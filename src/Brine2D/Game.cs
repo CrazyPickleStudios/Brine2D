@@ -1,4 +1,15 @@
-﻿namespace Brine2D;
+﻿using Brine2D.Event;
+using Brine2D.Event.Messages;
+using Brine2D.Event.Messages.Keyboard;
+using Brine2D.Event.Messages.Mouse;
+using Brine2D.Event.Messages.Touch;
+using Brine2D.Event.Messages.Window;
+using Brine2D.Graphics;
+using Brine2D.Input;
+using Brine2D.Timer;
+using Brine2D.Window;
+
+namespace Brine2D;
 
 public abstract class Game
 {

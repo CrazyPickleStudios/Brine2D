@@ -1,6 +1,4 @@
-﻿using Brine2D;
-
-namespace Brine2D;
+﻿namespace Brine2D;
 
 // TODO: Does love::Exception actually throw?
 public class GameHost

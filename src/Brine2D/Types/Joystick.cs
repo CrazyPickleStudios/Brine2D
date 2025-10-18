@@ -1,3 +1,5 @@
+using Brine2D.Input;
+
 namespace Brine2D
 {
     /// <summary>

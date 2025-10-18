@@ -5,7 +5,7 @@ namespace Brine2D;
 ///     <para>CompressedImageData encompasses standard compressed texture formats such as DXT1, DXT5, and BC5 / 3Dc.</para>
 ///     <para>You can't draw CompressedImageData directly to the screen. See Image for that.</para>
 /// </summary>
-public class CompressedImageData : Data
+public class CompressedImageData : DataObject
 {
     /// <summary>
     ///     Gets the width and height of the CompressedImageData.
@@ -140,7 +140,7 @@ public class CompressedImageData : Data
     }
 
     /// <inheritdoc />
-    public override Data Clone()
+    public override DataObject Clone()
     {
         throw new NotImplementedException();
     }

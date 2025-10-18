@@ -1,0 +1,1 @@
+﻿global using SysMath = global::System.Math;
