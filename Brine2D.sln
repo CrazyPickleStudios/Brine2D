@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36221.1 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Brine2D", "src\Brine2D\Brine2D.csproj", "{21FDC4F8-C1A6-407E-931B-F393E3FA4D4A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Playground", "src\Playground\Playground.csproj", "{AE502B22-7A34-48F4-A8A9-43BFE35ADB43}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{21FDC4F8-C1A6-407E-931B-F393E3FA4D4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21FDC4F8-C1A6-407E-931B-F393E3FA4D4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21FDC4F8-C1A6-407E-931B-F393E3FA4D4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21FDC4F8-C1A6-407E-931B-F393E3FA4D4A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE502B22-7A34-48F4-A8A9-43BFE35ADB43}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE502B22-7A34-48F4-A8A9-43BFE35ADB43}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE502B22-7A34-48F4-A8A9-43BFE35ADB43}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE502B22-7A34-48F4-A8A9-43BFE35ADB43}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {68ADA055-B387-40A1-A18A-7CCC3D1CE255}
+	EndGlobalSection
+EndGlobal

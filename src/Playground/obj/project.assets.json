@@ -1,0 +1,602 @@
+{
+  "version": 3,
+  "targets": {
+    "net9.0": {
+      "ppy.SDL3-CS/2025.920.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/SDL3-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/SDL3-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/android-arm/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "android-arm"
+          },
+          "runtimes/android-arm64/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "android-arm64"
+          },
+          "runtimes/android-x64/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "android-x64"
+          },
+          "runtimes/android-x86/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "android-x86"
+          },
+          "runtimes/ios/native/SDL3.xcframework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3.xcframework/ios-arm64/SDL3.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3.xcframework/ios-arm64/SDL3.framework/SDL3": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3.xcframework/ios-arm64_x86_64-simulator/SDL3.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3.xcframework/ios-arm64_x86_64-simulator/SDL3.framework/SDL3": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/linux-arm/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "linux-arm"
+          },
+          "runtimes/linux-arm64/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-x64/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/linux-x86/native/libSDL3.so": {
+            "assetType": "native",
+            "rid": "linux-x86"
+          },
+          "runtimes/osx-arm64/native/libSDL3.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          },
+          "runtimes/osx-x64/native/libSDL3.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          },
+          "runtimes/win-arm64/native/SDL3.dll": {
+            "assetType": "native",
+            "rid": "win-arm64"
+          },
+          "runtimes/win-x64/native/SDL3.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          },
+          "runtimes/win-x86/native/SDL3.dll": {
+            "assetType": "native",
+            "rid": "win-x86"
+          }
+        }
+      },
+      "ppy.SDL3_image-CS/2025.920.0": {
+        "type": "package",
+        "dependencies": {
+          "ppy.SDL3-CS": "2025.920.0"
+        },
+        "compile": {
+          "lib/net8.0/SDL3_image-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/SDL3_image-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/android-arm/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "android-arm"
+          },
+          "runtimes/android-arm64/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "android-arm64"
+          },
+          "runtimes/android-x64/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "android-x64"
+          },
+          "runtimes/android-x86/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "android-x86"
+          },
+          "runtimes/ios/native/SDL3_image.xcframework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_image.xcframework/ios-arm64/SDL3_image.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_image.xcframework/ios-arm64/SDL3_image.framework/SDL3_image": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_image.xcframework/ios-arm64_x86_64-simulator/SDL3_image.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_image.xcframework/ios-arm64_x86_64-simulator/SDL3_image.framework/SDL3_image": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/linux-arm/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "linux-arm"
+          },
+          "runtimes/linux-arm64/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-x64/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/linux-x86/native/libSDL3_image.so": {
+            "assetType": "native",
+            "rid": "linux-x86"
+          },
+          "runtimes/osx-arm64/native/libSDL3_image.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          },
+          "runtimes/osx-x64/native/libSDL3_image.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          },
+          "runtimes/win-arm64/native/SDL3_image.dll": {
+            "assetType": "native",
+            "rid": "win-arm64"
+          },
+          "runtimes/win-x64/native/SDL3_image.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          },
+          "runtimes/win-x86/native/SDL3_image.dll": {
+            "assetType": "native",
+            "rid": "win-x86"
+          }
+        }
+      },
+      "ppy.SDL3_mixer-CS/2025.920.0": {
+        "type": "package",
+        "dependencies": {
+          "ppy.SDL3-CS": "2025.920.0"
+        },
+        "compile": {
+          "lib/net8.0/SDL3_mixer-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/SDL3_mixer-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/android-arm/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "android-arm"
+          },
+          "runtimes/android-arm64/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "android-arm64"
+          },
+          "runtimes/android-x64/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "android-x64"
+          },
+          "runtimes/android-x86/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "android-x86"
+          },
+          "runtimes/ios/native/SDL3_mixer.xcframework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64/SDL3_mixer.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64/SDL3_mixer.framework/SDL3_mixer": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64_x86_64-simulator/SDL3_mixer.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64_x86_64-simulator/SDL3_mixer.framework/SDL3_mixer": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/linux-arm/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "linux-arm"
+          },
+          "runtimes/linux-arm64/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-x64/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/linux-x86/native/libSDL3_mixer.so": {
+            "assetType": "native",
+            "rid": "linux-x86"
+          },
+          "runtimes/osx-arm64/native/libSDL3_mixer.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          },
+          "runtimes/osx-x64/native/libSDL3_mixer.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          },
+          "runtimes/win-arm64/native/SDL3_mixer.dll": {
+            "assetType": "native",
+            "rid": "win-arm64"
+          },
+          "runtimes/win-x64/native/SDL3_mixer.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          },
+          "runtimes/win-x86/native/SDL3_mixer.dll": {
+            "assetType": "native",
+            "rid": "win-x86"
+          }
+        }
+      },
+      "ppy.SDL3_ttf-CS/2025.920.0": {
+        "type": "package",
+        "dependencies": {
+          "ppy.SDL3-CS": "2025.920.0"
+        },
+        "compile": {
+          "lib/net8.0/SDL3_ttf-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/SDL3_ttf-CS.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/android-arm/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "android-arm"
+          },
+          "runtimes/android-arm64/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "android-arm64"
+          },
+          "runtimes/android-x64/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "android-x64"
+          },
+          "runtimes/android-x86/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "android-x86"
+          },
+          "runtimes/ios/native/SDL3_ttf.xcframework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64/SDL3_ttf.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64/SDL3_ttf.framework/SDL3_ttf": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64_x86_64-simulator/SDL3_ttf.framework/Info.plist": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64_x86_64-simulator/SDL3_ttf.framework/SDL3_ttf": {
+            "assetType": "native",
+            "rid": "ios"
+          },
+          "runtimes/linux-arm/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "linux-arm"
+          },
+          "runtimes/linux-arm64/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-x64/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/linux-x86/native/libSDL3_ttf.so": {
+            "assetType": "native",
+            "rid": "linux-x86"
+          },
+          "runtimes/osx-arm64/native/libSDL3_ttf.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          },
+          "runtimes/osx-x64/native/libSDL3_ttf.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          },
+          "runtimes/win-arm64/native/SDL3_ttf.dll": {
+            "assetType": "native",
+            "rid": "win-arm64"
+          },
+          "runtimes/win-x64/native/SDL3_ttf.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          },
+          "runtimes/win-x86/native/SDL3_ttf.dll": {
+            "assetType": "native",
+            "rid": "win-x86"
+          }
+        }
+      },
+      "Brine2D/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v9.0",
+        "dependencies": {
+          "ppy.SDL3-CS": "2025.920.0",
+          "ppy.SDL3_image-CS": "2025.920.0",
+          "ppy.SDL3_mixer-CS": "2025.920.0",
+          "ppy.SDL3_ttf-CS": "2025.920.0"
+        },
+        "compile": {
+          "bin/placeholder/Brine2D.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Brine2D.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "ppy.SDL3-CS/2025.920.0": {
+      "sha512": "N2K7h3iV2jlEBKhechKEqoV5K9HZXLJEYT0bM8Do8+cLVqFiWVfqgg2dFdBN4NIXct+EzmsHVmrLBjAFvn99mg==",
+      "type": "package",
+      "path": "ppy.sdl3-cs/2025.920.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README_nuget.md",
+        "lib/net8.0-android34.0/SDL3-CS.aar",
+        "lib/net8.0-android34.0/SDL3-CS.dll",
+        "lib/net8.0-android34.0/SDL3-CS.xml",
+        "lib/net8.0/SDL3-CS.dll",
+        "lib/net8.0/SDL3-CS.xml",
+        "ppy.sdl3-cs.2025.920.0.nupkg.sha512",
+        "ppy.sdl3-cs.nuspec",
+        "runtimes/android-arm/native/libSDL3.so",
+        "runtimes/android-arm64/native/libSDL3.so",
+        "runtimes/android-x64/native/libSDL3.so",
+        "runtimes/android-x86/native/libSDL3.so",
+        "runtimes/ios/native/SDL3.xcframework/Info.plist",
+        "runtimes/ios/native/SDL3.xcframework/ios-arm64/SDL3.framework/Info.plist",
+        "runtimes/ios/native/SDL3.xcframework/ios-arm64/SDL3.framework/SDL3",
+        "runtimes/ios/native/SDL3.xcframework/ios-arm64_x86_64-simulator/SDL3.framework/Info.plist",
+        "runtimes/ios/native/SDL3.xcframework/ios-arm64_x86_64-simulator/SDL3.framework/SDL3",
+        "runtimes/linux-arm/native/libSDL3.so",
+        "runtimes/linux-arm64/native/libSDL3.so",
+        "runtimes/linux-x64/native/libSDL3.so",
+        "runtimes/linux-x86/native/libSDL3.so",
+        "runtimes/osx-arm64/native/libSDL3.dylib",
+        "runtimes/osx-x64/native/libSDL3.dylib",
+        "runtimes/win-arm64/native/SDL3.dll",
+        "runtimes/win-x64/native/SDL3.dll",
+        "runtimes/win-x86/native/SDL3.dll"
+      ]
+    },
+    "ppy.SDL3_image-CS/2025.920.0": {
+      "sha512": "S7Xrc2iCB5frbRhLuaW7BzBZ142u2wpG3RAJgfn6lR0xp3To1sAKLmOFTaIqOjNmXD7sCDiGhNzJzhPq3j7Tbg==",
+      "type": "package",
+      "path": "ppy.sdl3_image-cs/2025.920.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README_nuget.md",
+        "lib/net8.0-android34.0/SDL3_image-CS.dll",
+        "lib/net8.0-android34.0/SDL3_image-CS.xml",
+        "lib/net8.0/SDL3_image-CS.dll",
+        "lib/net8.0/SDL3_image-CS.xml",
+        "ppy.sdl3_image-cs.2025.920.0.nupkg.sha512",
+        "ppy.sdl3_image-cs.nuspec",
+        "runtimes/android-arm/native/libSDL3_image.so",
+        "runtimes/android-arm64/native/libSDL3_image.so",
+        "runtimes/android-x64/native/libSDL3_image.so",
+        "runtimes/android-x86/native/libSDL3_image.so",
+        "runtimes/ios/native/SDL3_image.xcframework/Info.plist",
+        "runtimes/ios/native/SDL3_image.xcframework/ios-arm64/SDL3_image.framework/Info.plist",
+        "runtimes/ios/native/SDL3_image.xcframework/ios-arm64/SDL3_image.framework/SDL3_image",
+        "runtimes/ios/native/SDL3_image.xcframework/ios-arm64_x86_64-simulator/SDL3_image.framework/Info.plist",
+        "runtimes/ios/native/SDL3_image.xcframework/ios-arm64_x86_64-simulator/SDL3_image.framework/SDL3_image",
+        "runtimes/linux-arm/native/libSDL3_image.so",
+        "runtimes/linux-arm64/native/libSDL3_image.so",
+        "runtimes/linux-x64/native/libSDL3_image.so",
+        "runtimes/linux-x86/native/libSDL3_image.so",
+        "runtimes/osx-arm64/native/libSDL3_image.dylib",
+        "runtimes/osx-x64/native/libSDL3_image.dylib",
+        "runtimes/win-arm64/native/SDL3_image.dll",
+        "runtimes/win-x64/native/SDL3_image.dll",
+        "runtimes/win-x86/native/SDL3_image.dll"
+      ]
+    },
+    "ppy.SDL3_mixer-CS/2025.920.0": {
+      "sha512": "dQrgTie5o+J9pJB+47io4j/+yQ2vTBUiF3b5quvklkTsdK0jqRO+ejtLt3vJ3KyWcJSj5kE8Xtqsl5lx70izKA==",
+      "type": "package",
+      "path": "ppy.sdl3_mixer-cs/2025.920.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README_nuget.md",
+        "lib/net8.0-android34.0/SDL3_mixer-CS.dll",
+        "lib/net8.0-android34.0/SDL3_mixer-CS.xml",
+        "lib/net8.0/SDL3_mixer-CS.dll",
+        "lib/net8.0/SDL3_mixer-CS.xml",
+        "ppy.sdl3_mixer-cs.2025.920.0.nupkg.sha512",
+        "ppy.sdl3_mixer-cs.nuspec",
+        "runtimes/android-arm/native/libSDL3_mixer.so",
+        "runtimes/android-arm64/native/libSDL3_mixer.so",
+        "runtimes/android-x64/native/libSDL3_mixer.so",
+        "runtimes/android-x86/native/libSDL3_mixer.so",
+        "runtimes/ios/native/SDL3_mixer.xcframework/Info.plist",
+        "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64/SDL3_mixer.framework/Info.plist",
+        "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64/SDL3_mixer.framework/SDL3_mixer",
+        "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64_x86_64-simulator/SDL3_mixer.framework/Info.plist",
+        "runtimes/ios/native/SDL3_mixer.xcframework/ios-arm64_x86_64-simulator/SDL3_mixer.framework/SDL3_mixer",
+        "runtimes/linux-arm/native/libSDL3_mixer.so",
+        "runtimes/linux-arm64/native/libSDL3_mixer.so",
+        "runtimes/linux-x64/native/libSDL3_mixer.so",
+        "runtimes/linux-x86/native/libSDL3_mixer.so",
+        "runtimes/osx-arm64/native/libSDL3_mixer.dylib",
+        "runtimes/osx-x64/native/libSDL3_mixer.dylib",
+        "runtimes/win-arm64/native/SDL3_mixer.dll",
+        "runtimes/win-x64/native/SDL3_mixer.dll",
+        "runtimes/win-x86/native/SDL3_mixer.dll"
+      ]
+    },
+    "ppy.SDL3_ttf-CS/2025.920.0": {
+      "sha512": "QkSIa889PiQmNRc7YWttIMS9xbgS4knQJfkt+oG/yGtL9oE0ly0I24TlyabkvkL1EYlGv7silhy0nBwYSVjaeA==",
+      "type": "package",
+      "path": "ppy.sdl3_ttf-cs/2025.920.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README_nuget.md",
+        "lib/net8.0-android34.0/SDL3_ttf-CS.dll",
+        "lib/net8.0-android34.0/SDL3_ttf-CS.xml",
+        "lib/net8.0/SDL3_ttf-CS.dll",
+        "lib/net8.0/SDL3_ttf-CS.xml",
+        "ppy.sdl3_ttf-cs.2025.920.0.nupkg.sha512",
+        "ppy.sdl3_ttf-cs.nuspec",
+        "runtimes/android-arm/native/libSDL3_ttf.so",
+        "runtimes/android-arm64/native/libSDL3_ttf.so",
+        "runtimes/android-x64/native/libSDL3_ttf.so",
+        "runtimes/android-x86/native/libSDL3_ttf.so",
+        "runtimes/ios/native/SDL3_ttf.xcframework/Info.plist",
+        "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64/SDL3_ttf.framework/Info.plist",
+        "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64/SDL3_ttf.framework/SDL3_ttf",
+        "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64_x86_64-simulator/SDL3_ttf.framework/Info.plist",
+        "runtimes/ios/native/SDL3_ttf.xcframework/ios-arm64_x86_64-simulator/SDL3_ttf.framework/SDL3_ttf",
+        "runtimes/linux-arm/native/libSDL3_ttf.so",
+        "runtimes/linux-arm64/native/libSDL3_ttf.so",
+        "runtimes/linux-x64/native/libSDL3_ttf.so",
+        "runtimes/linux-x86/native/libSDL3_ttf.so",
+        "runtimes/osx-arm64/native/libSDL3_ttf.dylib",
+        "runtimes/osx-x64/native/libSDL3_ttf.dylib",
+        "runtimes/win-arm64/native/SDL3_ttf.dll",
+        "runtimes/win-x64/native/SDL3_ttf.dll",
+        "runtimes/win-x86/native/SDL3_ttf.dll"
+      ]
+    },
+    "Brine2D/1.0.0": {
+      "type": "project",
+      "path": "../Brine2D/Brine2D.csproj",
+      "msbuildProject": "../Brine2D/Brine2D.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net9.0": [
+      "Brine2D >= 1.0.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\richa\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\Users\\richa\\source\\repos\\CrazyPickleStudios\\Brine2D\\src\\Playground\\Playground.csproj",
+      "projectName": "Playground",
+      "projectPath": "C:\\Users\\richa\\source\\repos\\CrazyPickleStudios\\Brine2D\\src\\Playground\\Playground.csproj",
+      "packagesPath": "C:\\Users\\richa\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\richa\\source\\repos\\CrazyPickleStudios\\Brine2D\\src\\Playground\\obj\\",
+      "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
+      "configFilePaths": [
+        "C:\\Users\\richa\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net9.0"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "projectReferences": {
+            "C:\\Users\\richa\\source\\repos\\CrazyPickleStudios\\Brine2D\\src\\Brine2D\\Brine2D.csproj": {
+              "projectPath": "C:\\Users\\richa\\source\\repos\\CrazyPickleStudios\\Brine2D\\src\\Brine2D\\Brine2D.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "9.0.300"
+    },
+    "frameworks": {
+      "net9.0": {
+        "targetAlias": "net9.0",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}
