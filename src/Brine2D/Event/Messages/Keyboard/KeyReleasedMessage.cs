@@ -1,5 +1,5 @@
 ﻿using Brine2D.Event.Messages;
-using Brine2D.Input;
+using Brine2D.Keyboard;
 using SDL;
 
 namespace Brine2D.Event.Messages.Keyboard;

@@ -1,6 +1,6 @@
 using System;
 
-namespace Brine2D.Input;
+namespace Brine2D.Joystick;
 
 // TODO: Needs review
 public sealed class JoystickModule : Module

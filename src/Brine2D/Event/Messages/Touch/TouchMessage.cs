@@ -1,5 +1,5 @@
 ﻿using Brine2D.Event.Messages;
-using Brine2D.Input;
+using Brine2D.Touch;
 using Brine2D.Window;
 using SDL;
 

@@ -1,7 +1,7 @@
 using SDL;
 using static SDL.SDL3;
 
-namespace Brine2D.Input;
+namespace Brine2D.Keyboard;
 
 /// <summary>
 ///     Provides an interface to the user's keyboard.

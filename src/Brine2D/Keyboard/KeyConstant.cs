@@ -1,6 +1,6 @@
 using static Brine2D.KeyUtil;
 
-namespace Brine2D.Input;
+namespace Brine2D.Keyboard;
 
 public enum Key
 {

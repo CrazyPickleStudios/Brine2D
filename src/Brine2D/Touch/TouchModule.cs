@@ -1,7 +1,7 @@
 using SDL;
 using static SDL.SDL3;
 
-namespace Brine2D.Input;
+namespace Brine2D.Touch;
 
 /// <summary>
 ///     Provides an interface to touch-screen presses.

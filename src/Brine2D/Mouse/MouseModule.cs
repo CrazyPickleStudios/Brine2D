@@ -1,4 +1,4 @@
-namespace Brine2D.Input;
+namespace Brine2D.Mouse;
 
 /// <summary>
 ///     Provides an interface to the user's mouse.
