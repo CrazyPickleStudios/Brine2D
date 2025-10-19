@@ -1,5 +1,3 @@
-using System;
-
 namespace Brine2D.Math;
 
 // TODO: Needs review
