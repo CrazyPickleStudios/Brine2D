@@ -7,13 +7,15 @@ namespace Brine2D.Timer;
 /// </summary>
 public sealed class TimerModule
 {
-    private static readonly ulong s_frequency = SDL_GetPerformanceFrequency();
-    private static readonly ulong s_start = SDL_GetPerformanceCounter();
+    private static readonly ulong Frequency = SDL_GetPerformanceFrequency();
+    private static readonly ulong Start = SDL_GetPerformanceCounter();
+
+    private readonly double _fpsUpdateFrequency;
+
     private double _averageDelta;
     private double _currTime;
     private double _dt;
     private int _fps;
-    private readonly double _fpsUpdateFrequency;
     private int _frames;
     private double _prevFpsUpdate;
     private double _prevTime;
@@ -60,11 +62,11 @@ public sealed class TimerModule
     ///         value.
     ///     </para>
     ///     <para>
-    ///         It is one divided by what love.timer.getAverageDelta returns, otherwise known as the reciprocal, or
+    ///         It is one divided by what game.Timer.GetAverageDelta returns, otherwise known as the reciprocal, or
     ///         multiplicative inverse of it.
     ///     </para>
     ///     <para>
-    ///         To get instantaneous frame rate values, use 1.0 / love.timer.getDelta(), or 1.0 / dt if in love.update, with
+    ///         To get instantaneous frame rate values, use 1.0 / game.Timer.GetDelta, or 1.0 / dt if in game.Update, with
     ///         dt given as the parameter.
     ///     </para>
     /// </remarks>
@@ -74,15 +76,12 @@ public sealed class TimerModule
     public double GetFPS()
     {
         return _fps;
-        ;
     }
 
     /// <summary>
     ///     <para>Returns the value of a precise timer with an unspecified starting time.</para>
     ///     <para>
-    ///         This function should only be used to calculate differences between points in time, as the starting time of
-    ///         the timer is unknown prior to version 11.4. Beginning with 11.4, the timer is initialized to 0 when the
-    ///         love.timer module is first loaded (usually before main.lua is loaded).
+    ///         This function should only be used to calculate differences between points in time.
     ///     </para>
     /// </summary>
     /// <returns>
@@ -91,8 +90,8 @@ public sealed class TimerModule
     public double GetTime()
     {
         var now = SDL_GetPerformanceCounter();
-        var rel = now - s_start;
-        return (double)rel / s_frequency;
+        var rel = now - Start;
+        return (double)rel / Frequency;
     }
 
     /// <summary>
@@ -102,12 +101,14 @@ public sealed class TimerModule
     public void Sleep(double s)
     {
         if (s >= 0)
+        {
             SDL_DelayNS(unchecked((ulong)(SDL_NS_PER_MS * (s * 1000))));
+        }
     }
 
     /// <summary>
     ///     <para>Measures the time between two frames.</para>
-    ///     <para>Calling this changes the return value of love.timer.getDelta.</para>
+    ///     <para>Calling this changes the return value of game.Timer.GetDelta.</para>
     /// </summary>
     /// <returns>The time passed (in seconds).</returns>
     public double Step()
