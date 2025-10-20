@@ -1,4 +1,4 @@
-namespace Brine2D
+namespace Brine2D.Math
 {
     /// <summary>
     /// <para>A random number generation object which has its own random state.</para>

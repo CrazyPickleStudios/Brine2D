@@ -47,13 +47,7 @@ public sealed class VideoStream : Object
     {
         throw new NotImplementedException();
     }
-
-    /// <inheritdoc />
-    public override bool Release()
-    {
-        throw new NotImplementedException();
-    }
-
+    
     /// <summary>
     ///     Rewinds video stream.
     /// </summary>
@@ -99,18 +93,6 @@ public sealed class VideoStream : Object
     ///     The seconds since the beginning of the video.
     /// </returns>
     public double Tell()
-    {
-        throw new NotImplementedException();
-    }
-
-    /// <inheritdoc />
-    public override string Type()
-    {
-        throw new NotImplementedException();
-    }
-
-    /// <inheritdoc />
-    public override bool TypeOf(string name)
     {
         throw new NotImplementedException();
     }

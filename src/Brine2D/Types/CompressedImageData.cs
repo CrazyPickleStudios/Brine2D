@@ -120,25 +120,7 @@ public class CompressedImageData : DataObject
     {
         throw new NotImplementedException();
     }
-
-    /// <inheritdoc />
-    public override bool Release()
-    {
-        throw new NotImplementedException();
-    }
-
-    /// <inheritdoc />
-    public override string Type()
-    {
-        throw new NotImplementedException();
-    }
-
-    /// <inheritdoc />
-    public override bool TypeOf(string name)
-    {
-        throw new NotImplementedException();
-    }
-
+    
     /// <inheritdoc />
     public override DataObject Clone()
     {

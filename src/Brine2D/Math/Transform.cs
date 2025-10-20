@@ -1,4 +1,4 @@
-namespace Brine2D
+namespace Brine2D.Math
 {
     /// <summary>
     /// <para>Object containing a coordinate system transformation.</para>

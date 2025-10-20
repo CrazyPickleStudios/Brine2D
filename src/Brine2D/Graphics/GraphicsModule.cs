@@ -44,21 +44,6 @@ public sealed class GraphicsModule : Module
         }
     }
 
-    public override bool Release()
-    {
-        throw new NotImplementedException();
-    }
-
-    public override string Type()
-    {
-        throw new NotImplementedException();
-    }
-
-    public override bool TypeOf(string name)
-    {
-        throw new NotImplementedException();
-    }
-
 ///// <summary>
 //        /// <para>Draws a filled or unfilled arc at position (x, y). The arc is drawn from angle1 to angle2 in radians. The segments parameter determines how many segments are used to draw the arc. The more segments, the smoother the edge.</para>
 //        /// </summary>

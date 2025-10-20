@@ -125,19 +125,4 @@ public sealed class TouchModule : Module
 
         throw new Exception($"Invalid active touch ID: {id}");
     }
-
-    public override bool Release()
-    {
-        throw new NotImplementedException();
-    }
-
-    public override string Type()
-    {
-        throw new NotImplementedException();
-    }
-
-    public override bool TypeOf(string name)
-    {
-        throw new NotImplementedException();
-    }
 }

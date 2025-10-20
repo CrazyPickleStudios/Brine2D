@@ -23,14 +23,20 @@ public abstract class Object
     ///     released.
     /// </returns>
     /// TODO: This matches the Love2D API, but C# has garbage collection. Consider whether this method is necessary.
-    public abstract bool Release();
+    public virtual bool Release()
+    {
+        return true;
+    }
 
     /// <summary>
     ///     Gets the type of the object as a string.
     /// </summary>
     /// <returns>The type as a string.</returns>
     /// TODO: This matches the Love2D API, but C# has built-in type checking. Consider whether this method is necessary.
-    public abstract string Type();
+    public virtual string Type()
+    {
+        return GetType().Name;
+    }
 
     /// <summary>
     ///     <para>Checks whether an object is of a certain type.</para>
@@ -39,5 +45,12 @@ public abstract class Object
     /// <param name="name">The name of the type to check for.</param>
     /// <returns>True if the object is of the specified type, false otherwise.</returns>
     /// TODO: This matches the Love2D API, but C# has built-in type checking. Consider whether this method is necessary.
-    public abstract bool TypeOf(string name);
+    public virtual bool TypeOf(string name)
+    {
+        for (var t = GetType(); t != null; t = t.BaseType)
+        {
+            if (t.Name == name) return true;
+        }
+        return false;
+    }
 }

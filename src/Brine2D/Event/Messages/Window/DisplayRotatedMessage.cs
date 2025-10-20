@@ -20,13 +20,13 @@ internal sealed record DisplayRotatedMessage(int Index, DisplayOrientation Orien
                 orientation = DisplayOrientation.Landscape;
                 break;
             case SDL_DisplayOrientation.SDL_ORIENTATION_LANDSCAPE_FLIPPED:
-                orientation = DisplayOrientation.Landscapeflipped;
+                orientation = DisplayOrientation.LandscapeFlipped;
                 break;
             case SDL_DisplayOrientation.SDL_ORIENTATION_PORTRAIT:
                 orientation = DisplayOrientation.Portrait;
                 break;
             case SDL_DisplayOrientation.SDL_ORIENTATION_PORTRAIT_FLIPPED:
-                orientation = DisplayOrientation.Portraitflipped;
+                orientation = DisplayOrientation.PortraitFlipped;
                 break;
         }
 

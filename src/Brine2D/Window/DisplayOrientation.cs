@@ -1,4 +1,4 @@
-﻿namespace Brine2D.Window;
+namespace Brine2D;
 
 /// <summary>
 ///     Types of device display orientation.

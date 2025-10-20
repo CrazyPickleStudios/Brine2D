@@ -1,4 +1,4 @@
-namespace Brine2D
+namespace Brine2D.Mouse
 {
     /// <summary>
     /// <para>Represents a hardware cursor.</para>
