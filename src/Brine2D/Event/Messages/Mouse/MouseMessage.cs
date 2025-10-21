@@ -5,19 +5,13 @@ namespace Brine2D.Event.Messages.Mouse;
 
 internal abstract record MouseMessage : Message
 {
-    protected static void ClampToWindow(WindowModule? window, ref double? x, ref double? y)
+    protected static (double x, double y) ClampToWindow(WindowModule? window, double x, double y)
     {
-        if (window != null)
-        {
-            window.ClampPositionInWindow(ref x, ref y);
-        }
+        return window?.ClampPositionInWindow(x, y) ?? (x, y);
     }
 
-    protected static void WindowToDPICoords(WindowModule? window, ref double? x, ref double? y)
+    protected static (double x, double y) WindowToDPICoords(WindowModule? window, double x, double y)
     {
-        if (window != null)
-        {
-            window.WindowToDPICoords(ref x, ref y);
-        }
+        return window?.WindowToDPICoords(x, y) ?? (x, y);
     }
 }

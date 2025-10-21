@@ -41,6 +41,36 @@ public unsafe sealed class WindowModule : Module
         FILEDIALOG_MAX_ENUM
     };
 
+    internal SDL_Window* GetHandle()
+    {
+        return window;
+    }
+
+    public (double x, double y) DPIToWindowCoords(double dpix, double dpiy)
+    {
+        // ToPixels currently exists as a method in this class (unimplemented placeholder).
+        // It should return (px, py). Keep calling it — implement later if needed.
+        var (px, py) = ToPixels(dpix, dpiy);
+
+        var (wx, wy) = PixelToWindowCoords(px, py);
+        return (wx, wy);
+    }
+
+    private (double x, double y) PixelToWindowCoords(double px, double py)
+    {
+        double wx = px;
+        double wy = py;
+
+        // guard against zero to avoid division by zero (defensive)
+        if (pixelWidth != 0 && windowWidth != 0)
+            wx = px * (windowWidth / (double)pixelWidth);
+
+        if (pixelHeight != 0 && windowHeight != 0)
+            wy = py * (windowHeight / (double)pixelHeight);
+
+        return (wx, wy);
+    }
+
     public struct WindowSize : IEquatable<WindowSize>
     {
         public int Width { get; }
@@ -766,43 +796,34 @@ public (double width, double height) GetDesktopDimensions(double displayindex = 
         throw new NotImplementedException();
 
     // TODO: Change to named tuples.
-    internal void ClampPositionInWindow(ref double? wx, ref double? wy) 
-     {
-     	if (wx != null)
-     		wx = SysMath.Min(SysMath.Max(0.0, wx.Value), (double) GetWidth() - 1);
-     	if (wy != null)
-     		wy = SysMath.Min(SysMath.Max(0.0, wy.Value), (double) GetHeight() - 1);
-     }
-
-    // TODO: Change to named tuples.
-    internal void WindowToDPICoords(ref double? x, ref double? y)
+    internal (double x, double y) ClampPositionInWindow(double wx, double wy)
     {
-
-        double? px = x != null ? x : 0.0;
-        double? py = y != null ? y : 0.0;
-
-        WindowToPixelCoords(ref px, ref py);
-
-        double dpix = 0.0;
-        double dpiy = 0.0;
-
-        (dpix, dpiy) = FromPixels(px!.Value, py!.Value);
-
-        if (x != null)
-            x = dpix;
-        if (y != null)
-            y = dpiy;
+        var nx = SysMath.Min(SysMath.Max(0.0, wx), GetWidth() - 1);
+        var ny = SysMath.Min(SysMath.Max(0.0, wy), GetHeight() - 1);
+        return (nx, ny);
     }
 
-    // TODO: Change to named tuples.
-    private void WindowToPixelCoords(ref double? x,ref double? y) 
+    internal (double px, double py) WindowToPixelCoords(double x, double y)
     {
-        if (x != null)
-            x =  x* ( pixelWidth / (double) windowWidth);
-        if (y != null)
-            y =  y* ( pixelHeight / (double) windowHeight);
+        double px = x;
+        double py = y;
+
+        if (windowWidth != 0 && pixelWidth != 0)
+            px = x * (pixelWidth / (double)windowWidth);
+
+        if (windowHeight != 0 && pixelHeight != 0)
+            py = y * (pixelHeight / (double)windowHeight);
+
+        return (px, py);
     }
-    
+
+    internal (double x, double y) WindowToDPICoords(double x, double y)
+    {
+        var (px, py) = WindowToPixelCoords(x, y);
+        var (dx, dy) = FromPixels(px, py);
+        return (dx, dy);
+    }
+
     /// <summary>
     /// <para>Gets the position of the window on the screen.</para>
     /// <para>The window position is in the coordinate space of the display it is currently in.</para>

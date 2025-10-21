@@ -1,4 +1,6 @@
+using Brine2D.Window;
 using SDL;
+using System.Collections.Generic;
 using static SDL.SDL3;
 
 namespace Brine2D.Keyboard;
@@ -6,14 +8,14 @@ namespace Brine2D.Keyboard;
 /// <summary>
 ///     Provides an interface to the user's keyboard.
 /// </summary>
-public unsafe sealed class KeyboardModule : Module
+public sealed class KeyboardModule : Module
 {
     internal KeyboardModule()
     {
         key_repeat = false;
     }
 
-    bool key_repeat;
+    private bool key_repeat;
     
     private static Dictionary<Key, SDL_Keycode> keyToSDLKey = new()
     {
@@ -414,9 +416,9 @@ public unsafe sealed class KeyboardModule : Module
     {
         scancodes.TryGetValue(scancode, out var sdlscancode);
 
-        var sdlKey = SDL_GetKeyFromScancode(sdlscancode, SDL_Keymod.SDL_KMOD_NONE, false);
+        SDL_Keycode sdlkey = SDL_GetKeyFromScancode(sdlscancode, SDL_KMOD_NONE, false);
 
-        GetConstant(sdlKey, out var key);
+        GetConstant(sdlkey, out var key);
         return key;
     }
 
@@ -521,7 +523,7 @@ public unsafe sealed class KeyboardModule : Module
     /// </returns>
     public bool HasKeyRepeat()
     {
-        throw new NotImplementedException();
+        return key_repeat;
     }
 
     /// <summary>
@@ -532,7 +534,7 @@ public unsafe sealed class KeyboardModule : Module
     /// </returns>
     public bool HasScreenKeyboard()
     {
-        throw new NotImplementedException();
+        return SDL_HasScreenKeyboardSupport();
     }
 
     /// <summary>
@@ -541,9 +543,12 @@ public unsafe sealed class KeyboardModule : Module
     /// <returns>
     ///     Whether text input events are enabled.
     /// </returns>
-    public bool HasTextInput()
+    public unsafe bool HasTextInput()
     {
-        throw new NotImplementedException();
+        SDL_Window* window = getSDLWindow();
+        if (window == null)
+            return false;
+        return SDL_TextInputActive(window);
     }
 
     /// <summary>
@@ -555,7 +560,7 @@ public unsafe sealed class KeyboardModule : Module
     /// </returns>
     public bool IsDown(Key key)
     {
-        throw new NotImplementedException();
+        return IsDown([key]);
     }
 
     /// <summary>
@@ -566,9 +571,15 @@ public unsafe sealed class KeyboardModule : Module
     /// <returns>
     ///     True if any supplied key is down, false if not.
     /// </returns>
-    public bool IsDown(Key key, params Key[] keys)
+    public bool IsDown(Key key, params Key[]? keys)
     {
-        throw new NotImplementedException();
+        if (keys == null || keys.Length == 0)
+            return IsDown(key);
+
+        var list = new List<Key>(1 + keys.Length) { key };
+        list.AddRange(keys);
+
+        return IsDown(list);
     }
 
     /// <summary>
@@ -578,9 +589,22 @@ public unsafe sealed class KeyboardModule : Module
     /// <returns>
     ///     True if any supplied key is down, false if not.
     /// </returns>
-    public bool IsDown(IEnumerable<Key> keys)
+    public unsafe bool IsDown(IEnumerable<Key> keys)
     {
-        throw new NotImplementedException();
+        var state = SDL_GetKeyboardState(null);
+
+        foreach (Key key in keys)
+        {
+            if (GetConstant(key, out var sdlkey))
+            {
+                SDL_Scancode scancode = SDL_GetScancodeFromKey(sdlkey, null);
+
+                if (state[(int)scancode])
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -599,9 +623,15 @@ public unsafe sealed class KeyboardModule : Module
     /// <returns>
     ///     True if any supplied Scancode is down, false if not.
     /// </returns>
-    public bool IsScancodeDown(Scancode scancode, params Scancode[] scancodes)
+    public bool IsScancodeDown(Scancode scancode, params Scancode[]? scancodes)
     {
-        throw new NotImplementedException();
+        if (scancodes == null || scancodes.Length == 0)
+            return IsScancodeDown(scancode);
+
+        var list = new List<Scancode>(1 + scancodes.Length) { scancode };
+        list.AddRange(scancodes);
+
+        return IsScancodeDown(list);
     }
 
     /// <summary>
@@ -619,9 +649,17 @@ public unsafe sealed class KeyboardModule : Module
     /// <returns>
     ///     True if any supplied Scancode is down, false if not.
     /// </returns>
-    public bool IsScancodeDown(IEnumerable<Scancode> scancodes)
+    public unsafe bool IsScancodeDown(IEnumerable<Scancode> scancodes)
     {
-        throw new NotImplementedException();
+        var state = SDL_GetKeyboardState(null);
+
+        foreach (Scancode scancode in scancodes)
+        {
+            if (KeyboardModule.scancodes.TryGetValue(scancode, out var sdlcode) && state[(int)sdlcode])
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -634,7 +672,7 @@ public unsafe sealed class KeyboardModule : Module
     /// <param name="enable">Whether repeat keypress events should be enabled when a key is held down.</param>
     public void SetKeyRepeat(bool enable)
     {
-        throw new NotImplementedException();
+        key_repeat = enable;
     }
 
     /// <summary>
@@ -645,9 +683,23 @@ public unsafe sealed class KeyboardModule : Module
     ///     <para>On touch devices, this shows the system's native on-screen keyboard when it's enabled.</para>
     /// </summary>
     /// <param name="enable">Whether text input events should be enabled.</param>
-    public void SetTextInput(bool enable)
+    public unsafe void SetTextInput(bool enable)
     {
-        throw new NotImplementedException();
+        SDL_Window* window = getSDLWindow();
+        if (window == null)
+            return;
+        if (enable)
+            SDL_StartTextInput(window);
+        else
+            SDL_StopTextInput(window);
+    }
+
+    private unsafe static SDL_Window* getSDLWindow()
+    {
+        var window = Module.GetInstance<WindowModule>();
+        if (window != null)
+            return (SDL_Window*)window.GetHandle();
+        return null;
     }
 
     /// <summary>
@@ -662,8 +714,28 @@ public unsafe sealed class KeyboardModule : Module
     /// <param name="y">Text rectangle y position.</param>
     /// <param name="w">Text rectangle width.</param>
     /// <param name="h">Text rectangle height.</param>
-    public void SetTextInput(bool enable, double x, double y, double w, double h)
+    public unsafe void SetTextInput(bool enable, double x, double y, double w, double h)
     {
-        throw new NotImplementedException();
+        var window = Module.GetInstance<WindowModule>();
+        
+        if (window != null)
+        {
+            (x, y) = window.DPIToWindowCoords(x, y);
+            (w, h) = window.DPIToWindowCoords(w, h);
+        }
+
+        SDL_Rect rect = new SDL_Rect
+        {
+            x = (int)x,
+            y = (int)y,
+            w = (int)w,
+            h = (int)h
+        };
+
+        SDL_Window* sdlwindow = getSDLWindow();
+        if (sdlwindow != null)
+            SDL_SetTextInputArea(sdlwindow, &rect, 0);
+
+        SetTextInput(enable);
     }
 }

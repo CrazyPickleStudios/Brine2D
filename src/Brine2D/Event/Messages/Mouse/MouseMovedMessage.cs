@@ -10,15 +10,15 @@ internal sealed record MouseMovedMessage(double X, double Y, double DX, double D
     {
         var win = Module.GetInstance<WindowModule>();
 
-        double? x = e.motion.x;
-        double? y = e.motion.y;
-        double? xrel = e.motion.xrel;
-        double? yrel = e.motion.yrel;
+        double x = e.motion.x;
+        double y = e.motion.y;
+        double xrel = e.motion.xrel;
+        double yrel = e.motion.yrel;
 
-        ClampToWindow(win, ref x, ref y);
-        WindowToDPICoords(win, ref x, ref y);
-        WindowToDPICoords(win, ref xrel, ref yrel);
+        (x, y) =ClampToWindow(win,  x,  y);
+        (x, y) = WindowToDPICoords(win,  x,  y);
+        (xrel, yrel) = WindowToDPICoords(win, xrel,  yrel);
 
-        return new MouseMovedMessage(x.Value, y.Value, xrel.Value, yrel.Value, e.motion.which == SDL_TOUCH_MOUSEID);
+        return new MouseMovedMessage(x, y, xrel, yrel, e.motion.which == SDL_TOUCH_MOUSEID);
     }
 }

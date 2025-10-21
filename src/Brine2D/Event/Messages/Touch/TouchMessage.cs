@@ -26,8 +26,8 @@ internal abstract record TouchMessage(object Id, double X, double Y, double DX, 
         {
             var win = Module.GetInstance<WindowModule>();
 
-            normalizedToDPICoords(win, ref touchinfo.x, ref touchinfo.y);
-            normalizedToDPICoords(win, ref touchinfo.dx, ref touchinfo.dy);
+            (touchinfo.x, touchinfo.y) = normalizedToDPICoords(win, touchinfo.x, touchinfo.y);
+            (touchinfo.dx, touchinfo.dy) = normalizedToDPICoords(win, touchinfo.dx, touchinfo.dy);
         }
 
         var touchmodule = Module.GetInstance<TouchModule>();
@@ -46,20 +46,22 @@ internal abstract record TouchMessage(object Id, double X, double Y, double DX, 
         
     }
 
-    static void normalizedToDPICoords(WindowModule? window, ref double x, ref double y)
+    static (double x, double y) normalizedToDPICoords(WindowModule? window, double x, double y)
     {
-        double? w = 1.0, h = 1.0;
+        // default normalized->dpi scale is 1.0 (no-op)
+        double w = 1.0, h = 1.0;
 
         if (window != null)
         {
+            // get window size in window coords, then convert those to DPI units
             w = window.GetWidth();
             h = window.GetHeight();
-            window.WindowToDPICoords(ref w, ref h);
+            (w, h) = window.WindowToDPICoords(w, h);
         }
 
-        if (x != null)
-            x = x * w.Value;
-        if (y != null)
-            y = y * h.Value;
+        x = x * w;
+        y = y * h;
+
+        return (x, y);
     }
 }
