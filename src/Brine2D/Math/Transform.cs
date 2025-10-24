@@ -28,6 +28,12 @@ public class Transform : Object
         _inverseMatrix = new Matrix4x4();
     }
 
+    internal Transform(float x, float y, float a, float sx, float sy, float ox, float oy, float kx, float ky)
+     : this()
+    {
+        SetTransformation(x, y, a, sx, sy, ox, oy, kx, ky);
+    }
+
     /// <summary>
     ///     <para>Applies the given other Transform object to this one.</para>
     ///     <para>

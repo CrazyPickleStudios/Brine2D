@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection.Metadata.Ecma335;
 
 namespace Brine2D.Math;
 
@@ -16,9 +17,17 @@ public class RandomGenerator : Object
         SetSeed(new Seed { Low = 0xCBBF7A44, High = 0x0139408D });
     }
 
-    public (double low, double high) GetSeed(double low, double high)
+    /// <summary>
+    /// <para>Gets the seed of the random number generator object.</para>
+    /// <para>The seed is split into two numbers due to Lua's use of doubles for all number values - doubles can't accurately represent integer values above 2^53, but the seed value is an integer number in the range of [0, 2^64 - 1].</para>
+    /// </summary>
+    /// <list type="bullet">
+    /// <item><term>low</term><description>Integer number representing the lower 32 bits of the random number generator's 64 bit seed value.</description></item>
+    /// <item><term>high</term><description>Integer number representing the higher 32 bits of the random number generator's 64 bit seed value.</description></item>
+    /// </list>
+    public (double low, double high) GetSeed()
     {
-        throw new NotImplementedException();
+        return (_seed.Low, _seed.High);
     }
 
     /// <summary>
@@ -203,11 +212,13 @@ public class RandomGenerator : Object
 
         public uint Low
         {
+            get => (uint)(B64 & 0xFFFFFFFFu);
             set => B64 = (B64 & 0xFFFFFFFF00000000UL) | value;
         }
 
         public uint High
         {
+            get => (uint)(B64 >> 32);
             set => B64 = ((ulong)value << 32) | (B64 & 0xFFFFFFFFUL);
         }
 

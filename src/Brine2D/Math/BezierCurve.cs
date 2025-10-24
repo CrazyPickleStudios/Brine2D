@@ -1,4 +1,4 @@
-using Brine2D.Common;
+using System.Numerics;
 
 namespace Brine2D.Math;
 
