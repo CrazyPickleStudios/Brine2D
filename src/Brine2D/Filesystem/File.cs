@@ -1,12 +1,28 @@
-namespace Brine2D
+namespace Brine2D.Filesystem
 {
     /// <summary>
-    /// <para>Represents a file dropped onto the window.</para>
-/// <para>Note that the DroppedFile type can only be obtained from love.filedropped callback, and can't be constructed manually by the user.</para>
+    /// <para>Represents a file on the filesystem. A function that takes a file path can also take a File.</para>
     /// </summary>
     // TODO: Requires Review
-    public class DroppedFile
+    public class File : Object
     {
+        enum Mode
+        {
+            MODE_CLOSED,
+            MODE_READ,
+            MODE_WRITE,
+            MODE_APPEND,
+            MODE_MAX_ENUM
+        };
+
+        enum BufferMode
+        {
+            BUFFER_NONE,
+            BUFFER_LINE,
+            BUFFER_FULL,
+            BUFFER_MAX_ENUM
+        };
+
         /// <summary>
         /// <para>Closes a File.</para>
         /// </summary>

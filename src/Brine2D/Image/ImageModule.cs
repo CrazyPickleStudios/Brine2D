@@ -1,3 +1,5 @@
+using Brine2D.Filesystem;
+
 namespace Brine2D.Image;
 
 /// <summary>

@@ -11,7 +11,10 @@ public abstract class DataObject : Object
     /// <returns>
     ///     The new copy.
     /// </returns>
-    public abstract DataObject Clone();
+    public virtual DataObject Clone()
+    {
+        throw new NotImplementedException("Clone method not implemented for this DataObject subclass.");
+    }
 
     /// <summary>
     ///     <para>Gets an FFI pointer to the Data.</para>
@@ -27,10 +30,13 @@ public abstract class DataObject : Object
     /// <returns>
     ///     A raw void* pointer to the Data, or null if FFI is unavailable.
     /// </returns>
-    public abstract IntPtr GetFFIPointer();
+    public virtual IntPtr GetFFIPointer()
+    {
+        throw new NotImplementedException("GetFFIPointer method not implemented for this DataObject subclass.");
+    }
 
     /// <summary>
-    ///     <para>Gets a pointer to the Data. Can be used with libraries such as LuaJIT's FFI.</para>
+    ///     Gets a pointer to the Data. Can be used with libraries such as LuaJIT's FFI.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -45,24 +51,29 @@ public abstract class DataObject : Object
     /// <returns>
     ///     A raw pointer to the Data.
     /// </returns>
-    public abstract IntPtr GetPointer();
+    public virtual IntPtr GetPointer()
+    {
+        throw new NotImplementedException("GetPointer method not implemented for this DataObject subclass.");
+    }
 
     /// <summary>
-    ///     <para>Gets the Data's size in bytes.</para>
+    ///     Gets the Data's size in bytes.
     /// </summary>
     /// <returns>
     ///     The size of the Data in bytes.
     /// </returns>
-    public abstract double GetSize();
+    public virtual long GetSize()
+    {
+        throw new NotImplementedException("GetSize method not implemented for this DataObject subclass.");
+    }
 
     /// <summary>
-    ///     <para>Gets the full Data as a string.</para>
+    ///     Gets the full Data as a string.
     /// </summary>
     /// <param name="offset">Optional byte offset into the Data's memory to copy from</param>
     /// <param name="size">Optionally limit the copied string to the specified number of bytes.</param>
     /// <returns>
     ///     The raw data.
     /// </returns>
-    /// TODO: the original signature is Data:getSize(), not sure what the most idiomatic way to represent that in C# is.
-    public abstract string GetString(double offset = 0, double size = double.MaxValue);
+    public abstract string GetString(int offset = 0, int? size = null);
 }

@@ -4,6 +4,7 @@ using Brine2D.Event.Messages.Keyboard;
 using Brine2D.Event.Messages.Mouse;
 using Brine2D.Event.Messages.Touch;
 using Brine2D.Event.Messages.Window;
+using Brine2D.Filesystem;
 using Brine2D.Graphics;
 using Brine2D.Keyboard;
 using Brine2D.Timer;
