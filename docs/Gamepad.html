@@ -1,0 +1,148 @@
+﻿<html>
+<body>
+    <section id="gamepad-input">
+        <h1>Gamepad input</h1>
+        <p>
+            Brine2D exposes gamepads via <code>IGamepads</code> (manager) and <code>IGamepad</code> (device).
+            You can query buttons, per-frame edges, and analog axes for multiple controllers. The desktop SDL host supports hot-plug,
+            remapping, and rumble where available.
+        </p>
+
+        <h2 id="quick-start">Quick start</h2>
+        <pre><code class="language-csharp">// Access the primary gamepad (first connected)
+var pads = context.Gamepads;
+var pad = pads.Primary;
+
+if (pad != null && pad.IsConnected)
+{
+    // Left stick movement (normalized, with deadzone applied)
+    var move = pad.LeftStick; // X: -1..+1, Y: -1..+1
+
+    // Button edges (fire on the frame they change)
+    if (pad.WasButtonPressed(GamepadButton.A))
+        Shoot();
+
+    // Right shoulder held
+    if (pad.IsButtonDown(GamepadButton.RightShoulder))
+        FireHeld();
+
+    // Triggers as analog (0..1)
+    float throttle = pad.RightTrigger;
+}</code></pre>
+
+        <h2 id="core-api">Core API</h2>
+        <ul>
+            <li><code>IGamepads.Count</code>, <code>IGamepads.Primary</code>, <code>IGamepads.Get(i)</code></li>
+            <li><code>IGamepad.IsConnected</code>, <code>Name</code></li>
+            <li>Buttons: <code>IsButtonDown/WasButtonPressed/WasButtonReleased(GamepadButton)</code></li>
+            <li>
+                Axes:
+                <ul>
+                    <li><code>Vector2 LeftStick</code>, <code>Vector2 RightStick</code> — normalized -1..+1 per component.</li>
+                    <li><code>float LeftTrigger</code>, <code>float RightTrigger</code> — normalized 0..1.</li>
+                    <li><code>float GetAxis(GamepadAxis)</code> — direct axis read.</li>
+                </ul>
+            </li>
+            <li>
+                Deadzones and feel:
+                <ul>
+                    <li><code>float StickDeadzone</code> (default 0.15)</li>
+                    <li><code>bool RadialDeadzone</code> (default true) — radial with rescaling; set false for per-axis deadzones</li>
+                    <li>Axis inversion per stick: <code>InvertLeftX/Y</code>, <code>InvertRightX/Y</code></li>
+                </ul>
+            </li>
+            <li>
+                Trigger edges with hysteresis:
+                <ul>
+                    <li><code>float TriggerPressThreshold</code> (default 0.5)</li>
+                    <li><code>float TriggerReleaseThreshold</code> (default 0.45)</li>
+                    <li><code>WasLeftTriggerPressed/WasLeftTriggerReleased</code>, <code>WasRightTriggerPressed/Released</code></li>
+                </ul>
+            </li>
+            <li>
+                Rumble (capability-based):
+                <ul>
+                    <li><code>bool SupportsRumble</code>, <code>bool SupportsTriggerRumble</code></li>
+                    <li><code>TryRumble(ushort low, ushort high, uint ms)</code> — main motors</li>
+                    <li><code>TryRumbleTriggers(ushort left, ushort right, uint ms)</code> — trigger motors</li>
+                    <li><code>StopRumble()</code>, <code>StopRumbleTriggers()</code></li>
+                </ul>
+            </li>
+        </ul>
+
+        <h2 id="examples">Examples</h2>
+
+        <h3>Movement and actions</h3>
+        <pre><code class="language-csharp">var pad = context.Gamepads.Primary;
+if (pad == null || !pad.IsConnected) return;
+
+var move = pad.LeftStick; // (-1..1, -1..1)
+MovePlayer(move);
+
+if (pad.WasButtonPressed(GamepadButton.A))
+    Jump();
+
+var aim = pad.RightStick;
+if (pad.IsButtonDown(GamepadButton.RightShoulder))
+    Fire(aim);</code></pre>
+
+        <h3>Trigger edges with hysteresis</h3>
+        <pre><code class="language-csharp">var pad = context.Gamepads.Primary;
+if (pad == null) return;
+
+// Optional: tune thresholds (defaults 0.5/0.45)
+pad.TriggerPressThreshold = 0.6f;
+pad.TriggerReleaseThreshold = 0.5f;
+
+if (pad.WasRightTriggerPressed())
+    StartCharging();
+
+if (pad.WasRightTriggerReleased())
+    ReleaseCharge();</code></pre>
+
+        <h3>Axis inversion (typical “up is negative” Y)</h3>
+        <pre><code class="language-csharp">var pad = context.Gamepads.Primary;
+if (pad != null)
+{
+    pad.InvertRightY = true; // if your camera expects +Y up
+}</code></pre>
+
+        <h3>Rumble with capability checks</h3>
+        <pre><code class="language-csharp">var pad = context.Gamepads.Primary;
+if (pad != null)
+{
+    if (pad.SupportsRumble)
+        pad.TryRumble(20000, 40000, 250);   // low/high strengths (0..65535), 250ms
+
+    if (pad.SupportsTriggerRumble)
+        pad.TryRumbleTriggers(30000, 0, 200); // left trigger kick
+}</code></pre>
+
+        <h2 id="behavior">Behavior notes</h2>
+        <ul>
+            <li><b>Per-frame edges</b>: queries like <code>WasButtonPressed</code> and trigger edge helpers are per-frame; call them during your Update.</li>
+            <li><b>Normalization</b>: sticks are -1..+1; triggers are 0..1. Deadzones are applied by <code>LeftStick</code>/<code>RightStick</code> helpers.</li>
+            <li><b>Radial deadzone</b>: by default, magnitudes inside the deadzone are zeroed and values outside are rescaled back to [0..1]. Disable with <code>RadialDeadzone=false</code>.</li>
+            <li><b>Focus changes</b>: on focus loss, held state is cleared to prevent “stuck” input.</li>
+            <li><b>Hot-plug and remap</b>: newly connected pads are available via <code>IGamepads</code>, and state is re-seeded on remap for consistent reads.</li>
+        </ul>
+
+        <h2 id="advanced">Advanced tips</h2>
+        <ul>
+            <li><b>Per-pad tuning</b>: adjust <code>StickDeadzone</code>, <code>RadialDeadzone</code> and inversion flags per device to match your gameplay feel.</li>
+            <li><b>Trigger-as-button</b>: use the trigger edge helpers for clean “press/release” semantics driven by analog thresholds.</li>
+            <li><b>Independent rumbles</b>: main and trigger rumble are independent. Use <code>StopRumble()</code> and <code>StopRumbleTriggers()</code> separately when needed.</li>
+            <li><b>Axis access</b>: when you need raw numbers, call <code>GetAxis(GamepadAxis)</code> directly (values are still normalized).</li>
+        </ul>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        <ul>
+            <li><b>No input?</b> Ensure you’re querying during Update. Check that a pad is connected (<code>pads.Primary?.IsConnected</code>).</li>
+            <li><b>Drifting sticks</b>: increase <code>StickDeadzone</code> or switch to per-axis deadzones.</li>
+            <li><b>Rumble does nothing</b>: check <code>SupportsRumble</code>/<code>SupportsTriggerRumble</code>. Some devices or platforms may not expose motors.</li>
+            <li><b>Trigger noise</b>: adjust <code>TriggerPressThreshold</code>/<code>TriggerReleaseThreshold</code> to suit hardware.</li>
+            <li><b>Inverted Y expectation</b>: set <code>InvertLeftY</code>/<code>InvertRightY</code> if your world treats +Y up.</li>
+        </ul>
+    </section>
+</body>
+</html>

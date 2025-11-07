@@ -1,0 +1,163 @@
+﻿<html>
+<body>
+    <section id="input-actions">
+        <h1>Input actions and axes</h1>
+        <p>
+            <code>InputActions&lt;TAction, TAxis&gt;</code> unifies keyboard, mouse, and gamepad into
+            digital actions and analog axes. It supports multi-binding, action sets, per-action repeat,
+            axis combine policies and smoothing, JSON load/merge/save, and rebind capture.
+        </p>
+
+        <h2 id="quick-start">Quick start</h2>
+        <pre><code class="language-csharp">// Define enums for your game
+enum MyAction { Jump, Pause, Interact, NavigateDown }
+enum MyAxis { MoveX, MoveY, LookX, LookY }
+
+// Create and bind (batch to coalesce change notifications)
+var input = new InputActions&lt;MyAction, MyAxis&gt;();
+using (input.BeginBindingsBatch())
+{
+    input.BindAction(MyAction.Jump, new KeyChordBinding(new KeyChord(Key.Space, KeyboardModifiers.None)));
+    input.BindAction(MyAction.Pause, new KeyChordBinding(new KeyChord(Key.Escape, KeyboardModifiers.None)));
+
+    input.BindAxis(MyAxis.MoveX, new Composite2KeysAxisBinding(Key.A, Key.D, 1f));
+    input.BindAxis(MyAxis.MoveY, new Composite2KeysAxisBinding(Key.S, Key.W, 1f));
+
+    // Frame-rate independent smoothing for movement
+    input.SetAxisSmoothingTimeConstant(MyAxis.MoveX, 0.10f);
+    input.SetAxisSmoothingTimeConstant(MyAxis.MoveY, 0.10f);
+
+    // UI-friendly repeat (for menus)
+    input.SetRepeat(MyAction.NavigateDown, enabled: true, initialDelaySeconds: 0.35, repeatSeconds: 0.05);
+}
+
+// Per-frame
+input.Update(kb, mods, mouse, pads, dt);
+
+if (input.TryConsumePressed(MyAction.Pause))
+    TogglePause();
+
+var move = input.Get2D(MyAxis.MoveX, MyAxis.MoveY);
+if (input.WasPressed(MyAction.Jump))
+    Jump();
+</code></pre>
+
+        <h2 id="core-api">Core queries</h2>
+        <ul>
+            <li><code>bool IsDown(TAction action)</code>, <code>bool WasPressed(TAction action)</code>, <code>bool WasReleased(TAction action)</code></li>
+            <li><code>bool WasRepeated(TAction action)</code>, <code>bool WasPressedOrRepeated(TAction action)</code></li>
+            <li><code>float Get(TAxis axis)</code> (smoothed or raw if no smoothing)</li>
+            <li><code>float GetRaw(TAxis axis)</code> (pre-smoothing, useful for tuning)</li>
+            <li><code>Vector2 Get2D(TAxis x, TAxis y)</code></li>
+            <li><code>double GetHoldSeconds(TAction action)</code> (duration held in seconds)</li>
+            <li><code>bool TryConsumePressed(TAction action)</code> (returns true once per press)</li>
+            <li><code>InputDevice GetLastSource(TAction)</code>, <code>InputDevice GetLastSource(TAxis)</code></li>
+        </ul>
+
+        <h2 id="binding-management">Binding management</h2>
+        <ul>
+            <li><code>BindAction(TAction, params IActionBinding[])</code>, <code>BindAxis(TAxis, params IAxisBinding[])</code> (duplicates ignored)</li>
+            <li><code>UnbindAction(TAction)</code>, <code>UnbindAxis(TAxis)</code></li>
+            <li><code>ClearActionBindings(TAction)</code>, <code>ClearAxisBindings(TAxis)</code></li>
+            <li><code>HasAction(TAction)</code>, <code>HasAxis(TAxis)</code></li>
+            <li><code>BeginBindingsUpdate()</code>, <code>EndBindingsUpdate()</code>, <code>BeginBindingsBatch()</code> (RAII) — coalesce <code>OnBindingsChanged</code></li>
+            <li><code>OnBindingsChanged</code> — fired once after a batch of edits</li>
+        </ul>
+
+        <h2 id="sets-and-toggles">Action sets and enable/disable</h2>
+        <ul>
+            <li><code>SetActionSet(TAction, string? setName)</code>, <code>EnableSet(string set, bool enabled)</code></li>
+            <li><code>EnableAction(TAction, bool)</code>, <code>EnableAxis(TAxis, bool)</code></li>
+        </ul>
+
+        <h2 id="repeat">Per-action repeat</h2>
+        <ul>
+            <li><code>SetRepeat(TAction, bool enabled, double initialDelaySeconds, double repeatSeconds)</code></li>
+            <li><code>WasRepeated(TAction)</code>, <code>WasPressedOrRepeated(TAction)</code></li>
+        </ul>
+        <pre><code class="language-csharp">input.SetRepeat(MyAction.NavigateDown, true, 0.35, 0.05);
+if (input.WasPressedOrRepeated(MyAction.NavigateDown))
+    MoveCursor(1);</code></pre>
+
+        <h2 id="smoothing">Axis combine and smoothing</h2>
+        <ul>
+            <li><code>SetAxisCombinePolicy(TAxis, AxisCombinePolicy)</code> — <code>MaxAbs</code>, <code>SumClamped</code>, <code>FirstNonZero</code></li>
+            <li><code>SetAxisSmoothing(TAxis, float alpha)</code> — 1 = instant, lower = smoother</li>
+            <li><code>SetAxisSmoothingTimeConstant(TAxis, float tauSeconds)</code> — frame-rate independent smoothing</li>
+        </ul>
+        <pre><code class="language-csharp">// UI look axis: simple alpha smoothing
+input.SetAxisSmoothing(MyAxis.LookX, 0.25f);
+
+// Player move axis: consistent smoothing across FPS
+input.SetAxisSmoothingTimeConstant(MyAxis.MoveX, 0.10f);</code></pre>
+
+        <h2 id="hold">Hold-duration</h2>
+        <ul>
+            <li><code>GetHoldSeconds(TAction)</code> — increases while held, resets on release/disable</li>
+        </ul>
+        <pre><code class="language-csharp">if (input.IsDown(MyAction.Interact) && input.GetHoldSeconds(MyAction.Interact) &gt;= 1.0)
+    ShowChargeEffect();</code></pre>
+
+        <h2 id="consume">Consume pressed edges</h2>
+        <ul>
+            <li><code>TryConsumePressed(TAction)</code> — returns true once per edge (prevents double-handling)</li>
+        </ul>
+        <pre><code class="language-csharp">if (input.TryConsumePressed(MyAction.Pause))
+    TogglePauseMenu();</code></pre>
+
+        <h2 id="persistence">JSON load/merge/save</h2>
+        <ul>
+            <li><code>string ToJson()</code>, <code>void WriteJsonTo(Stream)</code></li>
+            <li><code>void LoadFromJson(string json)</code>, <code>void LoadFromJson(string json, bool strictEnums)</code></li>
+            <li><code>void MergeFromJson(string json)</code>, <code>void MergeFromJson(string json, bool strictEnums)</code></li>
+            <li><code>void MergeFromJson(string json, bool strictEnums, MergeMode mode)</code> — <code>Replace</code> or <code>Append</code> (unique only)</li>
+            <li><code>string ExportDiffJson(InputActions&lt;TAction, TAxis&gt; defaults)</code> — emit only differences</li>
+            <li><code>string DumpState(bool includeBindings = false)</code> — human-readable snapshot for debugging</li>
+        </ul>
+        <pre><code class="language-csharp">// Append user overrides without removing defaults
+input.MergeFromJson(json, strictEnums: true, mode: InputActions&lt;MyAction, MyAxis&gt;.MergeMode.Append);
+
+// Export minimal user override vs defaults
+var diff = input.ExportDiffJson(defaults);</code></pre>
+
+        <h2 id="rebind-capture">Rebind capture helper</h2>
+        <p>
+            Capture the first meaningful input from the current frame. Keyboard capture skips pure modifiers/locks.
+        </p>
+        <ul>
+            <li><code>InputActions.InputCapture.TryCaptureAction(..., out IActionBinding? binding)</code></li>
+            <li><code>InputActions.InputCapture.TryCaptureAxis(..., out IAxisBinding? binding)</code></li>
+        </ul>
+
+        <h2 id="examples">Examples</h2>
+        <h3>Batched edits and repeat</h3>
+        <pre><code class="language-csharp">using (input.BeginBindingsBatch())
+{
+    input.ClearActionBindings(MyAction.NavigateDown);
+    input.BindAction(MyAction.NavigateDown, new KeyChordBinding(new KeyChord(Key.Down, KeyboardModifiers.None)));
+    input.SetRepeat(MyAction.NavigateDown, true, 0.35, 0.05);
+}</code></pre>
+
+        <h3>Raw vs smoothed readout (tuning)</h3>
+        <pre><code class="language-csharp">float rawX = input.GetRaw(MyAxis.MoveX);
+float smX  = input.Get(MyAxis.MoveX);
+DebugDrawAxis("MoveX", rawX, smX);</code></pre>
+
+        <h2 id="notes">Behavior notes</h2>
+        <ul>
+            <li><b>Per-frame edges</b>: call queries during your Update; transient state resets each frame.</li>
+            <li><b>Focus changes</b>: call <code>ResetState()</code> on focus loss/profile swap to clear held/transients.</li>
+            <li><b>dt spikes</b>: internal smoothing clamps large <code>dt</code> spikes for stability.</li>
+            <li><b>Duplicates</b>: binding helpers avoid adding identical bindings (per binding type parameters).</li>
+        </ul>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        <ul>
+            <li><b>Actions don’t fire</b>: ensure the action is enabled and its action set is active.</li>
+            <li><b>Axes feel inconsistent</b>: prefer time-constant smoothing for movement to decouple from frame rate.</li>
+            <li><b>JSON merge issues</b>: use <code>strictEnums: true</code> while migrating to catch typos in enum names.</li>
+            <li><b>Multiple handlers run</b>: gate logic with <code>TryConsumePressed(action)</code> to process an edge once.</li>
+        </ul>
+    </section>
+</body>
+</html>

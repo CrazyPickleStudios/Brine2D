@@ -1,0 +1,123 @@
+﻿<html>
+<body>
+	<section id="mouse-input">
+		<h1>Mouse input</h1>
+		<p>
+			Brine2D exposes mouse input through the <code>IMouse</code> interface. It provides per-frame button edges,
+			pointer position and movement, mouse wheel accumulation, cursor control, relative mode, and confinement.
+			This page is a practical guide for using it in games and tools built with Brine2D.
+		</p>
+
+		<h2 id="quick-start">Quick start</h2>
+		<pre><code class="language-csharp">// Access the mouse from your engine context (e.g. inside Update/Draw)
+var mouse = context.Mouse;
+
+if (mouse.WasButtonPressed(MouseButton.Left))
+{
+    // Left clicked this frame
+}
+
+if (mouse.IsButtonDown(MouseButton.Right))
+{
+    // Right button is held
+}
+
+float x = mouse.X; // logical window coordinates (see HiDPI note below)
+float y = mouse.Y;
+</code></pre>
+
+		<h2 id="core-api">Core API</h2>
+		<ul>
+			<li><b>Position and deltas</b> (logical coords): <code>X</code>, <code>Y</code>, <code>DeltaX</code>, <code>DeltaY</code></li>
+			<li><b>Wheel</b> (per-frame accumulation): <code>WheelX</code>, <code>WheelY</code></li>
+			<li>
+				<b>Buttons</b>:
+				<ul>
+					<li><code>IsButtonDown(MouseButton)</code></li>
+					<li><code>WasButtonPressed(MouseButton)</code> (edge: up → down this frame)</li>
+					<li><code>WasButtonReleased(MouseButton)</code> (edge: down → up this frame)</li>
+				</ul>
+			</li>
+			<li>
+				<b>Cursor / relative / capture / confine</b>:
+				<ul>
+					<li><code>SetCursorVisible(bool)</code>, <code>SetRelativeMouseMode(bool)</code></li>
+					<li><code>CaptureMouse(bool)</code>, <code>SetConfinedToWindow(bool)</code></li>
+					<li><code>SetCursor(MouseCursor)</code></li>
+					<li><code>SetConfineRect(Rectangle? rect)</code></li>
+					<li><code>SetCursorPosition(int x, int y)</code></li>
+					<li>Queries: <code>IsRelativeMouseModeEnabled</code>, <code>IsMouseCaptured</code></li>
+				</ul>
+			</li>
+			<li>
+				<b>Double-click tuning</b>:
+				<ul>
+					<li><code>SetDoubleClickTime(uint milliseconds)</code></li>
+					<li><code>SetDoubleClickRadius(float pixels)</code></li>
+				</ul>
+			</li>
+		</ul>
+
+		<h2 id="advanced">Advanced features (desktop host)</h2>
+		<p>Some hosts extend <code>IMouse</code> with additional functionality. When available, you can use:</p>
+		<ul>
+			<li><b>HiDPI helpers</b>: <code>GetPixelPosition()</code>, <code>GetNormalizedPosition()</code></li>
+			<li><b>Drag detection</b>: <code>IsDragging(button)</code>, <code>GetDragStart(button)</code>, <code>GetDragDelta(button)</code>, <code>DragThresholdPixels</code></li>
+			<li><b>Wheel tuning</b>: <code>WheelScale</code>, <code>InvertWheelX</code>, <code>InvertWheelY</code>, <code>WheelXScrolled</code>, <code>WheelYScrolled</code></li>
+			<li><b>Relative mode polish</b>: <code>RelativeSensitivity</code>, <code>EnableSmoothing</code>, <code>SmoothingFactor</code>, <code>FilteredDeltaX</code>, <code>FilteredDeltaY</code></li>
+			<li><b>Confinement helpers</b>: <code>SetAutoConfineToWindow(bool enable, int padding = 0)</code></li>
+			<li><b>Cursor management</b>: <code>PushHideCursor()</code>, <code>PopHideCursor()</code>, <code>CenterCursor()</code>, <code>TrySetCursorFromSurface(...)</code></li>
+			<li><b>State helpers</b>: <code>Snapshot()</code>, <code>DownMask</code>, <code>PressedMask</code>, <code>ReleasedMask</code>, <code>IsInWindow</code></li>
+			<li><b>Click metadata</b>: <code>LastClickButton</code>, <code>LastClickCount</code>, <code>LastClickTimeSeconds</code></li>
+			<li><b>Events</b>: <code>OnClick</code>, <code>OnDoubleClick</code>, <code>OnMultiClick(button, count)</code>, <code>OnDragStart</code>, <code>OnDragEnd</code></li>
+			<li><b>Lifecycle</b>: <code>AutoHideCursorAfterSeconds</code> (inactivity auto-hide), <code>Reset()</code> (clear all state)</li>
+		</ul>
+		<p style="font-size: 0.95em; opacity: 0.85;">
+			Note: Advanced features depend on the active host. If a feature is not available, it’s a no-op or not exposed by the host’s mouse type.
+		</p>
+
+		<h2 id="examples">Examples</h2>
+		<h3>Relative mouse mode</h3>
+		<pre><code class="language-csharp">context.Mouse.SetRelativeMouseMode(true); // deltas update, pointer may be locked
+</code></pre>
+
+		<h3>Confine to a region</h3>
+		<pre><code class="language-csharp">// Confine the cursor to a rectangle within the window (logical coords)
+context.Mouse.SetConfinedToWindow(true);
+context.Mouse.SetConfineRect(new Rectangle(100, 100, 400, 300));
+</code></pre>
+
+		<h3>Programmatic reposition and cursor shape</h3>
+		<pre><code class="language-csharp">context.Mouse.SetCursor(MouseCursor.Hand);
+context.Mouse.SetCursorPosition(200, 150);
+</code></pre>
+
+		<h3>Double-click behavior</h3>
+		<pre><code class="language-csharp">// Configure multi-click detection window (set early, before you start handling input)
+context.Mouse.SetDoubleClickTime(250);         // milliseconds
+context.Mouse.SetDoubleClickRadius(4f);        // pixels
+</code></pre>
+
+		<h2 id="notes">Behavior notes</h2>
+		<ul>
+			<li><b>Per-frame edges</b>: <code>WasButtonPressed/Released</code> and wheel values are cleared each frame. Read them during your Update loop.</li>
+			<li>
+				<b>Logical vs pixel coordinates</b>: <code>X/Y</code> are logical window units (DPI independent). If you render in back-buffer pixels,
+				convert using your window size and pixel size (or your renderer’s scaling) when needed.
+			</li>
+			<li>
+				<b>Focus changes</b>: on focus loss, held buttons and drag state are cleared and mouse capture is released to avoid “stuck” inputs.
+				On focus gain, per-frame deltas reset; re-apply any custom cursor/confine/relative mode settings as needed.
+			</li>
+			<li><b>Double-click tuning</b>: time/radius changes affect future click detection. Apply your preferred values during initialization for consistent behavior.</li>
+		</ul>
+
+		<h2 id="troubleshooting">Troubleshooting</h2>
+		<ul>
+			<li><b>Double-clicks not recognized</b>: ensure you set time/radius early; verify your game loop reads per-frame edges each Update.</li>
+			<li><b>Positions don’t match pixels</b>: remember <code>X/Y</code> are logical coordinates. Map to render pixels using your window/render target scaling.</li>
+			<li><b>Input stuck after alt-tab</b>: focus loss clears held state by design. Ensure your input handling doesn’t assume a button remains down across focus changes.</li>
+		</ul>
+	</section>
+</body>
+</html>

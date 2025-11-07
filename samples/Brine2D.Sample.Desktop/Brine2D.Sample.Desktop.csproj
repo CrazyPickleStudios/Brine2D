@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Brine2D.Core\Brine2D.Core.csproj" />
+		<ProjectReference Include="..\..\src\Brine2D.SDL\Brine2D.SDL.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="assets\**">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+</Project>

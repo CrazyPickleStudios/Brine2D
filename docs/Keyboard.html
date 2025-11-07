@@ -1,0 +1,142 @@
+﻿<html>
+<body>
+    <section id="keyboard-input">
+        <h1>Keyboard input</h1>
+        <p>
+            Brine2D exposes keyboard state via <code>IKeyboard</code> (and on some hosts, the equivalent <code>IInput</code> surface).
+            It provides per-frame key edges and “is down” queries. Desktop hosts also offer modifier/chord helpers and text input (IME).
+        </p>
+
+        <h2 id="quick-start">Quick start</h2>
+        <pre><code class="language-csharp">// Access the keyboard from your engine context (e.g., in Update)
+var kb = context as IKeyboard // if your host exposes IKeyboard
+         ?? (context as IEngineContext)?.Input; // or IInput on desktop host
+
+if (kb.WasKeyPressed(Key.Space))
+{
+    // Fired on the frame Space transitioned up -> down
+}
+
+if (kb.IsKeyDown(Key.Left) || kb.IsKeyDown(Key.A))
+{
+    // Held this frame
+}
+</code></pre>
+
+        <h2 id="core-api">Core API</h2>
+        <ul>
+            <li><code>bool IsKeyDown(Key key)</code> — true while the key is held.</li>
+            <li><code>bool WasKeyPressed(Key key)</code> — true only on the frame up → down.</li>
+            <li><code>bool WasKeyReleased(Key key)</code> — true only on the frame down → up.</li>
+        </ul>
+        <p>
+            Key identifiers are defined in <code>Key</code>, covering navigation, letters/digits, function keys,
+            modifiers (left/right), numpad and common media keys.
+        </p>
+
+        <h2 id="modifiers-and-chords">Modifiers and chords (desktop host)</h2>
+        <p>
+            The SDL desktop host exposes modifier state and chord helpers on <code>SdlHost</code>:
+        </p>
+        <ul>
+            <li><code>KeyboardModifiers Modifiers</code> — current modifiers (Shift/Ctrl/Alt/Super, side-specific, locks).</li>
+            <li><code>bool IsChordDown(Key key, KeyboardModifiers required)</code></li>
+            <li><code>bool WasChordPressed(Key key, KeyboardModifiers required)</code></li>
+            <li><code>bool WasShortcutPressed(Key key)</code> — Ctrl on Windows/Linux, Cmd on macOS.</li>
+            <li><code>static string FormatChord(KeyboardModifiers mods, Key key)</code> — e.g., “Ctrl+Shift+S”.</li>
+        </ul>
+        <pre><code class="language-csharp">if (host.WasChordPressed(Key.Enter, KeyboardModifiers.Alt))
+    ToggleFullscreen();
+
+if (host.WasShortcutPressed(Key.S))
+    SaveGame();
+
+var label = SdlHost.FormatChord(KeyboardModifiers.Control | KeyboardModifiers.Shift, Key.S);
+</code></pre>
+
+        <h2 id="text-input">Text input and IME (desktop host)</h2>
+        <p>
+            For text entry (names, chat, console) use text input and IME composition:
+        </p>
+        <ul>
+            <li><code>void StartTextInput(Rectangle? imeRect = null)</code> — begin text input. Optional caret area in window coords.</li>
+            <li><code>void StartTextInput(Rectangle imeRect, int caretOffset)</code> — explicit caret offset (relative to rect.x).</li>
+            <li><code>void StopTextInput()</code> — end text input.</li>
+            <li><code>IReadOnlyList&lt;string&gt; TypedText</code> — committed UTF-8 text chunks this frame.</li>
+            <li><code>string CompositionText</code>, <code>int CompositionStart</code>, <code>int CompositionLength</code>, <code>bool IsComposing</code> — IME composition info.</li>
+        </ul>
+        <pre><code class="language-csharp">// Start with a caret box at (x,y,w,h), caret at end
+host.StartTextInput(new Rectangle(x, y, w, h));
+
+// Per frame: consume typed characters
+foreach (var chunk in host.TypedText)
+    textBuffer.Append(chunk);
+
+// IME composition (show preedit with underline/selection)
+if (host.IsComposing)
+    DrawComposition(host.CompositionText, host.CompositionStart, host.CompositionLength);
+
+// Done
+host.StopTextInput();
+</code></pre>
+
+        <h2 id="repeat-and-advanced">Repeat and advanced behavior (desktop host)</h2>
+        <ul>
+            <li><code>SetSuppressKeyRepeat(bool)</code> — ignore OS key repeat for edge generation (default: true).</li>
+            <li><code>SetKeyRepeatGeneratesPressed(bool)</code> — treat repeats as <code>WasKeyPressed</code> when enabled (menus/held navigation).</li>
+        </ul>
+
+        <h2 id="rebinding">Rebinding and chords (optional utility)</h2>
+        <p>
+            The core includes a small binding utility for actions with keyboard chords:
+        </p>
+        <ul>
+            <li><code>KeyChord</code> — a key + required modifiers.</li>
+            <li><code>KeyChordFormat</code> — format/parse “Ctrl+Shift+S”, supports aliases like “PgUp”, “Num5”, “KP_1”.</li>
+            <li><code>KeyBindings&lt;TAction&gt;</code> — map actions to one or more chords; query <code>WasPressed/IsDown/WasReleased</code>.</li>
+        </ul>
+        <pre><code class="language-csharp">var bindings = new KeyBindings&lt;GameAction&gt;();
+bindings.Bind(GameAction.ToggleFullscreen, Key.Enter, KeyboardModifiers.Alt);
+bindings.Bind(GameAction.Save, Key.S, KeyboardModifiers.Control);
+
+if (bindings.WasPressed(GameAction.Save, host, host.Modifiers))
+    SaveGame();
+</code></pre>
+
+        <h2 id="examples">Examples</h2>
+        <h3>Discrete movement and actions</h3>
+        <pre><code class="language-csharp">var kb = (IKeyboard)host;
+var move = new Vector2(0, 0);
+if (kb.IsKeyDown(Key.W) || kb.IsKeyDown(Key.Up)) move.Y -= 1;
+if (kb.IsKeyDown(Key.S) || kb.IsKeyDown(Key.Down)) move.Y += 1;
+if (kb.IsKeyDown(Key.A) || kb.IsKeyDown(Key.Left)) move.X -= 1;
+if (kb.IsKeyDown(Key.D) || kb.IsKeyDown(Key.Right)) move.X += 1;
+
+if (kb.WasKeyPressed(Key.Space))
+    Jump();
+</code></pre>
+
+        <h3>Shortcuts and platform-friendly labels</h3>
+        <pre><code class="language-csharp">bool savePressed = host.WasShortcutPressed(Key.S);
+string label = SdlHost.FormatChord(
+    OperatingSystem.IsMacOS() ? KeyboardModifiers.Super : KeyboardModifiers.Control,
+    Key.S);
+</code></pre>
+
+        <h2 id="notes">Behavior notes</h2>
+        <ul>
+            <li><b>Per-frame edges</b>: call queries during your Update. Edge state resets each frame.</li>
+            <li><b>Focus changes</b>: on focus loss, held keys are cleared to prevent “stuck” input.</li>
+            <li><b>Modifiers and locks</b>: desktop host synchronizes with the OS (e.g., Caps/Num Lock) for accurate chord detection.</li>
+            <li><b>Numpad vs top-row digits</b>: both are exposed (e.g., <code>D1</code> vs <code>Numpad1</code>) and can be bound independently.</li>
+        </ul>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        <ul>
+            <li><b>Edges not firing</b>: ensure you’re not discarding Update frames and that you query within the frame they occur.</li>
+            <li><b>Shortcuts inconsistent across OS</b>: prefer <code>WasShortcutPressed(key)</code> to map Ctrl/Cmd automatically.</li>
+            <li><b>IME caret placement</b>: <code>StartTextInput(rect, caretOffset)</code> expects window coordinates; pass the caret offset relative to <code>rect.x</code>.</li>
+        </ul>
+    </section>
+</body>
+</html>
