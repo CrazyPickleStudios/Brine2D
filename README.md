@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/media/brine2d_logo.svg">
     <source media="(prefers-color-scheme: light)" srcset="docs/media/brine2d_logo.svg">
-    <img alt="Brine2D" src="docs/media/brine2d_logo.png" width="80" height="auto">
+    <img alt="Brine2D" src="docs/media/brine2d_logo.png" width="420" height="auto">
   </picture>
 </p>
 
