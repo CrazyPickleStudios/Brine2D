@@ -1,14 +1,14 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/media/brine2d-logo.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/media/brine2d-logo.svg">
-    <img alt="Brine2D" src="docs/media/brine2d-logo.png" width="420" height="auto">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/brine2d_logo.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/media/brine2d_logo.svg">
+    <img alt="Brine2D" src="docs/media/brine2d_logo.png" width="420" height="auto">
   </picture>
 </p>
 
 # Brine2D
 
-Brine2D is a fast, minimal 2D engine built on SDL3ís new GPU API, written entirely in C# for .NET 8. It targets modern backends (D3D12, Vulkan, Metal) via SDL3 GPU and provides a straightforward game loop, sprite renderer, input system, and content loading.
+Brine2D is a fast, minimal 2D engine built on SDL3‚Äôs new GPU API, written entirely in C# for .NET 8. It targets modern backends (D3D12, Vulkan, Metal) via SDL3 GPU and provides a straightforward game loop, sprite renderer, input system, and content loading.
 
 ## Highlights
 - SDL3 GPU renderer with device-appropriate shaders (DXIL, SPIR-V, MSL/Metallib)
@@ -23,7 +23,7 @@ Brine2D is a fast, minimal 2D engine built on SDL3ís new GPU API, written entire
 - Visual Studio 2022 or the dotnet CLI
 - SDL3 native runtime accessible at runtime (SDL3.dll / libSDL3.so / libSDL3.dylib)
 - DirectX Shader Compiler (dxc) on PATH to build engine shaders
-  - Windows: install ìDirectX Shader Compilerî or Vulkan SDK (includes dxc). Verify with: where dxc
+  - Windows: install ‚ÄúDirectX Shader Compiler‚Äù or Vulkan SDK (includes dxc). Verify with: where dxc
   - macOS/Linux: install Vulkan SDK and ensure $VULKAN_SDK/bin is on PATH. Verify with: which dxc
   - Alternatively set an absolute path in Brine2D.SDL.csproj:
     <PropertyGroup><DxcExe>C:\Tools\dxc\dxc.exe</DxcExe></PropertyGroup>
@@ -98,7 +98,7 @@ Custom shaders
 - Drop user-provided binaries into either:
   - Content/Shaders, or
   - Assets/Shaders
-- Filenames must match the engineís expectation:
+- Filenames must match the engine‚Äôs expectation:
   - SpriteVS.ext and SpritePS.ext
   - ResolveVS.ext and ResolvePS.ext
   - Where ext is one of: .dxil (D3D12), .spv (Vulkan), .msl/.metallib (Metal)
