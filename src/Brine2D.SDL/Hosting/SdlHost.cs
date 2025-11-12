@@ -1,7 +1,4 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text;
-using Brine2D.Core.Content;
+﻿using Brine2D.Core.Content;
 using Brine2D.Core.Content.Loaders;
 using Brine2D.Core.Graphics;
 using Brine2D.Core.Hosting;
@@ -10,15 +7,23 @@ using Brine2D.Core.Math;
 using Brine2D.Core.Runtime;
 using Brine2D.SDL.Content.Loaders;
 using Brine2D.SDL.Graphics;
+using Brine2D.SDL.Hosting;
 using Brine2D.SDL.Input;
 using SDL;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using static SDL.SDL3;
+using static SDL.SDL3_ttf;
 
 namespace Brine2D.SDL.Hosting;
 
 public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRenderer, IKeyboard
 {
     private readonly ContentManager _content = new();
+
+    // Resource leak tracker
+    private readonly ResourceTracker _resourceTracker = new();
 
     // Gamepads
     private readonly SdlGamepads _gamepads = new();
@@ -31,14 +36,15 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
     private readonly SDL_GPUTextureFormat _sceneFormat = SDL_GPUTextureFormat.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
     private readonly SdlSpriteRenderer _sprites;
+    private DebugOverlay? _overlay;
 
     private Color _pendingClear = Color.CornflowerBlue;
 
-    private SDL_GPUGraphicsPipeline* _resolvePipeline;
-    private SDL_GPUShader* _resolvePS;
-
-    private SDL_GPUSampler* _resolveSampler;
-    private SDL_GPUShader* _resolveVS;
+    // Resolve pipeline (wrapped)
+    private GpuGraphicsPipeline? _resolvePipeline;
+    private GpuShader? _resolvePS;
+    private GpuSampler? _resolveSampler;
+    private GpuShader? _resolveVS;
 
     // Offscreen resolve path when swapchain is non-sRGB
     private SDL_GPUTexture* _sceneColor;
@@ -46,7 +52,7 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
 
     private string _title = "Brine2D (SDL3 GPU)";
 
-    public SdlHost()
+    internal SdlHost()
     {
         _sprites = new SdlSpriteRenderer(this);
     }
@@ -102,6 +108,43 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
 
     internal SDL_Window* WindowPtr { get; private set; }
 
+    // Trackers
+    public int LiveTrackedResources => _resourceTracker.LiveCount;
+    public int TotalTrackedResources => _resourceTracker.Count;
+
+    // Approximate bytes used by live textures (width*height*bytesPerPixel)
+    public long LiveGpuTextureBytes
+    {
+        get
+        {
+            long total = 0;
+            _resourceTracker.ForEach(r =>
+            {
+                if (r is SdlTexture2D tex && !tex.IsDisposed)
+                {
+                    total += (long)tex.Width * tex.Height * BytesPerPixel(tex.Format);
+                }
+            });
+            return total;
+        }
+    }
+
+    private static int BytesPerPixel(TextureFormat fmt)
+    {
+        // Best-effort mapping; extend as you add formats
+        return fmt switch
+        {
+            TextureFormat.R8G8B8A8_UNorm => 4,
+            TextureFormat.B8G8R8A8_UNorm => 4,
+            TextureFormat.R8_UNorm => 1,
+            TextureFormat.R8G8_UNorm => 2,
+            TextureFormat.R16G16B16A16_Float => 8,
+            _ => 4
+        };
+    }
+
+    internal void RegisterResource(object resource) => _resourceTracker.Register(resource);
+
     // Formats a chord like "Ctrl+Shift+S" or "Cmd+Shift+S" on macOS.
     public static string FormatChord(KeyboardModifiers mods, Key key, bool preferPlatformNames = true,
         bool includeSideModifiers = false)
@@ -126,86 +169,31 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
 
         if (includeSideModifiers)
         {
-            if ((mods & KeyboardModifiers.LeftControl) != 0)
-            {
-                parts.Add($"{ctrl}-L");
-            }
-
-            if ((mods & KeyboardModifiers.RightControl) != 0)
-            {
-                parts.Add($"{ctrl}-R");
-            }
-
-            if ((mods & KeyboardModifiers.LeftShift) != 0)
-            {
-                parts.Add("Shift-L");
-            }
-
-            if ((mods & KeyboardModifiers.RightShift) != 0)
-            {
-                parts.Add("Shift-R");
-            }
-
-            if ((mods & KeyboardModifiers.LeftAlt) != 0)
-            {
-                parts.Add("Alt-L");
-            }
-
-            if ((mods & KeyboardModifiers.RightAlt) != 0)
-            {
-                parts.Add("Alt-R");
-            }
-
-            if ((mods & KeyboardModifiers.LeftSuper) != 0)
-            {
-                parts.Add($"{super}-L");
-            }
-
-            if ((mods & KeyboardModifiers.RightSuper) != 0)
-            {
-                parts.Add($"{super}-R");
-            }
+            if ((mods & KeyboardModifiers.LeftControl) != 0) parts.Add($"{ctrl}-L");
+            if ((mods & KeyboardModifiers.RightControl) != 0) parts.Add($"{ctrl}-R");
+            if ((mods & KeyboardModifiers.LeftShift) != 0) parts.Add("Shift-L");
+            if ((mods & KeyboardModifiers.RightShift) != 0) parts.Add("Shift-R");
+            if ((mods & KeyboardModifiers.LeftAlt) != 0) parts.Add("Alt-L");
+            if ((mods & KeyboardModifiers.RightAlt) != 0) parts.Add("Alt-R");
+            if ((mods & KeyboardModifiers.LeftSuper) != 0) parts.Add($"{super}-L");
+            if ((mods & KeyboardModifiers.RightSuper) != 0) parts.Add($"{super}-R");
         }
         else
         {
-            if ((mods & KeyboardModifiers.Control) != 0)
-            {
-                parts.Add(ctrl);
-            }
-
-            if ((mods & KeyboardModifiers.Shift) != 0)
-            {
-                parts.Add("Shift");
-            }
-
-            if ((mods & KeyboardModifiers.Alt) != 0)
-            {
-                parts.Add("Alt");
-            }
-
-            if ((mods & KeyboardModifiers.Super) != 0)
-            {
-                parts.Add(super);
-            }
+            if ((mods & KeyboardModifiers.Control) != 0) parts.Add(ctrl);
+            if ((mods & KeyboardModifiers.Shift) != 0) parts.Add("Shift");
+            if ((mods & KeyboardModifiers.Alt) != 0) parts.Add("Alt");
+            if ((mods & KeyboardModifiers.Super) != 0) parts.Add(super);
         }
 
-        // Optional: show lock states
-        if ((mods & KeyboardModifiers.CapsLock) != 0)
-        {
-            parts.Add("Caps");
-        }
-
-        if ((mods & KeyboardModifiers.NumLock) != 0)
-        {
-            parts.Add("Num");
-        }
+        if ((mods & KeyboardModifiers.CapsLock) != 0) parts.Add("Caps");
+        if ((mods & KeyboardModifiers.NumLock) != 0) parts.Add("Num");
 
         parts.Add(FormatKeyName(key));
         return string.Join('+', parts);
 
         static string FormatKeyName(Key k)
         {
-            // Provide common short labels; otherwise fallback to enum name.
             return k switch
             {
                 Key.Escape => "Esc",
@@ -327,7 +315,7 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
 
             var resolvePass = SDL_BeginGPURenderPass(cmd, &backTarget, 1, null);
 
-            SDL_BindGPUGraphicsPipeline(resolvePass, _resolvePipeline);
+            SDL_BindGPUGraphicsPipeline(resolvePass, _resolvePipeline!.Ptr);
 
             SDL_GPUViewport vp;
             vp.x = 0;
@@ -340,7 +328,7 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
 
             SDL_GPUTextureSamplerBinding ts;
             ts.texture = _sceneColor;
-            ts.sampler = _resolveSampler;
+            ts.sampler = _resolveSampler!.Ptr;
             SDL_BindGPUFragmentSamplers(resolvePass, 0, &ts, 1);
 
             // Fullscreen triangle (SV_VertexID in resolve VS)
@@ -351,7 +339,7 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
 
         SDL_SubmitGPUCommandBuffer(cmd);
     }
-
+    
     public void Run(IGame game)
     {
         SDL_SetAppMetadata(_title, null, null);
@@ -359,6 +347,12 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
         if (!SDL_Init(SDL_InitFlags.SDL_INIT_VIDEO | SDL_InitFlags.SDL_INIT_GAMEPAD | SDL_InitFlags.SDL_INIT_JOYSTICK))
         {
             throw new InvalidOperationException($"SDL_Init failed: {SDL_GetError()}");
+        }
+
+        // Initialize SDL_ttf
+        if (!TTF_Init())
+        {
+            throw new InvalidOperationException($"TTF_Init failed: {SDL_GetError()}");
         }
 
         var winFlags = SDL_WindowFlags.SDL_WINDOW_RESIZABLE | SDL_WindowFlags.SDL_WINDOW_HIGH_PIXEL_DENSITY;
@@ -400,6 +394,8 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
         _content.AddLoader(new StringLoader());
         _content.AddLoader(new BytesLoader());
         _content.AddLoader(new SdlTextureLoader(this));
+        _content.AddLoader(new TtfFontLoader());
+        _content.AddLoader(new SpriteFontLoader(this));
 
         SDL_SetWindowResizable(WindowPtr, true);
         SDL_FlashWindow(WindowPtr, SDL_FlashOperation.SDL_FLASH_BRIEFLY);
@@ -416,9 +412,21 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
         // Eagerly enumerate currently connected gamepads (in addition to runtime events)
         _gamepads.EnumerateExisting();
 
+        // Track top-level disposable
+        RegisterResource(_sprites);
+
+        _overlay = new DebugOverlay(this, _sprites);
+        _overlay.EnsureEmbeddedFallbackFont();
+        _overlay.AutoWrapToWindow();
+        // Optional: keep default Ctrl/Cmd + F12 using platform shortcut
+        _overlay.SetToggleChord(Key.F12, 0, usePlatformShortcut: true);
+
         game.Initialize(this);
 
         var loop = new GameLoop(new GameLoopOptions(60, 6));
+        var swUpdate = new Stopwatch();
+        var swDraw = new Stopwatch();
+
         loop.Run(
             gt =>
             {
@@ -434,12 +442,31 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                     return false;
                 }
 
+                // Overlay toggle via configured chord (12)
+                if (_overlay != null && _overlay.ShouldToggle(this))
+                {
+                    _overlay.Toggle();
+                }
+
+                swUpdate.Restart();
                 game.Update(gt);
+                swUpdate.Stop();
                 return true;
             },
             gt =>
             {
+                swDraw.Restart();
+
                 game.Draw(gt);
+
+                if (_overlay != null)
+                {
+                    _overlay.UpdateMetrics(swUpdate.Elapsed.TotalMilliseconds, swDraw.Elapsed.TotalMilliseconds);
+                    _overlay.Draw();
+                }
+
+                swDraw.Stop();
+
                 Present();
             });
 
@@ -675,11 +702,14 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
             sci.address_mode_v = SDL_GPUSamplerAddressMode.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
             sci.address_mode_w = SDL_GPUSamplerAddressMode.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
             sci.enable_compare = false;
-            _resolveSampler = SDL_CreateGPUSampler(Device, &sci);
-            if (_resolveSampler == null)
+            var sp = SDL_CreateGPUSampler(Device, &sci);
+            if (sp == null)
             {
                 throw new InvalidOperationException($"SDL_CreateGPUSampler (resolve) failed: {SDL_GetError()}");
             }
+
+            _resolveSampler = new GpuSampler(Device, sp, "Resolve:Sampler");
+            RegisterResource(_resolveSampler);
         }
 
         if (_resolvePipeline != null)
@@ -704,12 +734,14 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                 vsci.entrypoint = pVsEntry;
                 vsci.stage = SDL_GPUShaderStage.SDL_GPU_SHADERSTAGE_VERTEX;
                 vsci.format = fmt;
-
-                _resolveVS = SDL_CreateGPUShader(Device, &vsci);
-                if (_resolveVS == null)
+                var vptr = SDL_CreateGPUShader(Device, &vsci);
+                if (vptr == null)
                 {
                     throw new InvalidOperationException($"SDL_CreateGPUShader (Resolve VS) failed: {SDL_GetError()}");
                 }
+
+                _resolveVS = new GpuShader(Device, vptr, "Resolve:VS");
+                RegisterResource(_resolveVS);
 
                 SDL_GPUShaderCreateInfo psci = default;
                 psci.code = psCode;
@@ -719,11 +751,14 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                 psci.format = fmt;
                 psci.num_samplers = 1;
 
-                _resolvePS = SDL_CreateGPUShader(Device, &psci);
-                if (_resolvePS == null)
+                var pptr = SDL_CreateGPUShader(Device, &psci);
+                if (pptr == null)
                 {
                     throw new InvalidOperationException($"SDL_CreateGPUShader (Resolve PS) failed: {SDL_GetError()}");
                 }
+
+                _resolvePS = new GpuShader(Device, pptr, "Resolve:PS");
+                RegisterResource(_resolvePS);
             }
         }
 
@@ -760,8 +795,8 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
         pti.has_depth_stencil_target = false;
 
         SDL_GPUGraphicsPipelineCreateInfo pci = default;
-        pci.vertex_shader = _resolveVS;
-        pci.fragment_shader = _resolvePS;
+        pci.vertex_shader = _resolveVS!.Ptr;
+        pci.fragment_shader = _resolvePS!.Ptr;
         pci.vertex_input_state = vis;
         pci.primitive_type = SDL_GPUPrimitiveType.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
         pci.rasterizer_state = rast;
@@ -769,11 +804,14 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
         pci.depth_stencil_state = ds;
         pci.target_info = pti;
 
-        _resolvePipeline = SDL_CreateGPUGraphicsPipeline(Device, &pci);
-        if (_resolvePipeline == null)
+        var pipe = SDL_CreateGPUGraphicsPipeline(Device, &pci);
+        if (pipe == null)
         {
             throw new InvalidOperationException($"SDL_CreateGPUGraphicsPipeline (resolve) failed: {SDL_GetError()}");
         }
+
+        _resolvePipeline = new GpuGraphicsPipeline(Device, pipe, "Resolve:Pipeline");
+        RegisterResource(_resolvePipeline);
     }
 
     private void EnsureSceneColor(uint w, uint h)
@@ -841,22 +879,22 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                     break;
 
                 case SDL_EventType.SDL_EVENT_TEXT_INPUT:
-                {
-                    var txt = ev.text.text != null ? Marshal.PtrToStringUTF8((nint)ev.text.text) : null;
-                    if (!string.IsNullOrEmpty(txt))
                     {
-                        _keyboard.OnTextInput(txt);
+                        var txt = ev.text.text != null ? Marshal.PtrToStringUTF8((nint)ev.text.text) : null;
+                        if (!string.IsNullOrEmpty(txt))
+                        {
+                            _keyboard.OnTextInput(txt);
+                        }
+
+                        break;
                     }
 
-                    break;
-                }
-
                 case SDL_EventType.SDL_EVENT_TEXT_EDITING:
-                {
-                    var txt = ev.edit.text != null ? Marshal.PtrToStringUTF8((nint)ev.edit.text) : string.Empty;
-                    _keyboard.OnTextEditing(txt ?? string.Empty, ev.edit.start, ev.edit.length);
-                    break;
-                }
+                    {
+                        var txt = ev.edit.text != null ? Marshal.PtrToStringUTF8((nint)ev.edit.text) : string.Empty;
+                        _keyboard.OnTextEditing(txt ?? string.Empty, ev.edit.start, ev.edit.length);
+                        break;
+                    }
 
                 case SDL_EventType.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                     int w, h;
@@ -864,6 +902,7 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                     Width = w;
                     Height = h;
                     _mouse.OnWindowResized();
+                    _overlay?.OnWindowResized();
                     break;
 
                 case SDL_EventType.SDL_EVENT_WINDOW_MOUSE_ENTER:
@@ -895,18 +934,18 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                     break;
 
                 case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_DOWN:
-                {
-                    var b = MapMouseButton(ev.button.button);
-                    _mouse.OnButtonDown(b, ev.button.clicks, ev.button.which);
-                    break;
-                }
+                    {
+                        var b = MapMouseButton(ev.button.button);
+                        _mouse.OnButtonDown(b, ev.button.clicks, ev.button.which);
+                        break;
+                    }
 
                 case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_UP:
-                {
-                    var b = MapMouseButton(ev.button.button);
-                    _mouse.OnButtonUp(b, ev.button.which);
-                    break;
-                }
+                    {
+                        var b = MapMouseButton(ev.button.button);
+                        _mouse.OnButtonUp(b, ev.button.which);
+                        break;
+                    }
 
                 // Gamepad hotplug and input
                 case SDL_EventType.SDL_EVENT_GAMEPAD_ADDED:
@@ -940,6 +979,10 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
     {
         try
         {
+            // Dispose overlay resources before tearing down device/TTF
+            _overlay?.Dispose();
+            _overlay = null;
+
             _sprites.Dispose();
 
             // Dispose mouse resources (cursor cache)
@@ -948,29 +991,21 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
             // Close gamepads
             _gamepads.Dispose();
 
-            if (_resolvePipeline != null)
-            {
-                SDL_ReleaseGPUGraphicsPipeline(Device, _resolvePipeline);
-                _resolvePipeline = null;
-            }
+            // Dispose all cached assets (textures, etc.)
+            _content.Dispose();
 
-            if (_resolvePS != null)
-            {
-                SDL_ReleaseGPUShader(Device, _resolvePS);
-                _resolvePS = null;
-            }
+            // Release resolve resources
+            _resolvePipeline?.Dispose();
+            _resolvePipeline = null;
 
-            if (_resolveVS != null)
-            {
-                SDL_ReleaseGPUShader(Device, _resolveVS);
-                _resolveVS = null;
-            }
+            _resolvePS?.Dispose();
+            _resolvePS = null;
 
-            if (_resolveSampler != null)
-            {
-                SDL_ReleaseGPUSampler(Device, _resolveSampler);
-                _resolveSampler = null;
-            }
+            _resolveVS?.Dispose();
+            _resolveVS = null;
+
+            _resolveSampler?.Dispose();
+            _resolveSampler = null;
 
             if (_sceneColor != null)
             {
@@ -984,6 +1019,10 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                 SDL_ReleaseWindowFromGPUDevice(Device, WindowPtr);
             }
 
+#if DEBUG
+            _resourceTracker.VerifyAllDisposed();
+#endif
+
             if (Device != null)
             {
                 SDL_DestroyGPUDevice(Device);
@@ -995,10 +1034,20 @@ public sealed unsafe class SdlHost : IGameHost, IEngineContext, IWindow, IRender
                 SDL_DestroyWindow(WindowPtr);
                 WindowPtr = null;
             }
+
+            // Quit SDL_ttf
+            TTF_Quit();
         }
         finally
         {
             SDL_Quit();
         }
+    }
+    
+    public void ConfigureDebugOverlayTTF(string pathWithSize)
+    {
+        if (_overlay == null) return;
+        var font = _content.Load<TtfFont>(pathWithSize);
+        _overlay.UseTtfFontAsset(font);
     }
 }

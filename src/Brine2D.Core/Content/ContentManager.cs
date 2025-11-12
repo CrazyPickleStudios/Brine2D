@@ -15,7 +15,7 @@ namespace Brine2D.Core.Content;
 ///     </list>
 ///     <para><b>Thread safety:</b> This type is not thread-safe. Coordinate access if used from multiple threads.</para>
 /// </remarks>
-public sealed class ContentManager : IContentManager
+public sealed class ContentManager : IContentManager, IDisposable
 {
     // Cache of fully loaded assets by (Type, normalized key).
     private readonly Dictionary<(Type type, string key), object> _cache = new();
@@ -290,5 +290,13 @@ public sealed class ContentManager : IContentManager
     private async Task<object> WrapAsync(ValueTask<object> vt)
     {
         return await vt.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Disposes the content manager, unloading all assets.
+    /// </summary>
+    public void Dispose()
+    {
+        UnloadAll();
     }
 }

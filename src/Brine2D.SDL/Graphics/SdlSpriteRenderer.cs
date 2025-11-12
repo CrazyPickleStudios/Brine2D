@@ -13,10 +13,10 @@ namespace Brine2D.SDL.Graphics;
 // Sort options for sprites (after primary sort by Layer).
 public enum SpriteSortMode
 {
-    None, // Keep submission order within each Layer.
-    ByTexture, // Group by texture within each Layer.
-    BackToFront, // Within Layer: smaller depth first (good for transparency).
-    FrontToBack // Within Layer: larger depth first (good for opaque).
+    None,            // Keep submission order within each Layer.
+    ByTexture,       // Group by texture within each Layer.
+    BackToFront,     // Within Layer: smaller depth first (good for transparency).
+    FrontToBack      // Within Layer: larger depth first (good for opaque).
 }
 
 public enum SpriteBlendMode
@@ -35,8 +35,8 @@ public enum SpriteSamplerMode
 internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
 {
     private static readonly string PS_ENTRY = "PSMain";
-
     private static readonly string VS_ENTRY = "VSMain";
+
     private static int _frameId;
     private readonly List<Batch> _batches = new(8);
     private readonly List<DrawCmd> _draws = new(256);
@@ -49,7 +49,7 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
     private bool _begun;
 
     // Pipeline config
-    private SpriteBlendMode _blendMode = SpriteBlendMode.PremultipliedAlpha;
+    private SpriteBlendMode _blendMode = SpriteBlendMode.StraightAlpha;
 
     // Active camera (null => screen-space)
     private Camera2D? _camera;
@@ -61,12 +61,13 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
     private uint _ibSize;
     private uint _ibWriteOffset;
     private ushort[] _indices = Array.Empty<ushort>();
-    private SDL_GPUGraphicsPipeline* _pipeline;
-    private SDL_GPUTextureFormat _pipelineTargetFormat = SDL_GPUTextureFormat.SDL_GPU_TEXTUREFORMAT_INVALID;
-    private SDL_GPUShader* _ps;
 
-    // GPU resources
-    private SDL_GPUSampler* _sampler;
+    // Wrapped GPU objects
+    private GpuGraphicsPipeline? _pipeline;
+    private SDL_GPUTextureFormat _pipelineTargetFormat = SDL_GPUTextureFormat.SDL_GPU_TEXTUREFORMAT_INVALID;
+    private GpuShader? _ps;
+
+    private GpuSampler? _sampler;
     private SpriteSamplerMode _samplerMode = SpriteSamplerMode.Linear;
     private SpriteSortMode _sortMode = SpriteSortMode.None;
     private int _targetW, _targetH;
@@ -85,7 +86,12 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
 
     // CPU staging (frame-wide)
     private Vertex[] _verts = Array.Empty<Vertex>();
-    private SDL_GPUShader* _vs;
+    private GpuShader? _vs;
+
+    // Diagnostics exposed for overlay
+    public int LastItemCount { get; private set; }
+    public int LastBatchCount { get; private set; }
+    public int LastDrawCallCount { get; private set; }
 
     public SdlSpriteRenderer(SdlHost host)
     {
@@ -156,30 +162,18 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
             return;
         }
 
-        if (_pipeline != null)
-        {
-            SDL_ReleaseGPUGraphicsPipeline(dev, _pipeline);
-            _pipeline = null;
-            _pipelineTargetFormat = SDL_GPUTextureFormat.SDL_GPU_TEXTUREFORMAT_INVALID;
-        }
+        _pipeline?.Dispose();
+        _pipeline = null;
+        _pipelineTargetFormat = SDL_GPUTextureFormat.SDL_GPU_TEXTUREFORMAT_INVALID;
 
-        if (_ps != null)
-        {
-            SDL_ReleaseGPUShader(dev, _ps);
-            _ps = null;
-        }
+        _ps?.Dispose();
+        _ps = null;
 
-        if (_vs != null)
-        {
-            SDL_ReleaseGPUShader(dev, _vs);
-            _vs = null;
-        }
+        _vs?.Dispose();
+        _vs = null;
 
-        if (_sampler != null)
-        {
-            SDL_ReleaseGPUSampler(dev, _sampler);
-            _sampler = null;
-        }
+        _sampler?.Dispose();
+        _sampler = null;
 
         if (_vb != null)
         {
@@ -264,10 +258,9 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
         }
 
         _blendMode = mode;
-        var dev = _host.Device;
-        if (_pipeline != null && dev != null)
+        if (_pipeline != null)
         {
-            SDL_ReleaseGPUGraphicsPipeline(dev, _pipeline);
+            _pipeline.Dispose();
             _pipeline = null;
             _pipelineTargetFormat = SDL_GPUTextureFormat.SDL_GPU_TEXTUREFORMAT_INVALID;
         }
@@ -293,10 +286,9 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
         }
 
         _samplerMode = mode;
-        var dev = _host.Device;
-        if (_sampler != null && dev != null)
+        if (_sampler != null)
         {
-            SDL_ReleaseGPUSampler(dev, _sampler);
+            _sampler.Dispose();
             _sampler = null;
         }
     }
@@ -312,6 +304,9 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
     {
         if (_items.Count == 0)
         {
+            LastItemCount = 0;
+            LastBatchCount = 0;
+            LastDrawCallCount = 0;
             return;
         }
 
@@ -471,7 +466,7 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
                 else if (it.Tex != runTex)
                 {
                     _draws.Add(new DrawCmd
-                        { Tex = runTex!, IndexStart = (uint)runStartLocal, IndexCount = (uint)(i - runStartLocal) });
+                    { Tex = runTex!, IndexStart = (uint)runStartLocal, IndexCount = (uint)(i - runStartLocal) });
                     runTex = it.Tex;
                     runStartLocal = i;
                 }
@@ -600,7 +595,7 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
             if (haveRun)
             {
                 _draws.Add(new DrawCmd
-                    { Tex = runTex!, IndexStart = (uint)runStartLocal, IndexCount = (uint)(i - runStartLocal) });
+                { Tex = runTex!, IndexStart = (uint)runStartLocal, IndexCount = (uint)(i - runStartLocal) });
             }
 
             if (_debugLog)
@@ -659,12 +654,17 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
         _vbWriteOffset = vbBase + vbBytes;
         _ibWriteOffset = ibBase + ibBytes;
 
+        // Diagnostics: expose counts to overlay
+        LastItemCount = _items.Count;
+        LastBatchCount = emits.Count;
+        LastDrawCallCount = _draws.Count;
+
         // Now draw per batch from the uploaded ring regions
         for (var b = 0; b < emits.Count; b++)
         {
             var e = emits[b];
 
-            SDL_BindGPUGraphicsPipeline(pass, _pipeline);
+            SDL_BindGPUGraphicsPipeline(pass, _pipeline!.Ptr);
 
             SDL_GPUViewport vpState;
             vpState.x = (uint)e.VpX;
@@ -691,7 +691,7 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
                 var dc = _draws[d];
                 SDL_GPUTextureSamplerBinding ts;
                 ts.texture = dc.Tex.Texture;
-                ts.sampler = _sampler;
+                ts.sampler = _sampler!.Ptr;
                 SDL_BindGPUFragmentSamplers(pass, 0, &ts, 1);
 
                 SDL_DrawGPUIndexedPrimitives(pass, dc.IndexCount, 1, dc.IndexStart, 0, 0);
@@ -744,36 +744,36 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
         switch (_sortMode)
         {
             case SpriteSortMode.ByTexture:
-            {
-                var pa = (nuint)a.Tex.Texture;
-                var pb = (nuint)b.Tex.Texture;
-                if (pa != pb)
                 {
-                    return pa < pb ? -1 : 1;
-                }
+                    var pa = (nuint)a.Tex.Texture;
+                    var pb = (nuint)b.Tex.Texture;
+                    if (pa != pb)
+                    {
+                        return pa < pb ? -1 : 1;
+                    }
 
-                break;
-            }
+                    break;
+                }
             case SpriteSortMode.BackToFront:
-            {
-                c = a.Depth.CompareTo(b.Depth); // smaller first
-                if (c != 0)
                 {
-                    return c;
-                }
+                    c = a.Depth.CompareTo(b.Depth); // smaller first
+                    if (c != 0)
+                    {
+                        return c;
+                    }
 
-                break;
-            }
+                    break;
+                }
             case SpriteSortMode.FrontToBack:
-            {
-                c = b.Depth.CompareTo(a.Depth); // larger first
-                if (c != 0)
                 {
-                    return c;
-                }
+                    c = b.Depth.CompareTo(a.Depth); // larger first
+                    if (c != 0)
+                    {
+                        return c;
+                    }
 
-                break;
-            }
+                    break;
+                }
             case SpriteSortMode.None:
             default:
                 break; // fall through to Order
@@ -816,11 +816,15 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
             sci.address_mode_v = SDL_GPUSamplerAddressMode.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
             sci.address_mode_w = SDL_GPUSamplerAddressMode.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
             sci.enable_compare = false;
-            _sampler = SDL_CreateGPUSampler(dev, &sci);
-            if (_sampler == null)
+
+            var sp = SDL_CreateGPUSampler(dev, &sci);
+            if (sp == null)
             {
                 throw new InvalidOperationException($"SDL_CreateGPUSampler failed: {SDL_GetError()}");
             }
+
+            _sampler = new GpuSampler(dev, sp, "Sprites:Sampler");
+            _host.RegisterResource(_sampler);
         }
 
         if (_pipeline != null && _pipelineTargetFormat == targetFormat)
@@ -828,23 +832,14 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
             return;
         }
 
-        if (_pipeline != null)
-        {
-            SDL_ReleaseGPUGraphicsPipeline(dev, _pipeline);
-            _pipeline = null;
-        }
+        _pipeline?.Dispose();
+        _pipeline = null;
 
-        if (_ps != null)
-        {
-            SDL_ReleaseGPUShader(dev, _ps);
-            _ps = null;
-        }
+        _ps?.Dispose();
+        _ps = null;
 
-        if (_vs != null)
-        {
-            SDL_ReleaseGPUShader(dev, _vs);
-            _vs = null;
-        }
+        _vs?.Dispose();
+        _vs = null;
 
         var fmt = _host.ActiveShaderFormat;
         var (vsBytes, psBytes) = SpriteShaders.GetShaders(fmt);
@@ -868,11 +863,14 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
                 vsci.entrypoint = pVsEntry;
                 vsci.stage = SDL_GPUShaderStage.SDL_GPU_SHADERSTAGE_VERTEX;
                 vsci.format = fmt;
-                _vs = SDL_CreateGPUShader(dev, &vsci);
-                if (_vs == null)
+                var vptr = SDL_CreateGPUShader(dev, &vsci);
+                if (vptr == null)
                 {
                     throw new InvalidOperationException($"SDL_CreateGPUShader (VS) failed: {SDL_GetError()}");
                 }
+
+                _vs = new GpuShader(dev, vptr, "Sprites:VS");
+                _host.RegisterResource(_vs);
 
                 SDL_GPUShaderCreateInfo psci = default;
                 psci.code = psCode;
@@ -881,11 +879,14 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
                 psci.stage = SDL_GPUShaderStage.SDL_GPU_SHADERSTAGE_FRAGMENT;
                 psci.format = fmt;
                 psci.num_samplers = 1;
-                _ps = SDL_CreateGPUShader(dev, &psci);
-                if (_ps == null)
+                var pptr = SDL_CreateGPUShader(dev, &psci);
+                if (pptr == null)
                 {
                     throw new InvalidOperationException($"SDL_CreateGPUShader (PS) failed: {SDL_GetError()}");
                 }
+
+                _ps = new GpuShader(dev, pptr, "Sprites:PS");
+                _host.RegisterResource(_ps);
             }
         }
 
@@ -900,17 +901,23 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
         var attrs = stackalloc SDL_GPUVertexAttribute[3];
         attrs[0] = new SDL_GPUVertexAttribute
         {
-            location = 0, buffer_slot = 0, format = SDL_GPUVertexElementFormat.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+            location = 0,
+            buffer_slot = 0,
+            format = SDL_GPUVertexElementFormat.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
             offset = 0u
         };
         attrs[1] = new SDL_GPUVertexAttribute
         {
-            location = 1, buffer_slot = 0, format = SDL_GPUVertexElementFormat.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+            location = 1,
+            buffer_slot = 0,
+            format = SDL_GPUVertexElementFormat.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
             offset = 8u
         };
         attrs[2] = new SDL_GPUVertexAttribute
         {
-            location = 2, buffer_slot = 0, format = SDL_GPUVertexElementFormat.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+            location = 2,
+            buffer_slot = 0,
+            format = SDL_GPUVertexElementFormat.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
             offset = 16u
         };
 
@@ -962,8 +969,8 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
         pti.has_depth_stencil_target = false;
 
         SDL_GPUGraphicsPipelineCreateInfo pci = default;
-        pci.vertex_shader = _vs;
-        pci.fragment_shader = _ps;
+        pci.vertex_shader = _vs!.Ptr;
+        pci.fragment_shader = _ps!.Ptr;
         pci.vertex_input_state = vis;
         pci.primitive_type = SDL_GPUPrimitiveType.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
         pci.rasterizer_state = rast;
@@ -971,11 +978,14 @@ internal sealed unsafe class SdlSpriteRenderer : ISpriteRenderer, IDisposable
         pci.depth_stencil_state = ds;
         pci.target_info = pti;
 
-        _pipeline = SDL_CreateGPUGraphicsPipeline(dev, &pci);
-        if (_pipeline == null)
+        var pipe = SDL_CreateGPUGraphicsPipeline(dev, &pci);
+        if (pipe == null)
         {
             throw new InvalidOperationException($"SDL_CreateGPUGraphicsPipeline failed: {SDL_GetError()}");
         }
+
+        _pipeline = new GpuGraphicsPipeline(dev, pipe, $"Sprites:Pipeline[{targetFormat}]");
+        _host.RegisterResource(_pipeline);
 
         _pipelineTargetFormat = targetFormat;
     }

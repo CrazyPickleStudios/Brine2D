@@ -1,0 +1,163 @@
+﻿<html>
+<body>
+	<section id="debug-overlay">
+		<h1>Debug overlay</h1>
+		<p>
+			The DebugOverlay provides on-screen performance and runtime diagnostics: FPS (smoothed + history),
+			frame/update/draw timing, sprite batching stats, resource counts, managed heap usage, approximate GPU texture
+			memory, window info, frame budget, and automatic severity coloring. It is lightweight, throttles text rebuilds,
+			and supports customization (layout, colors, corner placement, alpha, scaling, font).
+		</p>
+
+		<h2 id="quick-start">Quick start</h2>
+		<pre><code class="language-csharp">// After creating SdlHost:
+var host = new SdlHost();
+// Overlay is created by SdlHost.Run() internally; default toggle: Ctrl/Cmd + F12.
+// Inside your game Initialize you can customize:
+host.ConfigureDebugOverlayTTF("fonts/JetBrainsMono-Regular@14.ttf"); // load a content font (optional)
+
+// At runtime (e.g. in Update): toggle manually
+if (host.WasShortcutPressed(Key.F11)) // custom key
+{
+    (host as SdlHost)?.Sprites; // overlay already hooked; or expose host.Overlay if you decide to.
+}
+
+// Change appearance (example):
+// Corner: top-right, semi-transparent panel, show only text.
+var overlay = typeof(SdlHost).GetField("_overlay", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(host) as object;
+// (Prefer adding a public accessor if needed.)
+</code></pre>
+
+		<h2 id="core-api">Core API</h2>
+		<ul>
+			<li><b>Visibility</b>: <code>Toggle()</code>, <code>SetVisible(bool)</code></li>
+			<li><b>Placement</b>: <code>SetCorner(OverlayCorner)</code> (TopLeft / TopRight / BottomLeft / BottomRight)</li>
+			<li>
+				<b>Panel & border</b>: <code>SetPanelVisible(bool)</code>, <code>SetBorderVisible(bool)</code>,
+				<code>SetBorderThickness(int)</code>, <code>SetPadding(l,t,r,b)</code>, <code>SetOuterMargin(int)</code>,
+				<code>SetPanelAlpha(byte)</code>, <code>SetBorderAlpha(byte)</code>
+			</li>
+			<li>
+				<b>Colors</b>: <code>SetColors(text,panel,border)</code>, <code>SetTextColor(Color)</code>,
+				<code>SetPanelColor(Color)</code>, <code>SetBorderColor(Color)</code>
+			</li>
+			<li>
+				<b>Font</b>: <code>UseTtfFontFromContent(path,size)</code>, <code>UseTtfFontFromMemory(byte[],size)</code>,
+				<code>UseTtfFontAsset(TtfFont)</code>, <code>EnsureEmbeddedFallbackFont(int)</code>
+			</li>
+			<li>
+				<b>Wrapping</b>: <code>SetTtfWrapWidth(int)</code>, <code>AutoWrapToWindow(int outerMargin)</code>,
+				<code>OnWindowResized()</code>
+			</li>
+			<li><b>Scaling (HiDPI/UI)</b>: <code>SetUiScale(float)</code> (applies to margins/padding/border)</li>
+			<li><b>Performance update cadence</b>: <code>SetUpdatePeriod(double seconds)</code> (text rebuild throttle)</li>
+			<li>
+				<b>FPS target & severity coloring</b>: <code>SetTargetFps(double)</code>,
+				<code>SetAutoFpsColoring(bool)</code>
+			</li>
+			<li>
+				<b>Toggle chord</b>: <code>SetToggleChord(Key, KeyboardModifiers, bool usePlatformShortcut)</code>
+				(platform shortcut uses Ctrl on Windows/Linux, Cmd on macOS)
+			</li>
+			<li><b>Metrics ingestion</b>: <code>UpdateMetrics(updateMs, drawMs)</code> (called before <code>Draw()</code>)</li>
+			<li><b>Rendering</b>: <code>Draw()</code> (submits overlay sprites via shared sprite renderer)</li>
+			<li><b>Lifecycle</b>: <code>Dispose()</code> (releases font texture & transfer buffer)</li>
+			<li>
+				<b>Query metrics</b>: <code>LastUpdateMs</code>, <code>LastDrawMs</code>, <code>LastFrameMs</code>,
+				<code>SmoothedFps</code>, <code>LastSpriteItems</code>, <code>LastSpriteBatches</code>,
+				<code>LastSpriteDrawCalls</code>, <code>TrackedResources</code>
+			</li>
+		</ul>
+
+		<h2 id="displayed-values">Displayed values</h2>
+		<ul>
+			<li><b>FPS</b>: Exponential moving average + history (min/avg/max over last N samples)</li>
+			<li><b>Frame / Update / Draw</b> times (milliseconds)</li>
+			<li><b>Frame budget</b>: Derived from target FPS; over-budget frames flagged with "!"</li>
+			<li><b>Sprite stats</b>: Items, batches, draw calls</li>
+			<li><b>Resources</b>: Live and Total tracked, managed heap size, approximate GPU texture memory</li>
+			<li><b>Window & backend</b>: Resolution, sRGB flag, active shader backend</li>
+			<li><b>Severity coloring</b>: Text color shifts (normal/yellow/red) based on frame time thresholds</li>
+		</ul>
+
+		<h2 id="examples">Examples</h2>
+
+		<h3>Basic customization</h3>
+		<pre><code class="language-csharp">overlay.SetCorner(OverlayCorner.BottomRight);
+overlay.SetPanelAlpha(200);
+overlay.SetBorderVisible(false);
+overlay.SetUiScale(1.25f); // enlarge spacing for HiDPI
+overlay.SetTargetFps(120); // adjust frame budget
+overlay.SetAutoFpsColoring(true);
+overlay.SetUpdatePeriod(0.2); // refresh text 5 Hz
+</code></pre>
+
+		<h3>Custom toggle chord (disable platform shortcut)</h3>
+		<pre><code class="language-csharp">// Use Shift+O (exact chord, no Ctrl/Cmd)
+overlay.SetToggleChord(Key.O, KeyboardModifiers.Shift, usePlatformShortcut: false);
+</code></pre>
+
+		<h3>Applying a custom font</h3>
+		<pre><code class="language-csharp">// Content pipeline must provide the font asset path (loader returns TtfFont)
+overlay.UseTtfFontFromContent("fonts/JetBrainsMono-Regular@14.ttf");
+overlay.AutoWrapToWindow(); // reflow text after font change
+</code></pre>
+
+		<h3>Manual wrap width (fixed column)</h3>
+		<pre><code class="language-csharp">overlay.SetTtfWrapWidth(600); // fixed width instead of window adaptive
+</code></pre>
+
+		<h3>Color & transparency</h3>
+		<pre><code class="language-csharp">overlay.SetColors(Color.White, new Color(32, 36, 40, 220), new Color(96, 100, 108, 255));
+overlay.SetPanelAlpha(180);  // adjust opacity later without changing RGB
+</code></pre>
+
+		<h3>Integrating without auto creation (advanced)</h3>
+		<pre><code class="language-csharp">// If you choose to manage it yourself:
+var overlay = new DebugOverlay(host, (SdlSpriteRenderer)host.Sprites);
+overlay.EnsureEmbeddedFallbackFont(14);
+overlay.AutoWrapToWindow();
+overlay.SetCorner(OverlayCorner.TopLeft);
+
+// Each frame:
+overlay.UpdateMetrics(updateMs, drawMs);
+overlay.Draw();
+</code></pre>
+
+		<h3>Disabling severity coloring</h3>
+		<pre><code class="language-csharp">overlay.SetAutoFpsColoring(false); // always use SetTextColor() value
+</code></pre>
+
+		<h2 id="behavior-notes">Behavior notes</h2>
+		<ul>
+			<li><b>Throttled rebuild</b>: Text surface regenerates at most every <code>SetUpdatePeriod()</code> interval or when metrics/layout/font change.</li>
+			<li><b>Resource memory</b>: GPU texture bytes are approximate (width × height × format bytes). Extend if you add more formats.</li>
+			<li><b>Live vs Total</b>: Total tracks all registrations over time; Live excludes disposed wrappers (overlay’s transient textures are untracked).</li>
+			<li><b>UI scale</b>: Affects margins, border, padding; not font point size (reload font for true text scaling).</li>
+			<li><b>Severity thresholds</b>: Red ≈ >125% of frame budget, Yellow ≈ >105%. Adjust logic in <code>SeverityColor()</code> if needed.</li>
+			<li><b>Safe font rebuild</b>: Guards reduce risk of native crashes (font validity, wrap width cap, UTF-8 render path).</li>
+			<li><b>Draw order</b>: Overlay batches with other sprites; ensure you call it before host <code>Present()</code>.</li>
+			<li><b>Wrap width cap</b>: Extremely large window widths clamp wrap width to avoid oversized surfaces.</li>
+			<li><b>Shadow effect</b>: Provided by a second draw with offset; disable by modifying draw section if not desired.</li>
+		</ul>
+
+		<h2 id="troubleshooting">Troubleshooting</h2>
+		<ul>
+			<li><b>Overlay not visible</b>: Confirm <code>SetVisible(true)</code>. Ensure <code>Draw()</code> is called after <code>UpdateMetrics()</code>.</li>
+			<li><b>Text stale</b>: Lower <code>SetUpdatePeriod()</code> or mark dirty via changing a setting (e.g. <code>SetTargetFps()</code>).</li>
+			<li><b>Resource count rising</b>: Live should remain stable; Total counts historical registrations. Use Live for current usage.</li>
+			<li><b>Font render crash</b>: Use embedded fallback (<code>EnsureEmbeddedFallbackFont()</code>) or verify the font wasn’t disposed elsewhere.</li>
+			<li><b>Colors not changing</b>: Disable severity coloring (<code>SetAutoFpsColoring(false)</code>) if you want exact text color control.</li>
+			<li><b>Performance impact</b>: Large wrap widths or very frequent update periods increase surface rebuild cost; raise period or reduce wrap width.</li>
+		</ul>
+
+		<h2 id="extensibility">Extensibility ideas</h2>
+		<ul>
+			<li>Add GPU timing queries to display CPU vs GPU frame time.</li>
+			<li>Expose a public accessor for the overlay from <code>SdlHost</code> (e.g. property <code>Overlay</code>).</li>
+			<li>Integrate logging snapshot: method returning current overlay text for copying.</li>
+			<li>Custom severity palette or thresholds via strategy API.</li>
+		</ul>
+	</section>
+</body>
+</html>

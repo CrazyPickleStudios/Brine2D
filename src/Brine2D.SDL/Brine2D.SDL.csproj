@@ -35,35 +35,31 @@
 	<!-- Declare what will be embedded (OK if missing at evaluation; they’ll exist before CoreCompile) -->
 	<ItemGroup>
 		<CompiledShaders Include="$(ShaderIntermediateDir)*.dxil;$(ShaderIntermediateDir)*.spv" />
+		<None Remove="Content\Fonts\JetBrainsMono-Regular.ttf" />
 		<EmbeddedResource Include="@(CompiledShaders)">
 			<LogicalName>Content.Shaders.%(Filename)%(Extension)</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="Content\Fonts\JetBrainsMono-Regular.ttf">
+			<LogicalName>Content.Fonts.JetBrainsMono-Regular.ttf</LogicalName>
 		</EmbeddedResource>
 	</ItemGroup>
 
 	<!-- Compile + copy (runs before CoreCompile) -->
-	<Target Name="CompileShaders"
-			BeforeTargets="CoreCompile"
-			Condition=" '@(HlslShader)' != '' ">
+	<Target Name="CompileShaders" BeforeTargets="CoreCompile" Condition=" '@(HlslShader)' != '' ">
 		<Message Text="Compiling Brine2D SDL shaders... DXC=$(DxcExe)" Importance="high" />
 		<MakeDir Directories="$(ShaderIntermediateDir)" />
 
 		<!-- DXIL -->
-		<Exec Condition="'$(BuildDxil)' == 'true'"
-			  Command="&quot;$(DxcExe)&quot; /nologo /O3 /T vs_6_7 /E VSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)VS.dxil&quot; &quot;%(HlslShader.FullPath)&quot;" />
-		<Exec Condition="'$(BuildDxil)' == 'true'"
-			  Command="&quot;$(DxcExe)&quot; /nologo /O3 /T ps_6_7 /E PSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)PS.dxil&quot; &quot;%(HlslShader.FullPath)&quot;" />
+		<Exec Condition="'$(BuildDxil)' == 'true'" Command="&quot;$(DxcExe)&quot; /nologo /O3 /T vs_6_7 /E VSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)VS.dxil&quot; &quot;%(HlslShader.FullPath)&quot;" />
+		<Exec Condition="'$(BuildDxil)' == 'true'" Command="&quot;$(DxcExe)&quot; /nologo /O3 /T ps_6_7 /E PSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)PS.dxil&quot; &quot;%(HlslShader.FullPath)&quot;" />
 
 		<!-- SPIR-V -->
-		<Exec Condition="'$(BuildSpirv)' == 'true'"
-			  Command="&quot;$(DxcExe)&quot; /nologo -spirv -fvk-use-dx-layout -fspv-target-env=vulkan1.2 /O3 /T vs_6_7 /E VSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)VS.spv&quot; &quot;%(HlslShader.FullPath)&quot;" />
-		<Exec Condition="'$(BuildSpirv)' == 'true'"
-			  Command="&quot;$(DxcExe)&quot; /nologo -spirv -fvk-use-dx-layout -fspv-target-env=vulkan1.2 /O3 /T ps_6_7 /E PSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)PS.spv&quot; &quot;%(HlslShader.FullPath)&quot;" />
+		<Exec Condition="'$(BuildSpirv)' == 'true'" Command="&quot;$(DxcExe)&quot; /nologo -spirv -fvk-use-dx-layout -fspv-target-env=vulkan1.2 /O3 /T vs_6_7 /E VSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)VS.spv&quot; &quot;%(HlslShader.FullPath)&quot;" />
+		<Exec Condition="'$(BuildSpirv)' == 'true'" Command="&quot;$(DxcExe)&quot; /nologo -spirv -fvk-use-dx-layout -fspv-target-env=vulkan1.2 /O3 /T ps_6_7 /E PSMain /Fo &quot;$(ShaderIntermediateDir)%(HlslShader.Filename)PS.spv&quot; &quot;%(HlslShader.FullPath)&quot;" />
 
 		<!-- Also copy to output (external override path) -->
 		<MakeDir Directories="$(OutDir)Content\Shaders" />
-		<Copy SourceFiles="@(CompiledShaders)"
-			  DestinationFolder="$(OutDir)Content\Shaders"
-			  SkipUnchangedFiles="true" />
+		<Copy SourceFiles="@(CompiledShaders)" DestinationFolder="$(OutDir)Content\Shaders" SkipUnchangedFiles="true" />
 	</Target>
 
 </Project>

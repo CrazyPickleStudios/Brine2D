@@ -24,5 +24,6 @@ VSOut VSMain(VSIn i)
 
 float4 PSMain(VSOut i) : SV_Target
 {
-    return Tex0.Sample(Samp0, i.uv) * float4(1,1,1,1);
+    // Apply vertex tint
+    return Tex0.Sample(Samp0, i.uv) * i.color;
 }

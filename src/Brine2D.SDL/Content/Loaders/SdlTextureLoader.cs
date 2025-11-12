@@ -419,7 +419,9 @@ public sealed unsafe class SdlTextureLoader : AssetLoader<ITexture2D>
                 SDL_ReleaseGPUTransferBuffer(_host.Device, tbuf);
             }
 
-            return new SdlTexture2D(_host.Device, tex, width, height, engineFmt);
+            var created = new SdlTexture2D(_host.Device, tex, width, height, engineFmt, debugName: path);
+            _host.RegisterResource(created); // Track for leak diagnostics
+            return created;
         }
         finally
         {

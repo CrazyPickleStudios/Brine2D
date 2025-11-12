@@ -35,5 +35,12 @@ public enum TextureFormat
     ///     8-bit four-channel (B,G,R,A) normalized [0..1] per channel in linear color space.
     ///     Often used by APIs/platforms where BGRA is the native optimal layout.
     /// </summary>
-    B8G8R8A8_UNorm
+    B8G8R8A8_UNorm,
+
+    /// <summary>
+    ///     16-bit float per component (R,G,B,A) in linear space.
+    ///     Provides higher precision and range for HDR render targets, light buffers, or high quality intermediate passes.
+    ///     Not sRGB encoded; sampling returns linear floats.
+    /// </summary>
+    R16G16B16A16_Float
 }

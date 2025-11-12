@@ -1,0 +1,241 @@
+﻿<html>
+<body>
+	<section id="text-fonts">
+		<h1>Text &amp; fonts</h1>
+		<p>
+			Brine2D exposes text rendering through the <code>IFont</code> interface. Internally this is backed by one or more
+			platform fonts (SpriteFont) combined via a composite for fallback (CompositeFont). User code only needs
+			<code>IFont</code>. Features include glyph caching into a GPU atlas, measurement, word wrapping, truncation with ellipsis,
+			justification (space distribution), selection highlighting, caret positioning, grapheme-aware layout, and style spans.
+		</p>
+
+		<h2 id="quick-start">Quick start</h2>
+		<pre><code class="language-csharp">// Load a font (single or fallback chain) via content:
+// Descriptor: FamilyA+FamilyB@Size[optional $MissingPrimary].spritefont
+var font = context.Content.Load&lt;IFont&gt;("JetBrainsMono+NotoEmoji@16.spritefont");
+
+// Simple draw
+font.DrawString(context.Sprites, "Hello Brine2D!", 32, 48, Color.White);
+
+// Wrapped draw (max width, left align)
+font.DrawStringWrapped(context.Sprites, "Long paragraph ...", 32, 120, 420, TextAlign.Left, Color.White);
+
+// Measure text (width,height in unscaled pixels)
+var (w, h) = font.Measure("Sample\nLines");
+
+// Build a layout (for selection / caret / decorations / custom scale)
+var layout = font.BuildLayout(
+    "Editable text sample",
+    originX: 32,
+    originY: 200,
+    maxWidth: 480,
+    align: TextAlign.Left,
+    scale: 1f);
+
+// Draw layout
+font.DrawLayout(context.Sprites, layout, Color.White);
+
+// Draw caret (index is UTF-16 position in source string)
+font.DrawCaret(context.Sprites, layout, index: 5, Color.Yellow, thickness: 2);
+</code></pre>
+
+		<h2 id="descriptor">Font descriptor (.spritefont)</h2>
+		<ul>
+			<li><b>Pattern</b>: <code>FamilyA+FamilyB+FamilyC@Size[$HexCodepoint].spritefont</code></li>
+			<li><b>Fallback chain</b>: families are checked in order for missing glyphs.</li>
+			<li><b>Missing glyph override</b>: optional primary sentinel after <code>$</code> (e.g. <code>$FFFD</code>).</li>
+			<li>
+				<b>Examples</b>:
+				<ul>
+					<li><code>JetBrainsMono@16.spritefont</code></li>
+					<li><code>JetBrainsMono+NotoEmoji@16$FFFD.spritefont</code></li>
+				</ul>
+			</li>
+			<li><b>Raw font shortcuts</b>: size suffix on TTF/OTF/TTC is supported by the loader, e.g. <code>SomeFont.ttf@18</code>.</li>
+		</ul>
+
+		<h2 id="file-formats">File formats &amp; loading</h2>
+		<ul>
+			<li><b>Containers</b>: TrueType (<code>.ttf</code>), OpenType (<code>.otf</code>), and TrueType Collections (<code>.ttc</code>).</li>
+			<li>
+				<b>Naming probes</b> (per family, for a given size N):
+				<ul>
+					<li><code>Family.ttf@N</code>, <code>Family.otf@N</code>, <code>Family.ttc@N</code></li>
+					<li><code>Family@N.ttf</code>, <code>Family@N.otf</code>, <code>Family@N.ttc</code></li>
+				</ul>
+			</li>
+			<li>Place assets under <code>Content/</code> or <code>Assets/</code> according to your providers.</li>
+		</ul>
+
+		<h2 id="core-api">Core API (<code>IFont</code>)</h2>
+		<ul>
+			<li><code>Measure(string)</code>, <code>MeasureWrapped(string, maxWidth)</code> (returns width,height).</li>
+			<li><code>DrawString(renderer, text, x, y, color, scale=1f)</code></li>
+			<li><code>DrawStringWrapped(renderer, text, x, y, maxWidth, align, color, scale=1f)</code></li>
+			<li>
+				<code>BuildLayout(text, originX, originY, maxWidth?, align, scale, styleSpans?, selectionStart, selectionLength, selectionColor?)</code>
+				&rarr; returns <code>TextLayout</code> (glyph positions, lines, selection rectangles, caret stops).
+			</li>
+			<li><code>DrawLayout(renderer, layout, baseColor, overrideScale?)</code></li>
+			<li><code>DrawCaret(renderer, layout, index, color, thickness=1)</code></li>
+			<li><code>PrewarmAscii()</code>, <code>Prewarm(string)</code>, <code>PrewarmRange(int start, int end)</code> (populate atlas ahead of time).</li>
+			<li><code>ClearCache()</code> (reset glyph + measure caches; triggers re-rasterization).</li>
+		</ul>
+
+		<h2 id="layout-features">Layout features</h2>
+		<ul>
+			<li><b>Word wrapping</b>: space, tab, hyphen, non‑breaking space break points.</li>
+			<li><b>Justification</b>: evenly distributes extra width across internal spaces (not last line).</li>
+			<li><b>Truncation</b>: optional width limit with ellipsis (defaults to <code>…</code>).</li>
+			<li><b>Selection highlighting</b>: rectangular background for selected range.</li>
+			<li><b>Caret stops</b>: positions for editing navigation (grapheme-aware if configured).</li>
+			<li><b>Style spans</b>: per-range color + text decorations (underline / strikethrough).</li>
+			<li><b>Grapheme clusters</b>: optional cluster mode joins combining marks / surrogate pairs for caret placement.</li>
+			<li><b>Scale</b>: uniform scaling of line height and glyph geometry (integer output size clamped &ge; 1).</li>
+		</ul>
+
+		<h2 id="style-spans">Style spans</h2>
+		<pre><code class="language-csharp">// Example: highlight "Brine" portion and underline "2D"
+var spans = new List&lt;StyleSpan&gt;
+{
+    new StyleSpan(start: 6, length: 5, Color.Yellow),
+    new StyleSpan(start: 11, length: 2, new Color(180,220,255), decorations: TextDecoration.Underline)
+};
+
+var layout = font.BuildLayout(
+    "Hello Brine2D Engine!",
+    originX: 40,
+    originY: 240,
+    maxWidth: 420,
+    align: TextAlign.Left,
+    scale: 1f,
+    styleSpans: spans,
+    selectionStart: 0,
+    selectionLength: 0);
+
+font.DrawLayout(context.Sprites, layout, Color.White);
+</code></pre>
+
+		<h2 id="truncation">Truncation &amp; ellipsis</h2>
+		<pre><code class="language-csharp">var options = new BuildLayoutOptions(
+    maxWidth: 320,
+    align: TextAlign.Left,
+    scale: 1f,
+    truncateWidth: 300,
+    ellipsis: "...");
+
+var layout = font.BuildLayout("Very long line that must fit", 24, 24, options);
+font.DrawLayout(context.Sprites, layout, Color.White);
+</code></pre>
+
+		<h2 id="justification">Justification</h2>
+		<pre><code class="language-csharp">var options = new BuildLayoutOptions(
+    maxWidth: 480,
+    align: TextAlign.Left,
+    scale: 1f,
+    justify: true);
+
+var layout = font.BuildLayout("Multiple words per line for justification demo", 32, 320, options);
+font.DrawLayout(context.Sprites, layout, Color.White);
+</code></pre>
+
+		<h2 id="grapheme">Grapheme-aware caret</h2>
+		<p>Enable when you handle user text editing with combining marks, emoji sequences, or surrogate pairs:</p>
+		<pre><code class="language-csharp">var options = new BuildLayoutOptions(maxWidth: 520, align: TextAlign.Left, scale: 1f, useGraphemeClusters: true);
+var layout = font.BuildLayout("Emoji 👍🏽 test", 32, 400, options);
+font.DrawLayout(context.Sprites, layout, Color.White);
+font.DrawCaret(context.Sprites, layout, index: 7, Color.Cyan); // caret aligns at cluster boundary
+</code></pre>
+
+		<h2 id="prewarm">Prewarm (performance)</h2>
+		<ul>
+			<li><b>Why</b>: Avoid runtime stalls fetching and uploading glyph bitmaps during gameplay.</li>
+			<li>
+				<b>Use</b>:
+				<pre><code class="language-csharp">// Before heavy UI / scene load
+font.PrewarmAscii();
+font.Prewarm("HUD labels 0123456789 Score Lives Pause Resume");
+font.PrewarmRange(0x2190, 0x21FF); // arrows block
+</code></pre>
+			</li>
+		</ul>
+
+		<h2 id="threading">Threading &amp; lifetime</h2>
+		<ul>
+			<li><b>Single-threaded usage</b>: SpriteFont mutates a GPU atlas and caches. Call <code>Prewarm</code>, <code>Measure</code>, <code>BuildLayout</code>, and draw methods on the font’s creator/main thread.</li>
+			<li><b>Cache resets</b>: <code>ClearCache()</code> and font disposal should also happen on the creator thread.</li>
+			<li><b>Reuse</b>: Reuse loaded <code>IFont</code> instances; each instance owns its own atlas pages.</li>
+		</ul>
+
+		<h2 id="fallback">Font fallback</h2>
+		<p>When using a descriptor with multiple families, missing glyphs are resolved by scanning the remaining fonts. Results are cached per codepoint (fast after first lookup).</p>
+		<ul>
+			<li><b>Primary first</b>; counts fallback hits internally (diagnostics).</li>
+			<li><b>Unsupported</b> glyphs default to a configured missing glyph sentinel (e.g. <code>?</code> or U+FFFD).</li>
+		</ul>
+
+		<h2 id="limitations">Current limitations</h2>
+		<ul>
+			<li>Approximate kerning using measured pair widths (not full GPOS). Adequate for many Latin fonts but not typographically perfect.</li>
+			<li>No advanced OpenType shaping yet (ligatures, mark positioning) — reserved extension via <code>ITextShaper</code>.</li>
+			<li>RTL / bidirectional scripts handled only at basic codepoint order for now (no reordering / shaping).</li>
+		</ul>
+
+		<h2 id="future">Future shaping (HarfBuzz integration)</h2>
+		<p>A pluggable shaper (<code>ITextShaper</code>) is present; advanced mode would supply:</p>
+		<ul>
+			<li>Proper glyph substitution (GSUB), positioning (GPOS), ligatures.</li>
+			<li>Script &amp; direction runs (Arabic, Devanagari, mixed RTL/LTR).</li>
+			<li>Accurate caret movement over clusters and combined marks.</li>
+		</ul>
+
+		<h2 id="troubleshooting">Troubleshooting</h2>
+		<ul>
+			<li><b>Text width seems off</b>: Ensure you measured with the same <code>ExtraLineSpacing</code>, <code>TabSpaces</code>, and scale; caches key off these values.</li>
+			<li><b>Glyphs pop in late</b>: Prewarm glyph ranges used in early UI; large first-frame stalls indicate rasterization on demand.</li>
+			<li><b>Missing characters</b>: Add an appropriate fallback font (e.g. Emoji or CJK) by listing multiple families in the descriptor.</li>
+			<li><b>Layout perf</b>: Reuse layouts if text does not change; <code>BuildLayout</code> is more expensive than simple draws.</li>
+			<li><b>Couldn’t load a family</b>: Verify the loader’s probe patterns (e.g. <code>Family.ttf@16</code> and <code>Family@16.ttf</code>) exist under your content roots.</li>
+		</ul>
+
+		<h2 id="best-practices">Best practices</h2>
+		<ul>
+			<li>Centralize font loading early; reuse <code>IFont</code> instances (glyph atlas is per font).</li>
+			<li>Use <code>BuildLayout</code> only when you need selection, caret, truncation or styling; simple labels can call <code>DrawString</code>.</li>
+			<li>Prewarm big UI sets in a loading phase; keep runtime glyph uploads small.</li>
+			<li>Plan shaping integration before large localization effort for complex scripts.</li>
+		</ul>
+
+		<h2 id="reference">Quick reference cheatsheet</h2>
+		<pre><code class="language-csharp">// Measure
+var (mw, mh) = font.Measure("Title");
+
+// Draw unwrapped
+font.DrawString(context.Sprites, "Score: 123", 16, 16, Color.White);
+
+// Draw wrapped & centered
+font.DrawStringWrapped(context.Sprites, paragraph, 40, 200, 360, TextAlign.Center, Color.White);
+
+// Build styled layout
+var spans = new [] { new StyleSpan(0, 5, Color.Gold, decorations: TextDecoration.Underline) };
+var layout = font.BuildLayout("TitleLine", 40, 300, maxWidth: null, align: TextAlign.Left, scale: 1f, styleSpans: spans);
+font.DrawLayout(context.Sprites, layout, Color.White);
+
+// Caret
+font.DrawCaret(context.Sprites, layout, 3, Color.Cyan);
+
+// Truncated
+var opts = new BuildLayoutOptions(maxWidth: 420, align: TextAlign.Left, scale: 1f, truncateWidth: 400, ellipsis: "…");
+var truncated = font.BuildLayout(longText, 32, 360, opts);
+font.DrawLayout(context.Sprites, truncated, Color.White);
+</code></pre>
+
+		<h2 id="notes-debugoverlay">Note about the built-in DebugOverlay</h2>
+		<p>
+			The DebugOverlay renders its text via a direct SDL_ttf path for robustness and minimal dependencies.
+			This is separate from <code>IFont</code> and intended to keep the overlay functional even during engine startup/shutdown.
+			Game/UI text should use <code>IFont</code>.
+		</p>
+	</section>
+</body>
+</html>

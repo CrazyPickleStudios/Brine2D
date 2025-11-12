@@ -1,14 +1,14 @@
-<p align="center">
+Ôªø<p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/media/brine2d-logo.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/media/brine2d-logo.svg">
-    <img alt="Brine2D" src="docs/media/brine2d-logo.png" width="420" height="auto">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/brine2d_logo.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/media/brine2d_logo.svg">
+    <img alt="Brine2D" src="docs/media/brine2d_logo.png" width="420" height="auto">
   </picture>
 </p>
 
 # Brine2D
 
-Brine2D is a fast, minimal 2D engine built on SDL3ís new GPU API, written entirely in C# for .NET 8. It targets modern backends (D3D12, Vulkan, Metal) via SDL3 GPU and provides a straightforward game loop, sprite renderer, input system, and content loading.
+Brine2D is a fast, minimal 2D engine built on SDL3‚Äôs new GPU API, written entirely in C# for .NET 8. It targets modern backends (D3D12, Vulkan, Metal) via SDL3 GPU and provides a straightforward game loop, sprite renderer, input system, and content loading.
 
 ## Highlights
 - SDL3 GPU renderer with device-appropriate shaders (DXIL, SPIR-V, MSL/Metallib)
@@ -21,19 +21,21 @@ Brine2D is a fast, minimal 2D engine built on SDL3ís new GPU API, written entire
 ## Requirements
 - .NET 8 SDK
 - Visual Studio 2022 or the dotnet CLI
-- SDL3 native runtime accessible at runtime (SDL3.dll / libSDL3.so / libSDL3.dylib)
+- SDL3 native runtime accessible at runtime (`SDL3.dll` / `libSDL3.so` / `libSDL3.dylib`)
 - DirectX Shader Compiler (dxc) on PATH to build engine shaders
-  - Windows: install ìDirectX Shader Compilerî or Vulkan SDK (includes dxc). Verify with: where dxc
-  - macOS/Linux: install Vulkan SDK and ensure $VULKAN_SDK/bin is on PATH. Verify with: which dxc
+  - Windows: install ‚ÄúDirectX Shader Compiler‚Äù or Vulkan SDK (includes dxc). Verify with: `where dxc`
+  - macOS/Linux: install Vulkan SDK and ensure `$VULKAN_SDK/bin` is on PATH. Verify with: `which dxc`
   - Alternatively set an absolute path in Brine2D.SDL.csproj:
+    ```xml
     <PropertyGroup><DxcExe>C:\Tools\dxc\dxc.exe</DxcExe></PropertyGroup>
+    ```
 
 ## Quick start
-1) Build and run the desktop sample in Visual Studio:
+1. Build and run the desktop sample in Visual Studio:
    - Set Brine2D.Sample.Desktop as startup project
    - Start Debugging (F5)
 
-2) CLI:
+2. CLI:
     ```bash
     dotnet run -p samples/Brine2D.Sample.Desktop
     ```
@@ -80,36 +82,51 @@ public static class Program
     }
 }
 ```
+
+### Built-in debug overlay
+- Toggle: Ctrl/Cmd + F12 (configurable)
+- Shows: FPS (smoothed + min/avg/max), frame/update/draw ms, sprite batches/draw calls, live/total resources, managed heap, approx. GPU texture memory, window and backend info, frame budget with severity coloring.
+- Customization: layout (corner, padding, border, alpha), colors, UI scale, font (TTF), update period, toggle chord.
+- The overlay is created automatically by SdlHost; see full guide: [DebugOverlay](docs/DebugOverlay.html)
+
+Example (optional font and placement):
+
+```csharp
+// content font
+// For advanced options (corner, colors, etc.) see docs/DebugOverlay.html
+host.ConfigureDebugOverlayTTF("fonts/JetBrainsMono-Regular@14.ttf");
+```
+
 ## Shaders (build and runtime lookup)
-- Engine HLSL sources live under src/Brine2D.SDL/Content/Shaders (e.g., Sprite.hlsl, Resolve.hlsl).
+- Engine HLSL sources live under `src/Brine2D.SDL/Content/Shaders` (e.g., Sprite.hlsl, Resolve.hlsl).
 - During build, Brine2D.SDL compiles HLSL with dxc into:
   - DXIL: SpriteVS.dxil / SpritePS.dxil, ResolveVS.dxil / ResolvePS.dxil
   - SPIR-V: SpriteVS.spv / SpritePS.spv, ResolveVS.spv / ResolvePS.spv
 - Compiled blobs are:
   - Embedded into Brine2D.SDL as defaults, and
-  - Copied next to the app under Content/Shaders
+  - Copied next to the app under `Content/Shaders`
 
 Runtime lookup order for each required pair (VS/PS):
-1) External files in Content/Shaders
-2) External files in Assets/Shaders (also supports lowercase content/shaders and assets/shaders)
-3) Embedded defaults in the Brine2D.SDL assembly
+1. External files in `Content/Shaders`
+2. External files in `Assets/Shaders` (also supports lowercase `content/shaders` and `assets/shaders`)
+3. Embedded defaults in the Brine2D.SDL assembly
 
 Custom shaders
 - Drop user-provided binaries into either:
-  - Content/Shaders, or
-  - Assets/Shaders
-- Filenames must match the engineís expectation:
-  - SpriteVS.ext and SpritePS.ext
-  - ResolveVS.ext and ResolvePS.ext
-  - Where ext is one of: .dxil (D3D12), .spv (Vulkan), .msl/.metallib (Metal)
+  - `Content/Shaders`, or
+  - `Assets/Shaders`
+- Filenames must match the engine‚Äôs expectation:
+  - `SpriteVS.ext` and `SpritePS.ext`
+  - `ResolveVS.ext` and `ResolvePS.ext`
+  - Where ext is one of: `.dxil` (D3D12), `.spv` (Vulkan), `.msl`/`.metallib` (Metal)
 - External files override embedded defaults without rebuilding the DLL.
 
-Note: The build currently produces DXIL and SPIR-V. For Metal you can provide .metallib files in the external shader folders.
+Note: The build currently produces DXIL and SPIR-V. For Metal you can provide `.metallib` files in the external shader folders.
 
 ## Content and layout
 The default host adds two file providers rooted at:
-- Content/
-- Assets/
+- `Content/`
+- `Assets/`
 
 Typical layout:
 
@@ -126,9 +143,9 @@ Assets/
 ```
 
 The renderer picks shaders based on the active GPU shader format:
-- D3D12: .dxil
-- Vulkan: .spv
-- Metal: .msl or .metallib
+- D3D12: `.dxil`
+- Vulkan: `.spv`
+- Metal: `.msl` or `.metallib`
 If a matching shader is missing, startup will throw with the expected file paths.
 
 ## Input system (actions & axes)
@@ -160,6 +177,36 @@ if (map.WasPressed(Act.Jump)) { /* jump */ }
 var move = map.Get2D(Ax.MoveX, Ax.MoveY);
 ```
 
+## Text & Fonts
+Brine2D provides an `IFont` interface with GPU atlas glyph caching, measurement, wrapping, truncation (ellipsis), justification, style spans, selection and caret support.
+
+Quick usage:
+
+```csharp
+var font = context.Content.Load<IFont>("JetBrainsMono+NotoEmoji@16.spritefont");
+font.DrawString(context.Sprites, "Hello Brine2D!", 32, 48, Color.White);
+var (w, h) = font.Measure("Stats:\nFPS");
+```
+
+Descriptor pattern:
+`FamilyA+FamilyB@Size[$MissingCodepoint].spritefont`
+Examples:
+- `JetBrainsMono@16.spritefont`
+- `JetBrainsMono+NotoEmoji@16$FFFD.spritefont`
+
+Use `BuildLayout` only when you need selection, caret, truncation, justification or styling:
+
+```csharp
+var layout = font.BuildLayout("Editable text", 40, 200, maxWidth: 420);
+font.DrawLayout(context.Sprites, layout, Color.White);
+```
+
+Performance:
+
+Call `font.PrewarmAscii()` or `font.Prewarm("UI labels 0123456789")` during loading to avoid first‚Äëframe stalls.
+
+See full guide: [Fonts](docs/Fonts.html)
+
 ## Samples
 - Desktop sample: `samples/Brine2D.Sample.Desktop`
   - Camera follow, simple sprite draws, basic input toggles
@@ -169,6 +216,9 @@ Run it from Visual Studio or:
 ```bash
 dotnet run -p samples/Brine2D.Sample.Desktop
 ```
+
+## Attribution
+Documentation, README, and code comments were created with the assistance of AI tools. I hate writing and documenting, it seemed like a good use case for AI and I think the results speak for themselves. Note that, final content was reviewed and edited by me.
 
 ## Notes
 - The host auto-selects a present mode (prefers Mailbox when available).
