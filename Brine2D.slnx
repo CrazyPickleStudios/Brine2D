@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/EmptyApp/EmptyApp.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Brine2D.Desktop/Brine2D.Desktop.csproj" />
+    <Project Path="src/Brine2D.SDL3/Brine2D.SDL3.csproj" />
+    <Project Path="src/Brine2D/Brine2D.csproj" />
+  </Folder>
+</Solution>
