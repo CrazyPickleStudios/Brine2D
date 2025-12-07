@@ -18,7 +18,7 @@ public sealed class HostedGame : BackgroundService
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Hosted game starting.");
-        
+
         _loop.Run();
 
         _logger.LogInformation("Hosted game finished.");

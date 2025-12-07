@@ -106,11 +106,11 @@ public sealed class SdlGameLoop : IGameLoop
                     return false;
 
                 case SDL.EventType.KeyDown:
-                    _sdlInput?.OnKeyDown(e.Key.Key);
+                    _sdlInput?.OnKeyDown(e.Key.Key, e.Key.Scancode);
                     break;
 
                 case SDL.EventType.KeyUp:
-                    _sdlInput?.OnKeyUp(e.Key.Key);
+                    _sdlInput?.OnKeyUp(e.Key.Key, e.Key.Scancode);
                     break;
             }
         }

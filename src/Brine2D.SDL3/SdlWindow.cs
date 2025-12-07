@@ -7,9 +7,8 @@ namespace Brine2D.SDL3;
 
 public sealed class SdlWindow : IWindow
 {
-    private readonly WindowOptions _options;
     private readonly SdlInitializer _initializer;
-    private IntPtr _window;
+    private readonly WindowOptions _options;
 
     public SdlWindow(IOptions<WindowOptions> options, SdlInitializer initializer)
     {
@@ -19,64 +18,65 @@ public sealed class SdlWindow : IWindow
         CreateWindow();
     }
 
+    public int Height => _options.Height;
+    public bool IsVisible { get; private set; }
+    public IntPtr RawHandle { get; private set; }
+
     public string Title
     {
         get => _options.Title;
         set
         {
             _options.Title = value;
-            if (_window != IntPtr.Zero)
+            if (RawHandle != IntPtr.Zero)
             {
-                SDL.SetWindowTitle(_window, value);
+                SDL.SetWindowTitle(RawHandle, value);
             }
         }
     }
 
     public int Width => _options.Width;
-    public int Height => _options.Height;
-    public bool IsVisible { get; private set; }
 
-    public void Show()
+    public void Dispose()
     {
-        if (_window != IntPtr.Zero)
+        if (RawHandle != IntPtr.Zero)
         {
-            SDL.ShowWindow(_window);
-            IsVisible = true;
+            SDL.DestroyWindow(RawHandle);
+            RawHandle = IntPtr.Zero;
         }
+
+        _initializer.Dispose();
     }
 
     public void Hide()
     {
-        if (_window != IntPtr.Zero)
+        if (RawHandle != IntPtr.Zero)
         {
-            SDL.HideWindow(_window);
+            SDL.HideWindow(RawHandle);
             IsVisible = false;
         }
     }
 
-    public void Dispose()
+    public void Show()
     {
-        if (_window != IntPtr.Zero)
+        if (RawHandle != IntPtr.Zero)
         {
-            SDL.DestroyWindow(_window);
-            _window = IntPtr.Zero;
+            SDL.ShowWindow(RawHandle);
+            IsVisible = true;
         }
-        _initializer.Dispose();
     }
 
     private void CreateWindow()
     {
-        _window = SDL.CreateWindow(
+        RawHandle = SDL.CreateWindow(
             _options.Title,
             _options.Width,
             _options.Height,
             SDL.WindowFlags.Resizable);
 
-        if (_window == IntPtr.Zero)
+        if (RawHandle == IntPtr.Zero)
         {
             throw new InvalidOperationException($"SDL_CreateWindow failed: {SDL.GetError()}");
         }
     }
-
-    public IntPtr RawHandle => _window;
 }

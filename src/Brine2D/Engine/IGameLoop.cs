@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Brine2D.Engine;
 
-namespace Brine2D.Engine
+public interface IGameLoop
 {
-    public interface IGameLoop
-    {
-        void Run();
-    }
+    void Run();
 }

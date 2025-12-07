@@ -1,5 +1,4 @@
 ﻿using Brine2D.Abstractions;
-using Brine2D.Desktop;
 using Brine2D.Hosting;
 using Brine2D.Options;
 using Brine2D.SDL3;
@@ -11,7 +10,11 @@ namespace Brine2D.Desktop;
 
 public static class DesktopHostBuilder
 {
-    public static IHostBuilder CreateDefault<TGame>(Action<WindowOptions>? configureWindow = null, Action<LoopOptions>? configureLoop = null)
+    public static IHostBuilder CreateDefault<TGame>
+    (
+        Action<WindowOptions>? configureWindow = null,
+        Action<LoopOptions>? configureLoop = null
+    )
         where TGame : class, IGame
     {
         var builder = Host.CreateDefaultBuilder();
@@ -26,7 +29,7 @@ public static class DesktopHostBuilder
             });
 
             services.AddBrine2DCore()
-                    .AddBrine2DSdl3();
+                .AddBrine2DSdl3();
 
             services.AddOptions<LoopOptions>();
 
@@ -40,11 +43,13 @@ public static class DesktopHostBuilder
                 services.Configure(configureLoop);
             }
 
-            services.AddSingleton<IGameContext>(sp =>
+            services.AddSingleton<IGameContext>
+            (sp =>
                 new DesktopGameContext(
                     sp,
                     sp.GetRequiredService<IWindow>(),
-                    sp.GetRequiredService<IInput>()));
+                    sp.GetRequiredService<IInput>())
+            );
 
             services.AddHostedService<HostedGame>();
             services.AddSingleton<IGame, TGame>();

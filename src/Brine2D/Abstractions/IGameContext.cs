@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Brine2D.Abstractions;
 
-namespace Brine2D.Abstractions
+public interface IGameContext
 {
-    public interface IGameContext
-    {
-        IServiceProvider Services { get; }
-        IWindow Window { get; }
-        IInput Input { get; }
-    }
+    IInput Input { get; }
+    IServiceProvider Services { get; }
+    IWindow Window { get; }
 }

@@ -1,14 +1,13 @@
 ﻿using Brine2D.Input;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace Brine2D.Abstractions
+namespace Brine2D.Abstractions;
+
+public interface IInput
 {
-    public interface IInput
-    {
-        bool IsKeyDown(KeyCode key);
-        bool WasKeyPressed(KeyCode key);
-        bool WasKeyReleased(KeyCode key);
-    }
+    bool IsKeyDown(KeyCode key);
+    bool IsKeyDown(ScanKey key);
+    bool WasKeyPressed(KeyCode key);
+    bool WasKeyPressed(ScanKey key);
+    bool WasKeyReleased(KeyCode key);
+    bool WasKeyReleased(ScanKey key);
 }

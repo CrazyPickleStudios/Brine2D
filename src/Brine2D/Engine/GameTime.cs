@@ -1,18 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Brine2D.Engine;
 
-namespace Brine2D.Engine
+public readonly struct GameTime
 {
-    public readonly struct GameTime
+    public GameTime(double totalSeconds, double deltaSeconds)
     {
-        public GameTime(double totalSeconds, double deltaSeconds)
-        {
-            TotalSeconds = totalSeconds;
-            DeltaSeconds = deltaSeconds;
-        }
-
-        public double TotalSeconds { get; }
-        public double DeltaSeconds { get; }
+        TotalSeconds = totalSeconds;
+        DeltaSeconds = deltaSeconds;
     }
+
+    public double TotalSeconds { get; }
+    public double DeltaSeconds { get; }
 }
