@@ -1,4 +1,6 @@
-﻿namespace Brine2D.Abstractions;
+﻿using Brine2D.Input;
+
+namespace Brine2D.Engine;
 
 public interface IGameContext
 {

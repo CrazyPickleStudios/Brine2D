@@ -115,4 +115,4 @@ Brine2D stays small and focused. It does not try to be an all-in-one engine with
 We welcome contributions. See CONTRIBUTING.md for guidelines.
 
 ## License
-TBD.
+MIT License. See LICENSE file for details.

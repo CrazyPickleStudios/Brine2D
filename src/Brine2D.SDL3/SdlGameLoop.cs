@@ -1,5 +1,4 @@
-﻿using Brine2D.Abstractions;
-using Brine2D.Engine;
+﻿using Brine2D.Engine;
 using Brine2D.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -8,14 +7,14 @@ using SDL3;
 
 namespace Brine2D.SDL3;
 
-public sealed class SdlGameLoop : IGameLoop
+internal sealed class SdlGameLoop : IGameLoop
 {
     private readonly IGameContext _context;
     private readonly IGame _game;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<SdlGameLoop> _logger;
     private readonly LoopOptions _loopOptions;
-    private readonly SdlInput? _sdlInput;
+    private readonly SdlInput _sdlInput;
 
     public SdlGameLoop
     (
@@ -52,6 +51,8 @@ public sealed class SdlGameLoop : IGameLoop
 
         while (!_lifetime.ApplicationStopping.IsCancellationRequested)
         {
+            _sdlInput.BeginFrame();
+
             if (!PumpEvents())
             {
                 break;
@@ -85,6 +86,8 @@ public sealed class SdlGameLoop : IGameLoop
 
             _game.Render((IRenderContext)_context.Services.GetService(typeof(IRenderContext))!);
 
+            _sdlInput.EndFrame();
+
             if (_loopOptions.MaxFps is > 0)
             {
                 var targetMs = 1000.0 / _loopOptions.MaxFps.Value;
@@ -106,16 +109,66 @@ public sealed class SdlGameLoop : IGameLoop
                     return false;
 
                 case SDL.EventType.KeyDown:
-                    _sdlInput?.OnKeyDown(e.Key.Key, e.Key.Scancode);
+                    _sdlInput.Keyboard.OnKeyDown(e.Key.Key, e.Key.Scancode);
                     break;
 
                 case SDL.EventType.KeyUp:
-                    _sdlInput?.OnKeyUp(e.Key.Key, e.Key.Scancode);
+                    _sdlInput.Keyboard.OnKeyUp(e.Key.Key, e.Key.Scancode);
+                    break;
+
+                case SDL.EventType.MouseMotion:
+                    _sdlInput.Mouse.OnMouseMotion(e.Motion.X, e.Motion.Y);
+                    break;
+
+                case SDL.EventType.MouseButtonDown:
+                    _sdlInput.Mouse.OnMouseButtonDown(e.Button.Button);
+                    break;
+
+                case SDL.EventType.MouseButtonUp:
+                    _sdlInput.Mouse.OnMouseButtonUp(e.Button.Button);
+                    break;
+
+                case SDL.EventType.MouseWheel:
+                    _sdlInput.Mouse.OnMouseWheel(e.Wheel.X, e.Wheel.Y);
+                    break;
+
+                case SDL.EventType.GamepadAdded:
+                    _sdlInput.Gamepads.OnDeviceAdded(e.GDevice.Which);
+                    break;
+                case SDL.EventType.GamepadRemoved:
+                    _sdlInput.Gamepads.OnDeviceRemoved(e.GDevice.Which);
+                    break;
+                case SDL.EventType.GamepadAxisMotion:
+                    _sdlInput.Gamepads.OnAxisMotion(e.GAxis.Which, (SDL.GamepadAxis)e.GAxis.Axis, e.GAxis.Value);
+                    break;
+                case SDL.EventType.GamepadButtonDown:
+                    _sdlInput.Gamepads.OnButtonDown(e.GButton.Which, (SDL.GamepadButton)e.GButton.Button);
+                    break;
+                case SDL.EventType.GamepadButtonUp:
+                    _sdlInput.Gamepads.OnButtonUp(e.GButton.Which, (SDL.GamepadButton)e.GButton.Button);
+                    break;
+
+                case SDL.EventType.FingerDown:
+                    _sdlInput.Touch.OnFingerDown(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
+                    break;
+
+                case SDL.EventType.FingerUp:
+                    _sdlInput.Touch.OnFingerUp(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
+                    break;
+
+                case SDL.EventType.FingerMotion:
+                    _sdlInput.Touch.OnFingerMotion(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
+                    break;
+
+                case SDL.EventType.TextInput:
+                    _sdlInput.TextInput.OnTextInput(e.Text.GetText());
+                    break;
+
+                case SDL.EventType.TextEditing:
+                    _sdlInput.TextInput.OnTextEditing(e.Edit.GetText(), e.Edit.Start, e.Edit.Length);
                     break;
             }
         }
-
-        _sdlInput?.CommitFrame();
 
         return true;
     }

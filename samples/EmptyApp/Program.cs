@@ -1,5 +1,4 @@
 ﻿using System.Drawing;
-using Brine2D.Abstractions;
 using Brine2D.Desktop;
 using Brine2D.Engine;
 using Microsoft.Extensions.Hosting;

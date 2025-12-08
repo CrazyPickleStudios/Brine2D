@@ -1,4 +1,4 @@
-﻿namespace Brine2D.Abstractions;
+﻿namespace Brine2D.Engine;
 
 public interface IWindow : IDisposable
 {
