@@ -16,15 +16,13 @@ internal sealed class SdlGameLoop : IGameLoop
     private readonly LoopOptions _loopOptions;
     private readonly SdlInput _sdlInput;
 
-    public SdlGameLoop
-    (
+    public SdlGameLoop(
         IGame game,
         IGameContext context,
         IHostApplicationLifetime lifetime,
         IOptions<LoopOptions> loopOptions,
         ILogger<SdlGameLoop> logger,
-        SdlInput sdlInput
-    )
+        SdlInput sdlInput)
     {
         _game = game;
         _context = context;
@@ -33,49 +31,40 @@ internal sealed class SdlGameLoop : IGameLoop
         _logger = logger;
         _sdlInput = sdlInput;
     }
-
-    public void Run()
+    
+    public async Task RunAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting SDL game loop.");
-
-        _game.Initialize(_context);
+        
+        await _game.Initialize(_context).ConfigureAwait(false);
 
         var freq = SDL.GetPerformanceFrequency();
         var last = SDL.GetPerformanceCounter();
-
         double accumulator = 0;
-
         var targetStep = _loopOptions is { UseFixedStep: true, FixedStepSeconds: > 0 }
             ? _loopOptions.FixedStepSeconds
             : 0;
 
-        while (!_lifetime.ApplicationStopping.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested && !_lifetime.ApplicationStopping.IsCancellationRequested)
         {
             _sdlInput.BeginFrame();
 
-            if (!PumpEvents())
+            if (!PumpEvents(ref cancellationToken))
             {
                 break;
             }
 
             var now = SDL.GetPerformanceCounter();
             var delta = (now - last) / (double)freq;
-
-            if (delta < 0)
-            {
-                delta = 0;
-            }
-
+            if (delta < 0) delta = 0;
             last = now;
 
             if (targetStep > 0)
             {
                 accumulator += delta;
-
-                while (accumulator >= targetStep)
+                while (accumulator >= targetStep && !cancellationToken.IsCancellationRequested)
                 {
                     _game.Update(new GameTime(now / (double)freq, targetStep));
-
                     accumulator -= targetStep;
                 }
             }
@@ -93,14 +82,18 @@ internal sealed class SdlGameLoop : IGameLoop
                 var targetMs = 1000.0 / _loopOptions.MaxFps.Value;
                 SDL.Delay((uint)Math.Max(0, targetMs));
             }
+            else
+            {
+                SDL.Delay(1);
+            }
         }
 
         _logger.LogInformation("SDL game loop exiting.");
     }
 
-    private bool PumpEvents()
+    private bool PumpEvents(ref CancellationToken cancellationToken)
     {
-        while (SDL.PollEvent(out var e))
+        while (!cancellationToken.IsCancellationRequested && SDL.PollEvent(out var e))
         {
             switch ((SDL.EventType)e.Type)
             {
@@ -111,7 +104,6 @@ internal sealed class SdlGameLoop : IGameLoop
                 case SDL.EventType.KeyDown:
                     _sdlInput.Keyboard.OnKeyDown(e.Key.Key, e.Key.Scancode);
                     break;
-
                 case SDL.EventType.KeyUp:
                     _sdlInput.Keyboard.OnKeyUp(e.Key.Key, e.Key.Scancode);
                     break;
@@ -119,15 +111,12 @@ internal sealed class SdlGameLoop : IGameLoop
                 case SDL.EventType.MouseMotion:
                     _sdlInput.Mouse.OnMouseMotion(e.Motion.X, e.Motion.Y);
                     break;
-
                 case SDL.EventType.MouseButtonDown:
                     _sdlInput.Mouse.OnMouseButtonDown(e.Button.Button);
                     break;
-
                 case SDL.EventType.MouseButtonUp:
                     _sdlInput.Mouse.OnMouseButtonUp(e.Button.Button);
                     break;
-
                 case SDL.EventType.MouseWheel:
                     _sdlInput.Mouse.OnMouseWheel(e.Wheel.X, e.Wheel.Y);
                     break;
@@ -151,11 +140,9 @@ internal sealed class SdlGameLoop : IGameLoop
                 case SDL.EventType.FingerDown:
                     _sdlInput.Touch.OnFingerDown(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
                     break;
-
                 case SDL.EventType.FingerUp:
                     _sdlInput.Touch.OnFingerUp(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
                     break;
-
                 case SDL.EventType.FingerMotion:
                     _sdlInput.Touch.OnFingerMotion(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
                     break;
@@ -163,13 +150,12 @@ internal sealed class SdlGameLoop : IGameLoop
                 case SDL.EventType.TextInput:
                     _sdlInput.TextInput.OnTextInput(e.Text.GetText());
                     break;
-
                 case SDL.EventType.TextEditing:
                     _sdlInput.TextInput.OnTextEditing(e.Edit.GetText(), e.Edit.Start, e.Edit.Length);
                     break;
             }
         }
 
-        return true;
+        return !cancellationToken.IsCancellationRequested;
     }
 }

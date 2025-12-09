@@ -13,7 +13,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SdlWindow>();
         services.AddSingleton<IWindow>(sp => sp.GetRequiredService<SdlWindow>());
 
-        services.AddSingleton<IRenderContext, SdlRenderer>();
+        services.AddSingleton<SdlRenderer>();
+        services.AddSingleton<IRenderContext>(sp => sp.GetRequiredService<SdlRenderer>());
 
         services.AddSingleton<SdlKeyboard>();
         services.AddSingleton<IKeyboard>(sp => sp.GetRequiredService<SdlKeyboard>());
@@ -21,7 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SdlMouse>();
         services.AddSingleton<IMouse>(sp => sp.GetRequiredService<SdlMouse>());
 
-        services.AddSingleton<SdlGamepad>();
+        services.AddSingleton<SdlGamepads>();
         services.AddSingleton<IGamepads>(sp => sp.GetRequiredService<SdlGamepads>());
 
         services.AddSingleton<SdlTouch>();
@@ -29,6 +30,10 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<SdlTextInput>();
         services.AddSingleton<ITextInput>(sp => sp.GetRequiredService<SdlTextInput>());
+
+        services.AddSingleton<IAssetLoaderRegistry, AssetLoaderRegistry>();
+        services.AddSingleton<IContentManager, ContentManager>();
+        services.AddSingleton<IAssetLoader<ITexture>, SdlTextureLoader>();
 
         services.AddSingleton<SdlInput>();
         services.AddSingleton<IInput>(sp => sp.GetRequiredService<SdlInput>());

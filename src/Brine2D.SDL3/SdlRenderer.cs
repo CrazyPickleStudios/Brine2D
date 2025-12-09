@@ -1,24 +1,22 @@
-﻿using System.Drawing;
+﻿using System;
+using System.Drawing;
 using Brine2D.Engine;
-using Microsoft.Extensions.Logging;
 using SDL3;
 
 namespace Brine2D.SDL3;
 
-public sealed class SdlRenderer : IRenderContext, IDisposable
+internal sealed class SdlRenderer : IRenderContext
 {
-    private readonly ILogger<SdlRenderer> _logger;
-    private readonly SdlWindow _window;
-    private IntPtr _renderer;
+    private readonly IntPtr _renderer;
+    internal IntPtr Raw => _renderer;
 
-    public SdlRenderer(ILogger<SdlRenderer> logger, SdlWindow window)
+    public SdlRenderer(SdlWindow window)
     {
-        _logger = logger;
-        _window = window;
         _renderer = SDL.CreateRenderer(window.RawHandle, null);
+
         if (_renderer == IntPtr.Zero)
         {
-            throw new InvalidOperationException($"SDL_CreateRenderer failed: {SDL.GetError()}");
+            throw new InvalidOperationException($"SDL renderer creation failed: {SDL.GetError()}");
         }
     }
 
@@ -28,24 +26,60 @@ public sealed class SdlRenderer : IRenderContext, IDisposable
         SDL.RenderClear(_renderer);
     }
 
-    public void Dispose()
-    {
-        if (_renderer != IntPtr.Zero)
-        {
-            SDL.DestroyRenderer(_renderer);
-            _renderer = IntPtr.Zero;
-        }
-    }
-
     public void DrawRect(Rectangle rect, Color color)
     {
         SDL.SetRenderDrawColor(_renderer, color.R, color.G, color.B, color.A);
-        var r = new SDL.FRect { X = rect.X, Y = rect.Y, W = rect.Width, H = rect.Height };
-        SDL.RenderFillRect(_renderer, in r);
+        var sdlRect = new SDL.FRect { X = rect.X, Y = rect.Y, W = rect.Width, H = rect.Height };
+        SDL.RenderFillRect(_renderer, sdlRect);
+    }
+
+    public void DrawTexture(ITexture texture, Rectangle dest, Rectangle? src = null, Color? tint = null)
+    {
+        if (texture is not SdlTexture sdlTex)
+        {
+            throw new ArgumentException("Unsupported texture type for SDL renderer.", nameof(texture));
+        }
+
+        if (tint is { } c)
+        {
+            SDL.SetTextureColorMod(sdlTex.Handle, c.R, c.G, c.B);
+            SDL.SetTextureAlphaMod(sdlTex.Handle, c.A);
+        }
+        else
+        {
+            SDL.SetTextureColorMod(sdlTex.Handle, 255, 255, 255);
+            SDL.SetTextureAlphaMod(sdlTex.Handle, 255);
+        }
+
+        SDL.FRect? sdlSrc = null;
+
+        if (src is { } s)
+        {
+            sdlSrc = new SDL.FRect { X = s.X, Y = s.Y, W = s.Width, H = s.Height };
+        }
+
+        var sdlDst = new SDL.FRect { X = dest.X, Y = dest.Y, W = dest.Width, H = dest.Height };
+
+        if (sdlSrc is { } srcRect)
+        {
+            SDL.RenderTexture(_renderer, sdlTex.Handle, in srcRect, in sdlDst);
+        }
+        else
+        {
+            SDL.RenderTexture(_renderer, sdlTex.Handle,  (IntPtr)null, in sdlDst);
+        }
     }
 
     public void Present()
     {
         SDL.RenderPresent(_renderer);
+    }
+
+    public void Dispose()
+    {
+        if (_renderer != IntPtr.Zero)
+        {
+            SDL.DestroyRenderer(_renderer);
+        }
     }
 }

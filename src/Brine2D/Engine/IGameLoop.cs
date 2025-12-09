@@ -2,5 +2,5 @@
 
 public interface IGameLoop
 {
-    void Run();
+    Task RunAsync(CancellationToken cancellationToken);
 }
