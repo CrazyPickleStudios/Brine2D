@@ -11,44 +11,25 @@ namespace Brine2D.Desktop;
 
 public static class DesktopHostBuilder
 {
-    // Game-type variant
-    public static IHostBuilder CreateWithGame<TGame>(
+    public static IHostBuilder CreateWithGame<TGame>
+    (
         Action<WindowOptions>? configureWindow = null,
-        Action<LoopOptions>? configureLoop = null)
+        Action<LoopOptions>? configureLoop = null
+    )
         where TGame : class, IGame
     {
-        var builder = Host.CreateDefaultBuilder();
-
-        builder.ConfigureServices((ctx, services) =>
+        return CreateInternal(configureWindow, configureLoop, services =>
         {
-            ConfigureLogging(services);
-
-            services.AddBrine2DCore()
-                    .AddBrine2DSdl3();
-
-            services.AddOptions<LoopOptions>();
-            if (configureWindow is not null)
-                services.Configure(configureWindow);
-            if (configureLoop is not null)
-                services.Configure(configureLoop);
-
-            services.AddSingleton<IGameContext>(sp =>
-                new DesktopGameContext(
-                    sp,
-                    sp.GetRequiredService<IWindow>(),
-                    sp.GetRequiredService<IInput>()));
-
             services.AddHostedService<HostedGame>();
             services.AddSingleton<IGame, TGame>();
         });
-
-        return builder;
     }
 
-    // Scene-only: initial scene (no loading scene)
-    public static IHostBuilder CreateWithScene<TInitialScene>(
+    public static IHostBuilder CreateWithScene<TInitialScene>
+    (
         Action<WindowOptions>? configureWindow = null,
-        Action<LoopOptions>? configureLoop = null)
+        Action<LoopOptions>? configureLoop = null
+    )
         where TInitialScene : class, IScene
     {
         return CreateInternal(configureWindow, configureLoop, services =>
@@ -71,10 +52,11 @@ public static class DesktopHostBuilder
         });
     }
 
-    // Scene-only: loading + initial scene
-    public static IHostBuilder CreateWithScene<TLoadingScene, TInitialScene>(
+    public static IHostBuilder CreateWithScene<TLoadingScene, TInitialScene>
+    (
         Action<WindowOptions>? configureWindow = null,
-        Action<LoopOptions>? configureLoop = null)
+        Action<LoopOptions>? configureLoop = null
+    )
         where TLoadingScene : class, IScene
         where TInitialScene : class, IScene
     {
@@ -103,11 +85,22 @@ public static class DesktopHostBuilder
         });
     }
 
-    // Shared base
-    private static IHostBuilder CreateInternal(
+    private static void ConfigureLogging(IServiceCollection services)
+    {
+        services.AddLogging(logging =>
+        {
+            logging.ClearProviders();
+            logging.AddConsole();
+            logging.SetMinimumLevel(LogLevel.Information);
+        });
+    }
+
+    private static IHostBuilder CreateInternal
+    (
         Action<WindowOptions>? configureWindow,
         Action<LoopOptions>? configureLoop,
-        Action<IServiceCollection> registerScenesAndGame)
+        Action<IServiceCollection> registerScenesAndGame
+    )
     {
         var builder = Host.CreateDefaultBuilder();
 
@@ -115,14 +108,19 @@ public static class DesktopHostBuilder
         {
             ConfigureLogging(services);
 
-            services.AddBrine2DCore()
-                    .AddBrine2DSdl3();
+            services.AddBrine2DCore().AddBrine2DSdl3();
 
             services.AddOptions<LoopOptions>();
+
             if (configureWindow is not null)
+            {
                 services.Configure(configureWindow);
+            }
+
             if (configureLoop is not null)
+            {
                 services.Configure(configureLoop);
+            }
 
             services.AddSingleton<IGameContext>(sp =>
                 new DesktopGameContext(
@@ -134,15 +132,5 @@ public static class DesktopHostBuilder
         });
 
         return builder;
-    }
-
-    private static void ConfigureLogging(IServiceCollection services)
-    {
-        services.AddLogging(logging =>
-        {
-            logging.ClearProviders();
-            logging.AddConsole();
-            logging.SetMinimumLevel(LogLevel.Information);
-        });
     }
 }

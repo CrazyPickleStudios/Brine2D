@@ -16,7 +16,8 @@ internal sealed class SdlGameLoop : IGameLoop
     private readonly LoopOptions _loopOptions;
     private readonly SdlInput _sdlInput;
 
-    public SdlGameLoop(
+    public SdlGameLoop
+    (
         IGame game,
         IGameContext context,
         IHostApplicationLifetime lifetime,
@@ -31,16 +32,32 @@ internal sealed class SdlGameLoop : IGameLoop
         _logger = logger;
         _sdlInput = sdlInput;
     }
-    
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting SDL game loop.");
-        
-        await _game.Initialize(_context).ConfigureAwait(false);
+
+        try
+        {
+            await _game.Initialize(_context).ConfigureAwait(false);
+            _logger.LogInformation("Game initialized successfully.");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Game initialization canceled.");
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception during game initialization.");
+            return;
+        }
 
         var freq = SDL.GetPerformanceFrequency();
         var last = SDL.GetPerformanceCounter();
+
         double accumulator = 0;
+
         var targetStep = _loopOptions is { UseFixedStep: true, FixedStepSeconds: > 0 }
             ? _loopOptions.FixedStepSeconds
             : 0;
@@ -49,31 +66,81 @@ internal sealed class SdlGameLoop : IGameLoop
         {
             _sdlInput.BeginFrame();
 
-            if (!PumpEvents(ref cancellationToken))
+            bool continueLoop;
+            try
+            {
+                continueLoop = PumpEvents(ref cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Event pump canceled.");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception while pumping events.");
+                break;
+            }
+
+            if (!continueLoop)
             {
                 break;
             }
 
             var now = SDL.GetPerformanceCounter();
             var delta = (now - last) / (double)freq;
-            if (delta < 0) delta = 0;
+
+            if (delta < 0)
+            {
+                delta = 0;
+            }
+
             last = now;
 
-            if (targetStep > 0)
+            try
             {
-                accumulator += delta;
-                while (accumulator >= targetStep && !cancellationToken.IsCancellationRequested)
+                if (targetStep > 0)
                 {
-                    _game.Update(new GameTime(now / (double)freq, targetStep));
-                    accumulator -= targetStep;
+                    accumulator += delta;
+
+                    while (accumulator >= targetStep && !cancellationToken.IsCancellationRequested)
+                    {
+                        _game.Update(new GameTime(now / (double)freq, targetStep));
+                        accumulator -= targetStep;
+                    }
+                }
+                else
+                {
+                    _game.Update(new GameTime(now / (double)freq, delta));
                 }
             }
-            else
+            catch (OperationCanceledException)
             {
-                _game.Update(new GameTime(now / (double)freq, delta));
+                _logger.LogInformation("Update canceled.");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception during Update.");
+                // Decide whether to continue or break; breaking prevents tight-loop logging storms.
+                break;
             }
 
-            _game.Render((IRenderContext)_context.Services.GetService(typeof(IRenderContext))!);
+            try
+            {
+                _game.Render((IRenderContext)_context.Services.GetService(typeof(IRenderContext))!);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Render canceled.");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception during Render.");
+                // Continue vs break: choose break to avoid repeated fault rendering; change if desired.
+                break;
+            }
 
             _sdlInput.EndFrame();
 

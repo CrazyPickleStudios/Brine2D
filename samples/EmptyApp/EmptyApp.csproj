@@ -11,4 +11,13 @@
     <ProjectReference Include="..\..\src\Brine2D.Desktop\Brine2D.Desktop.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Assets\logo.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Assets\music.mp3">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

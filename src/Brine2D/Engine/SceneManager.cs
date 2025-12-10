@@ -1,14 +1,22 @@
-﻿namespace Brine2D.Engine;
+﻿using Microsoft.Extensions.Logging;
+
+namespace Brine2D.Engine;
 
 public sealed class SceneManager : ISceneManager
 {
     private readonly IGameContext _context;
-    private IScene? _current;
-    private IScene? _loading;
+    private readonly ILogger<SceneManager> _logger;
 
-    public SceneManager(IGameContext context)
+    private IScene? _current;
+    private CancellationTokenSource? _initCts;
+    private Task? _initTask;
+    private IScene? _loading;
+    private IScene? _pending;
+
+    public SceneManager(IGameContext context, ILogger<SceneManager> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public IScene Current => _current!;
@@ -45,28 +53,83 @@ public sealed class SceneManager : ISceneManager
             throw new ArgumentNullException(nameof(scene));
         }
 
+        try
+        {
+            _initCts?.Cancel();
+        }
+        catch
+        {
+            // No-op. -RP
+        }
+
+        _initCts?.Dispose();
+        _initCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        
+        var linkedCt = _initCts.Token;
+
+        _pending = scene;
+
         if (_loading is not null)
         {
             _current = _loading;
         }
 
-        var next = scene;
-        
-        next.InitializeAsync(_context, ct).ContinueWith(t =>
-        {
-            if (t.IsCompletedSuccessfully)
-            {
-                _current = next;
-            }
-            else if (t.IsFaulted)
-            {
-                // TODO: log t.Exception; keep showing current (or loading) scene, or swap to an error scene. -RP
-            }
-        }, TaskScheduler.Default);
+        _initTask = InitializeSceneAsync(scene, linkedCt);
     }
 
     public void Update(GameTime time)
     {
+        if (_initTask is not null)
+        {
+            if (_initTask.IsCompleted)
+            {
+                var completedTask = _initTask;
+                var next = _pending;
+
+                _initTask = null;
+                _pending = null;
+
+                _initCts?.Dispose();
+                _initCts = null;
+
+                if (completedTask.IsCompletedSuccessfully)
+                {
+                    if (next is not null)
+                    {
+                        _current = next;
+                        _logger.LogInformation("Scene {Scene} initialized.", next.GetType().Name);
+                    }
+                }
+                else if (completedTask.IsCanceled)
+                {
+                    if (next is not null)
+                    {
+                        _logger.LogInformation("Initialization canceled for scene {Scene}.", next.GetType().Name);
+                    }
+                }
+                else if (completedTask.IsFaulted)
+                {
+                    var ex = completedTask.Exception is AggregateException ae
+                        ? ae.Flatten().InnerException ?? ae
+                        : completedTask.Exception!;
+
+                    if (next is not null)
+                    {
+                        _logger.LogError(ex, "Failed to initialize scene {Scene}.", next.GetType().Name);
+                    }
+                    else
+                    {
+                        _logger.LogError(ex, "Failed to initialize scene.");
+                    }
+                }
+            }
+        }
+
         _current?.Update(time);
+    }
+
+    private async Task InitializeSceneAsync(IScene scene, CancellationToken ct)
+    {
+        await scene.InitializeAsync(_context, ct).ConfigureAwait(false);
     }
 }

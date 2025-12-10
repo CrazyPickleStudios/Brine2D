@@ -31,12 +31,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SdlTextInput>();
         services.AddSingleton<ITextInput>(sp => sp.GetRequiredService<SdlTextInput>());
 
+        services.AddSingleton<SdlInput>();
+        services.AddSingleton<IInput>(sp => sp.GetRequiredService<SdlInput>());
+
         services.AddSingleton<IAssetLoaderRegistry, AssetLoaderRegistry>();
         services.AddSingleton<IContentManager, ContentManager>();
         services.AddSingleton<IAssetLoader<ITexture>, SdlTextureLoader>();
 
-        services.AddSingleton<SdlInput>();
-        services.AddSingleton<IInput>(sp => sp.GetRequiredService<SdlInput>());
+        //services.AddSingleton<IAudio, SdlAudio>();
+        //services.AddSingleton<IAssetLoader<ISound>, SdlSoundLoader>();
+        //services.AddSingleton<IAssetLoader<IMusic>, SdlMusicLoader>();
 
         services.AddSingleton<IGameLoop, SdlGameLoop>();
 
