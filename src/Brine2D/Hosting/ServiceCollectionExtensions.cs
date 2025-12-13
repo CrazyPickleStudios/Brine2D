@@ -1,5 +1,8 @@
-﻿using Brine2D.Engine;
+﻿using Brine2D.Content;
+using Brine2D.Engine;
+using Brine2D.Graphics.Tilemaps;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Brine2D.Hosting;
 
@@ -22,6 +25,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddBrine2DCore(this IServiceCollection services)
     {
         services.AddSingleton<ISceneManager, SceneManager>();
+        services.AddSingleton<IAssetLoader<Tilemap>, TilemapLoader>();
 
         return services;
     }

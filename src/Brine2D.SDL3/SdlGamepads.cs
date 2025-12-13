@@ -8,10 +8,41 @@ internal sealed class SdlGamepads : IGamepads, IDisposable
     private readonly List<SdlGamepad> _pads = [];
 
     public IReadOnlyList<IGamepad> Pads => _pads;
-    
+
+    public void Dispose()
+    {
+        foreach (var p in _pads)
+        {
+            p.Dispose();
+        }
+
+        _pads.Clear();
+    }
+
     internal void EndFrame()
     {
-        foreach (var p in _pads) p.EndFrame();
+        foreach (var p in _pads)
+        {
+            p.EndFrame();
+        }
+    }
+
+    internal void OnAxisMotion(uint which, SDL.GamepadAxis axis, short value)
+    {
+        var pad = Get(which);
+        pad?.OnAxisMotion(axis, value);
+    }
+
+    internal void OnButtonDown(uint which, SDL.GamepadButton button)
+    {
+        var pad = Get(which);
+        pad?.OnButtonDown(button);
+    }
+
+    internal void OnButtonUp(uint which, SDL.GamepadButton button)
+    {
+        var pad = Get(which);
+        pad?.OnButtonUp(button);
     }
 
     internal void OnDeviceAdded(uint which)
@@ -35,29 +66,8 @@ internal sealed class SdlGamepads : IGamepads, IDisposable
         }
     }
 
-    internal void OnAxisMotion(uint which, SDL.GamepadAxis axis, short value)
+    private SdlGamepad? Get(uint which)
     {
-        var pad = Get(which);
-        pad?.OnAxisMotion(axis, value);
-    }
-
-    internal void OnButtonDown(uint which, SDL.GamepadButton button)
-    {
-        var pad = Get(which);
-        pad?.OnButtonDown(button);
-    }
-
-    internal void OnButtonUp(uint which, SDL.GamepadButton button)
-    {
-        var pad = Get(which);
-        pad?.OnButtonUp(button);
-    }
-
-    private SdlGamepad? Get(uint which) => _pads.Find(p => p.Index == which);
-
-    public void Dispose()
-    {
-        foreach (var p in _pads) p.Dispose();
-        _pads.Clear();
+        return _pads.Find(p => p.Index == which);
     }
 }

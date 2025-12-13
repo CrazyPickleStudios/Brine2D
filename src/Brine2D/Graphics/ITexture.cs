@@ -1,4 +1,4 @@
-namespace Brine2D.Engine;
+namespace Brine2D.Graphics;
 
 public interface ITexture : IDisposable
 {

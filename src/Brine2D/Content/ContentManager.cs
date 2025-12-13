@@ -1,7 +1,8 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
-namespace Brine2D.Engine;
+namespace Brine2D.Content;
 
 public sealed class ContentManager : IContentManager
 {
@@ -9,11 +10,21 @@ public sealed class ContentManager : IContentManager
     private readonly ILogger<ContentManager> _logger;
     private readonly IAssetLoaderRegistry _registry;
 
-    public ContentManager(IAssetLoaderRegistry registry, ILogger<ContentManager> logger)
+    public ContentManager(IAssetLoaderRegistry registry, ILogger<ContentManager> logger,
+        IOptions<ContentOptions> options)
     {
         _registry = registry;
         _logger = logger;
+
+        var root = options.Value.RootDirectory;
+        ContentRoot = string.IsNullOrWhiteSpace(root)
+            ? Directory.GetCurrentDirectory()
+            : Path.IsPathRooted(root)
+                ? root
+                : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), root));
     }
+
+    public string ContentRoot { get; }
 
     public void Clear()
     {
@@ -59,6 +70,7 @@ public sealed class ContentManager : IContentManager
         if (_cache.TryGetValue(key, out var existing))
         {
             existing.RefCount++;
+
             return (T)existing.Asset;
         }
 
@@ -73,7 +85,15 @@ public sealed class ContentManager : IContentManager
     public Task<T> LoadAsync<T>(string path, CancellationToken ct = default)
         where T : class, IDisposable
     {
-        return LoadAsync<T>(path, path, ct);
+        var resolved = Path.IsPathRooted(path) ? path : Path.Combine(ContentRoot, path);
+
+        return LoadAsync<T>(resolved, resolved, ct);
+    }
+
+    public Task<T> LoadAsync<T>(Stream stream, CancellationToken ct = default)
+        where T : class, IDisposable
+    {
+        return _registry.GetLoader<T>().LoadAsync(stream, ct);
     }
 
     public bool TryGet<T>(string key, out T? asset) where T : class, IDisposable

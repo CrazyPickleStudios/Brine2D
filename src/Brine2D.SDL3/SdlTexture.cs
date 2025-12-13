@@ -1,4 +1,4 @@
-using Brine2D.Engine;
+using Brine2D.Graphics;
 using SDL3;
 
 namespace Brine2D.SDL3;

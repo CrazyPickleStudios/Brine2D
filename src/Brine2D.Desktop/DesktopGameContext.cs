@@ -17,7 +17,6 @@ public sealed class DesktopGameContext : IGameContext
     /// <param name="input">The input subsystem responsible for handling user input.</param>
     public DesktopGameContext(IServiceProvider services, IWindow window, IInput input)
     {
-        // Store references to the provided platform-specific components.
         Services = services;
         Window = window;
         Input = input;

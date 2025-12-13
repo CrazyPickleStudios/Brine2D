@@ -1,4 +1,6 @@
-﻿namespace Brine2D.Engine;
+﻿using Brine2D.Graphics;
+
+namespace Brine2D.Engine;
 
 public interface ISceneManager
 {

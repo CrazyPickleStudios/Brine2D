@@ -1,66 +1,124 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using Brine2D.Graphics;
 
-namespace Brine2D.Engine
+namespace Brine2D.Engine;
+
+/// <summary>
+///     Base implementation of <see cref="IGame" /> that delegates rendering and updates to an <see cref="ISceneManager" />
+///     .
+///     Provides helper methods to set and load scenes and stores a reference to the <see cref="IGameContext" />.
+/// </summary>
+public class GameBase : IGame
 {
     /// <summary>
-    /// Backend-agnostic base game that delegates Update/Render to a scene manager
-    /// and supports non-blocking scene transitions with an optional loading scene.
+    ///     Initializes a new instance of the <see cref="GameBase" /> class.
     /// </summary>
-    public class GameBase : IGame
+    /// <param name="scenes">The scene manager responsible for managing scenes.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scenes" /> is null.</exception>
+    public GameBase(ISceneManager scenes)
     {
-        protected ISceneManager Scenes { get; }
-        protected IGameContext? Context { get; private set; }
+        Scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
+    }
 
-        /// <summary>
-        /// Creates a new GameBase with a scene manager.
-        /// </summary>
-        public GameBase(ISceneManager scenes)
+    /// <summary>
+    ///     Gets the current game context after initialization.
+    /// </summary>
+    protected IGameContext? Context { get; private set; }
+
+    /// <summary>
+    ///     Gets the scene manager used to render and update scenes.
+    /// </summary>
+    protected ISceneManager Scenes { get; }
+
+    /// <summary>
+    ///     Initializes the game with the provided context.
+    /// </summary>
+    /// <param name="context">The game context.</param>
+    /// <returns>A completed task.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> is null.</exception>
+    public virtual Task Initialize(IGameContext context)
+    {
+        Context = context ?? throw new ArgumentNullException(nameof(context));
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Renders the current scene using the provided render context.
+    /// </summary>
+    /// <param name="ctx">The render context.</param>
+    public void Render(IRenderContext ctx)
+    {
+        Scenes.Render(ctx);
+    }
+
+    /// <summary>
+    ///     Updates the current scene using the provided game time.
+    /// </summary>
+    /// <param name="time">The current game time.</param>
+    public void Update(GameTime time)
+    {
+        Scenes.Update(time);
+    }
+
+    /// <summary>
+    ///     Asynchronously loads a new scene created by the provided factory.
+    /// </summary>
+    /// <param name="sceneFactory">Factory function to create the scene instance.</param>
+    /// <param name="ct">An optional cancellation token.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sceneFactory" /> is null.</exception>
+    protected void LoadSceneAsync(Func<IScene> sceneFactory, CancellationToken ct = default)
+    {
+        if (sceneFactory is null)
         {
-            Scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
+            throw new ArgumentNullException(nameof(sceneFactory));
         }
 
-        // Protected helpers for derived games
-        protected void SetInitialScene(IScene scene)
+        Scenes.LoadSceneAsync(sceneFactory, ct);
+    }
+
+    /// <summary>
+    ///     Sets the initial scene to be displayed when the game starts.
+    /// </summary>
+    /// <param name="scene">The initial scene.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scene" /> is null.</exception>
+    protected void SetInitialScene(IScene scene)
+    {
+        if (scene is null)
         {
-            if (scene is null) throw new ArgumentNullException(nameof(scene));
-            Scenes.SetInitialScene(scene);
+            throw new ArgumentNullException(nameof(scene));
         }
 
-        protected void SetLoadingScene(IScene loadingScene)
+        Scenes.SetInitialScene(scene);
+    }
+
+    /// <summary>
+    ///     Sets the scene shown while other scenes are loading.
+    /// </summary>
+    /// <param name="loadingScene">The loading scene.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="loadingScene" /> is null.</exception>
+    protected void SetLoadingScene(IScene loadingScene)
+    {
+        if (loadingScene is null)
         {
-            if (loadingScene is null) throw new ArgumentNullException(nameof(loadingScene));
-            Scenes.SetLoading(loadingScene);
+            throw new ArgumentNullException(nameof(loadingScene));
         }
 
-        protected void LoadSceneAsync(Func<IScene> sceneFactory, CancellationToken ct = default)
+        Scenes.SetLoading(loadingScene);
+    }
+
+    /// <summary>
+    ///     Asynchronously sets the active scene.
+    /// </summary>
+    /// <param name="scene">The scene to set as active.</param>
+    /// <param name="ct">An optional cancellation token.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scene" /> is null.</exception>
+    protected void SetSceneAsync(IScene scene, CancellationToken ct = default)
+    {
+        if (scene is null)
         {
-            if (sceneFactory is null) throw new ArgumentNullException(nameof(sceneFactory));
-            Scenes.LoadSceneAsync(sceneFactory, ct);
+            throw new ArgumentNullException(nameof(scene));
         }
 
-        protected void SetSceneAsync(IScene scene, CancellationToken ct = default)
-        {
-            if (scene is null) throw new ArgumentNullException(nameof(scene));
-            Scenes.SetSceneAsync(scene, ct);
-        }
-
-        // IGame implementation
-        public virtual Task Initialize(IGameContext context)
-        {
-            Context = context ?? throw new ArgumentNullException(nameof(context));
-            return Task.CompletedTask;
-        }
-
-        public void Update(GameTime time)
-        {
-            Scenes.Update(time);
-        }
-
-        public void Render(IRenderContext ctx)
-        {
-            Scenes.Render(ctx);
-        }
+        Scenes.SetSceneAsync(scene, ct);
     }
 }

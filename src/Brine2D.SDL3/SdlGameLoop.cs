@@ -14,6 +14,7 @@ internal sealed class SdlGameLoop : IGameLoop
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<SdlGameLoop> _logger;
     private readonly LoopOptions _loopOptions;
+    private readonly SdlRenderer _renderer;
     private readonly SdlInput _sdlInput;
 
     public SdlGameLoop
@@ -23,6 +24,7 @@ internal sealed class SdlGameLoop : IGameLoop
         IHostApplicationLifetime lifetime,
         IOptions<LoopOptions> loopOptions,
         ILogger<SdlGameLoop> logger,
+        SdlRenderer renderer,
         SdlInput sdlInput)
     {
         _game = game;
@@ -30,6 +32,7 @@ internal sealed class SdlGameLoop : IGameLoop
         _lifetime = lifetime;
         _loopOptions = loopOptions.Value;
         _logger = logger;
+        _renderer = renderer;
         _sdlInput = sdlInput;
     }
 
@@ -106,6 +109,7 @@ internal sealed class SdlGameLoop : IGameLoop
                     while (accumulator >= targetStep && !cancellationToken.IsCancellationRequested)
                     {
                         _game.Update(new GameTime(now / (double)freq, targetStep));
+
                         accumulator -= targetStep;
                     }
                 }
@@ -117,28 +121,39 @@ internal sealed class SdlGameLoop : IGameLoop
             catch (OperationCanceledException)
             {
                 _logger.LogInformation("Update canceled.");
+
                 break;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unhandled exception during Update.");
-                // Decide whether to continue or break; breaking prevents tight-loop logging storms.
+
                 break;
             }
 
             try
             {
-                _game.Render((IRenderContext)_context.Services.GetService(typeof(IRenderContext))!);
+                _renderer.DrainWorkQueue();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception while draining render-thread work.");
+            }
+
+            try
+            {
+                _game.Render(_renderer);
             }
             catch (OperationCanceledException)
             {
                 _logger.LogInformation("Render canceled.");
+
                 break;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unhandled exception during Render.");
-                // Continue vs break: choose break to avoid repeated fault rendering; change if desired.
+
                 break;
             }
 
@@ -147,6 +162,7 @@ internal sealed class SdlGameLoop : IGameLoop
             if (_loopOptions.MaxFps is > 0)
             {
                 var targetMs = 1000.0 / _loopOptions.MaxFps.Value;
+
                 SDL.Delay((uint)Math.Max(0, targetMs));
             }
             else
@@ -166,59 +182,87 @@ internal sealed class SdlGameLoop : IGameLoop
             {
                 case SDL.EventType.Quit:
                     _lifetime.StopApplication();
+
                     return false;
 
                 case SDL.EventType.KeyDown:
                     _sdlInput.Keyboard.OnKeyDown(e.Key.Key, e.Key.Scancode);
+
                     break;
+
                 case SDL.EventType.KeyUp:
                     _sdlInput.Keyboard.OnKeyUp(e.Key.Key, e.Key.Scancode);
+
                     break;
 
                 case SDL.EventType.MouseMotion:
                     _sdlInput.Mouse.OnMouseMotion(e.Motion.X, e.Motion.Y);
+
                     break;
+
                 case SDL.EventType.MouseButtonDown:
                     _sdlInput.Mouse.OnMouseButtonDown(e.Button.Button);
+
                     break;
+
                 case SDL.EventType.MouseButtonUp:
                     _sdlInput.Mouse.OnMouseButtonUp(e.Button.Button);
+
                     break;
+
                 case SDL.EventType.MouseWheel:
                     _sdlInput.Mouse.OnMouseWheel(e.Wheel.X, e.Wheel.Y);
+
                     break;
 
                 case SDL.EventType.GamepadAdded:
                     _sdlInput.Gamepads.OnDeviceAdded(e.GDevice.Which);
+
                     break;
+
                 case SDL.EventType.GamepadRemoved:
                     _sdlInput.Gamepads.OnDeviceRemoved(e.GDevice.Which);
+
                     break;
+
                 case SDL.EventType.GamepadAxisMotion:
                     _sdlInput.Gamepads.OnAxisMotion(e.GAxis.Which, (SDL.GamepadAxis)e.GAxis.Axis, e.GAxis.Value);
+
                     break;
+
                 case SDL.EventType.GamepadButtonDown:
                     _sdlInput.Gamepads.OnButtonDown(e.GButton.Which, (SDL.GamepadButton)e.GButton.Button);
+
                     break;
+
                 case SDL.EventType.GamepadButtonUp:
                     _sdlInput.Gamepads.OnButtonUp(e.GButton.Which, (SDL.GamepadButton)e.GButton.Button);
+
                     break;
 
                 case SDL.EventType.FingerDown:
                     _sdlInput.Touch.OnFingerDown(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
+
                     break;
+
                 case SDL.EventType.FingerUp:
                     _sdlInput.Touch.OnFingerUp(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
+
                     break;
+
                 case SDL.EventType.FingerMotion:
                     _sdlInput.Touch.OnFingerMotion(e.TFinger.TouchID, e.TFinger.X, e.TFinger.Y);
+
                     break;
 
                 case SDL.EventType.TextInput:
                     _sdlInput.TextInput.OnTextInput(e.Text.GetText());
+
                     break;
+
                 case SDL.EventType.TextEditing:
                     _sdlInput.TextInput.OnTextEditing(e.Edit.GetText(), e.Edit.Start, e.Edit.Length);
+
                     break;
             }
         }

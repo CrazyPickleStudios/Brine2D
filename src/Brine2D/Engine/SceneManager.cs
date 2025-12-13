@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Brine2D.Graphics;
+using Microsoft.Extensions.Logging;
 
 namespace Brine2D.Engine;
 

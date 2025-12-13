@@ -1,5 +1,6 @@
-﻿using System.Drawing;
-using Brine2D.Engine;
+﻿using Brine2D.Engine;
+using Brine2D.Graphics;
+using System.Drawing;
 
 namespace EmptyApp;
 
@@ -22,7 +23,7 @@ internal sealed class LoadingScene : IScene
         var x = cx + (int)(Math.Cos(_t * 6) * r);
         var y = cy + (int)(Math.Sin(_t * 6) * r);
 
-        ctx.DrawRect(new Rectangle(x - 10, y - 10, 20, 20), Color.FromArgb(255, 0, 200, 255));
+        ctx.DrawRect(new RectangleF(x - 10, y - 10, 20, 20), Color.FromArgb(255, 0, 200, 255));
         ctx.Present();
     }
 

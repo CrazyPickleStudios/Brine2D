@@ -1,4 +1,5 @@
-﻿using Brine2D.Engine;
+﻿using Brine2D.Content;
+using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Input;
 using Brine2D.Options;
@@ -109,7 +110,6 @@ public static class DesktopHostBuilder
             ConfigureLogging(services);
 
             services.AddBrine2DCore().AddBrine2DSdl3();
-
             services.AddOptions<LoopOptions>();
 
             if (configureWindow is not null)
@@ -121,6 +121,14 @@ public static class DesktopHostBuilder
             {
                 services.Configure(configureLoop);
             }
+
+            services.PostConfigure<ContentOptions>(opts =>
+            {
+                if (string.IsNullOrWhiteSpace(opts.RootDirectory))
+                {
+                    opts.RootDirectory = ctx.HostingEnvironment.ContentRootPath;
+                }
+            });
 
             services.AddSingleton<IGameContext>(sp =>
                 new DesktopGameContext(

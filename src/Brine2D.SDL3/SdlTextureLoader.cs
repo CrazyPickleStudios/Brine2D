@@ -1,5 +1,6 @@
 ﻿using System.Runtime.InteropServices;
-using Brine2D.Engine;
+using Brine2D.Content;
+using Brine2D.Graphics;
 using SDL3;
 
 namespace Brine2D.SDL3;
@@ -22,25 +23,40 @@ internal sealed class SdlTextureLoader : IAssetLoader<ITexture>
             throw new InvalidOperationException($"Failed to load image '{path}': {SDL.GetError()}");
         }
 
-        var tex = SDL.CreateTextureFromSurface(_renderer.Raw, surface);
-        SDL.DestroySurface(surface);
+        var tcs = new TaskCompletionSource<ITexture>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        if (tex == IntPtr.Zero)
+        _renderer.Enqueue(() =>
         {
-            throw new InvalidOperationException($"Failed to create texture: {SDL.GetError()}");
-        }
+            try
+            {
+                var tex = SDL.CreateTextureFromSurface(_renderer.Raw, surface);
+                SDL.DestroySurface(surface);
 
-        SDL.GetTextureSize(tex, out var w, out var h);
+                if (tex == IntPtr.Zero)
+                {
+                    tcs.TrySetException(new InvalidOperationException($"Failed to create texture: {SDL.GetError()}"));
+                    return;
+                }
 
-        return Task.FromResult<ITexture>(new SdlTexture(tex, w, h));
+                SDL.GetTextureSize(tex, out var w, out var h);
+                tcs.TrySetResult(new SdlTexture(tex, w, h));
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+
+        return tcs.Task;
     }
 
     public Task<ITexture> LoadAsync(Stream stream, CancellationToken ct = default)
     {
         using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        var data = ms.ToArray();
 
+        stream.CopyTo(ms);
+
+        var data = ms.ToArray();
         var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
 
         try
@@ -63,30 +79,41 @@ internal sealed class SdlTextureLoader : IAssetLoader<ITexture>
                 }
                 catch
                 {
-                    // No-op, ignore. -RP
+                    // No-op. -RP
                 }
 
                 throw new InvalidOperationException($"Failed to load image from stream: {SDL.GetError()}");
             }
 
-            var tex = SDL.CreateTextureFromSurface(_renderer.Raw, surface);
-            SDL.DestroySurface(surface);
+            var tcs = new TaskCompletionSource<ITexture>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            if (tex == IntPtr.Zero)
+            _renderer.Enqueue(() =>
             {
-                throw new InvalidOperationException($"Failed to create texture: {SDL.GetError()}");
-            }
+                try
+                {
+                    var tex = SDL.CreateTextureFromSurface(_renderer.Raw, surface);
+                    SDL.DestroySurface(surface);
 
-            SDL.GetTextureSize(tex, out var w, out var h);
+                    if (tex == IntPtr.Zero)
+                    {
+                        tcs.TrySetException(new InvalidOperationException($"Failed to create texture: {SDL.GetError()}"));
+                        return;
+                    }
 
-            return Task.FromResult<ITexture>(new SdlTexture(tex, w, h));
+                    SDL.GetTextureSize(tex, out var w, out var h);
+                    tcs.TrySetResult(new SdlTexture(tex, w, h));
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            });
+
+            return tcs.Task;
         }
         finally
         {
-            if (handle.IsAllocated)
-            {
-                handle.Free();
-            }
+            if (handle.IsAllocated) handle.Free();
         }
     }
 }

@@ -1,4 +1,4 @@
-namespace Brine2D.Engine;
+namespace Brine2D.Content;
 
 public interface IAssetLoader<TAsset>
     where TAsset : class, IDisposable

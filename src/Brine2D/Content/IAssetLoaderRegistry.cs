@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Brine2D.Engine;
+namespace Brine2D.Content;
 
 public interface IAssetLoaderRegistry
 {

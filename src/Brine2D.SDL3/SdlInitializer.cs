@@ -20,7 +20,7 @@ public sealed class SdlInitializer : IDisposable
             return;
         }
 
-        if (!SDL.Init(SDL.InitFlags.Video | SDL.InitFlags.Events))
+        if (!SDL.Init(SDL.InitFlags.Video | SDL.InitFlags.Audio | SDL.InitFlags.Events))
         {
             throw new InvalidOperationException($"SDL_Init failed: {SDL.GetError()}");
         }

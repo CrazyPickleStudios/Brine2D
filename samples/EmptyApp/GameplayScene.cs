@@ -1,54 +1,50 @@
 using System.Drawing;
+using Brine2D.Audio;
+using Brine2D.Content;
 using Brine2D.Engine;
+using Brine2D.Graphics;
+using Brine2D.Graphics.Tilemaps;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EmptyApp;
 
 internal sealed class GameplayScene : IScene
 {
-    private IMusic _music = null!;
-    private ITexture? _tex;
-    private int _x;
+    private readonly IContentManager _content;
+    //private readonly IAudio _audio;
+    private Tilemap? _map;
+    private readonly TilemapRenderer _renderer = new TilemapRenderer();
+    private int _camX;
+    //private IMusic _backgroundMusic;
+
+    public GameplayScene(IContentManager content)//, IAudio audio)
+    {
+        _content = content;
+        //_audio = audio;
+    }
 
     public async Task InitializeAsync(IGameContext context, CancellationToken ct)
     {
-        // Simulate a long loading time.
-        await Task.Delay(2000, ct).ConfigureAwait(false);
-
-        var content = context.Services.GetRequiredService<IContentManager>();
-        
-        _tex = await content.TryLoadAsync<ITexture>("Assets/logo.png", ct);
-
-        // TODO: The NuGet for SDL3-CS is pending a new release for audio to work. -RP
-        //var audio = context.Services.GetRequiredService<IAudio>();
-        //_music = await content.LoadAsync<IMusic>("Assets/music.mp3", ct);
-        // audio.PlayMusic(_music);
+        _map = await _content.LoadAsync<Tilemap>("untitled.tmj", ct);
+        //_backgroundMusic = await _content.LoadAsync<IMusic>("Assets/music.mp3");
+        //_audio.PlayMusic(_backgroundMusic);
     }
 
     public void Render(IRenderContext ctx)
     {
-        ctx.Clear(Color.FromArgb(255, 30, 30, 30));
+        ctx.Clear(Color.FromArgb(255,30, 30, 30));
 
-        if (_tex is not null)
+        if (_map is not null)
         {
-            ctx.DrawTexture(_tex, new Rectangle(_x, 100, 64, 64));
-        }
-        else
-        {
-            ctx.DrawRect(new Rectangle(_x, 100, 64, 64), Color.FromArgb(255, 0, 200, 255));
+            var viewport = new RectangleF(_camX, 0, 800, 600);
+            _renderer.Draw(ctx, _map, viewport);
         }
 
-        
         ctx.Present();
     }
 
     public void Update(GameTime time)
     {
-        _x += (int)(60 * time.DeltaSeconds);
-
-        if (_x > 760)
-        {
-            _x = 0;
-        }
+        //_camX += (int)(100 * time.DeltaSeconds);
     }
 }

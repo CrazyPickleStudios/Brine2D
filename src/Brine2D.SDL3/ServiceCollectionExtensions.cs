@@ -1,4 +1,9 @@
-﻿using Brine2D.Engine;
+﻿using Brine2D.Audio;
+using Brine2D.Content;
+using Brine2D.Engine;
+using Brine2D.Graphics;
+using Brine2D.Graphics.Sprites;
+using Brine2D.Graphics.Tilemaps;
 using Brine2D.Input;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -38,10 +43,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IContentManager, ContentManager>();
         services.AddSingleton<IAssetLoader<ITexture>, SdlTextureLoader>();
 
-        //services.AddSingleton<IAudio, SdlAudio>();
-        //services.AddSingleton<IAssetLoader<ISound>, SdlSoundLoader>();
-        //services.AddSingleton<IAssetLoader<IMusic>, SdlMusicLoader>();
+        services.AddSingleton<IAudio, SdlAudio>();
+        services.AddSingleton<IAssetLoader<ISound>, SdlSoundLoader>();
+        services.AddSingleton<IAssetLoader<IMusic>, SdlMusicLoader>();
 
+        services.AddSingleton<IAssetLoader<SpriteAtlas>, SdlSpriteAtlasLoader>();
+        
         services.AddSingleton<IGameLoop, SdlGameLoop>();
 
         return services;
