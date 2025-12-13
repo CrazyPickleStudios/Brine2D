@@ -1,3 +1,9 @@
+---
+layout: home
+title: "Brine2D"
+nav_order: 1
+---
+
 # Brine2D
 
 A modern 2D game engine for .NET 10. Build fast, ship confidently.

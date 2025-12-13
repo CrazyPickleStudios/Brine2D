@@ -3,6 +3,7 @@ description: Documentation for the Brine2D game engine.
 theme: just-the-docs
 
 url: https://github.com/CrazyPickleStudios/Brine2D
+baseurl: /Brine2D
 
 aux_links:
   Template Repository: https://github.com/just-the-docs/just-the-docs-template
