@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/AdvancedGame/AdvancedGame.csproj" />
+    <Project Path="samples/BasicGame/BasicGame.csproj" />
+    <Project Path="samples/PlatformerGame/PlatformerGame.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Brine2D.Audio/Brine2D.Audio.csproj" />
+    <Project Path="src/Brine2D.Content/Brine2D.Content.csproj" />
+    <Project Path="src/Brine2D.Core/Brine2D.Core.csproj" />
+    <Project Path="src/Brine2D.ECS/Brine2D.ECS.csproj" />
+    <Project Path="src/Brine2D.Engine/Brine2D.Engine.csproj" />
+    <Project Path="src/Brine2D.Extensions.DependencyInjection/Brine2D.Extensions.DependencyInjection.csproj" />
+    <Project Path="src/Brine2D.Hosting/Brine2D.Hosting.csproj" />
+    <Project Path="src/Brine2D.Input/Brine2D.Input.csproj" />
+    <Project Path="src/Brine2D.Physics/Brine2D.Physics.csproj" />
+    <Project Path="src/Brine2D.Rendering.SDL/Brine2D.Rendering.SDL.csproj" />
+    <Project Path="src/Brine2D.Rendering/Brine2D.Rendering.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+</Solution>
