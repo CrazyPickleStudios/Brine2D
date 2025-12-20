@@ -12,6 +12,7 @@
     <Project Path="src/Brine2D.Engine/Brine2D.Engine.csproj" />
     <Project Path="src/Brine2D.Extensions.DependencyInjection/Brine2D.Extensions.DependencyInjection.csproj" />
     <Project Path="src/Brine2D.Hosting/Brine2D.Hosting.csproj" />
+    <Project Path="src/Brine2D.Input.SDL/Brine2D.Input.SDL.csproj" />
     <Project Path="src/Brine2D.Input/Brine2D.Input.csproj" />
     <Project Path="src/Brine2D.Physics/Brine2D.Physics.csproj" />
     <Project Path="src/Brine2D.Rendering.SDL/Brine2D.Rendering.SDL.csproj" />

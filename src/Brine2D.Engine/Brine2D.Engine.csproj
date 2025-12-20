@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Brine2D.Core\Brine2D.Core.csproj" />
+    <ProjectReference Include="..\Brine2D.Rendering\Brine2D.Rendering.csproj" />
   </ItemGroup>
 
 </Project>

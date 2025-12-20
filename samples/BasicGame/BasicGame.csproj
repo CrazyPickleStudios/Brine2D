@@ -9,7 +9,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Brine2D.Hosting\Brine2D.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Brine2D.Input.SDL\Brine2D.Input.SDL.csproj" />
     <ProjectReference Include="..\..\src\Brine2D.Rendering.SDL\Brine2D.Rendering.SDL.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="gamesettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+	  <None Update="assets\**\*">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
   </ItemGroup>
 
 </Project>

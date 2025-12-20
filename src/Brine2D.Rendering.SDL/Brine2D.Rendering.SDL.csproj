@@ -7,11 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SDL3-CS" Version="3.3.3" />
-    <PackageReference Include="SDL3-CS.Native" Version="3.3.3" />
-    <PackageReference Include="SDL3-CS.Native.Image" Version="3.2.4" />
-    <PackageReference Include="SDL3-CS.Native.Mixer" Version="2.8.1.1" />
-    <PackageReference Include="SDL3-CS.Native.TTF" Version="3.2.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.1" />
+    <PackageReference Include="SDL3-CS" Version="3.3.5-preview.20251213-114652" />
+    <PackageReference Include="SDL3-CS.Native" Version="3.3.5-preview.20251212-135925" />
+    <PackageReference Include="SDL3-CS.Native.Image" Version="3.3.0-preview.20251212-134941" />
+    <PackageReference Include="SDL3-CS.Native.Mixer" Version="3.1.0-preview.20251213-114529" />
+    <PackageReference Include="SDL3-CS.Native.Shadercross" Version="3.0.0-preview.20251212-134943" />
+    <PackageReference Include="SDL3-CS.Native.TTF" Version="3.3.0-preview.20251212-134942" />
   </ItemGroup>
 
   <ItemGroup>

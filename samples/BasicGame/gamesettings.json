@@ -1,0 +1,17 @@
+{
+  "Rendering": {
+    "WindowTitle": "Brine2D Game",
+    "WindowWidth": 1280,
+    "WindowHeight": 720,
+    "Fullscreen": false,
+    "VSync": true,
+    "Resizable": true,
+    "Backend": "LegacyRenderer"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Brine2D": "Debug"
+    }
+  }
+}

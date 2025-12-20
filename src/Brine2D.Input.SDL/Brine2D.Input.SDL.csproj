@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="SDL3-CS" Version="3.3.5-preview.20251213-114652" />
+		<PackageReference Include="SDL3-CS.Native" Version="3.3.5-preview.20251212-135925" />
+		<PackageReference Include="SDL3-CS.Native.Image" Version="3.3.0-preview.20251212-134941" />
+		<PackageReference Include="SDL3-CS.Native.Mixer" Version="3.1.0-preview.20251213-114529" />
+		<PackageReference Include="SDL3-CS.Native.Shadercross" Version="3.0.0-preview.20251212-134943" />
+		<PackageReference Include="SDL3-CS.Native.TTF" Version="3.3.0-preview.20251212-134942" />
+	</ItemGroup>
+
+	<ItemGroup>
+    <ProjectReference Include="..\Brine2D.Core\Brine2D.Core.csproj" />
+  </ItemGroup>
+
+</Project>
