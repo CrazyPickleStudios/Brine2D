@@ -1,5 +1,5 @@
 ﻿using Brine2D.Core;
-using Brine2D.Core.Input;
+using Brine2D.Input;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 

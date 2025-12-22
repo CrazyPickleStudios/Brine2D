@@ -24,8 +24,7 @@ namespace Brine2D.Rendering
 
         public static Color FromRgb(byte r, byte g, byte b) => new(r, g, b, 255);
         public static Color FromRgba(byte r, byte g, byte b, byte a) => new(r, g, b, a);
-
-        // Common colors
+        
         public static Color White => new(255, 255, 255);
         public static Color Black => new(0, 0, 0);
         public static Color Red => new(255, 0, 0);

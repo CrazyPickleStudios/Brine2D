@@ -9,24 +9,27 @@ public interface ITextureLoader : IDisposable
     /// Loads a texture from a file path.
     /// </summary>
     /// <param name="path">Path to the image file.</param>
+    /// <param name="scaleMode">Scale mode for the texture (default: Linear).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The loaded texture.</returns>
-    Task<ITexture> LoadTextureAsync(string path, CancellationToken cancellationToken = default);
+    Task<ITexture> LoadTextureAsync(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads a texture from a file path synchronously.
     /// </summary>
     /// <param name="path">Path to the image file.</param>
+    /// <param name="scaleMode">Scale mode for the texture (default: Linear).</param>
     /// <returns>The loaded texture.</returns>
-    ITexture LoadTexture(string path);
+    ITexture LoadTexture(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear);
 
     /// <summary>
     /// Creates a blank texture with the specified dimensions.
     /// </summary>
     /// <param name="width">Width in pixels.</param>
     /// <param name="height">Height in pixels.</param>
+    /// <param name="scaleMode">Scale mode for the texture (default: Linear).</param>
     /// <returns>The created texture.</returns>
-    ITexture CreateTexture(int width, int height);
+    ITexture CreateTexture(int width, int height, TextureScaleMode scaleMode = TextureScaleMode.Linear);
 
     /// <summary>
     /// Unloads a texture and frees its resources.

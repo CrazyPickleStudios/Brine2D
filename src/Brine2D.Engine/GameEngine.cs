@@ -1,5 +1,5 @@
 ﻿using Brine2D.Core;
-using Brine2D.Core.Input;
+using Brine2D.Input;
 using Brine2D.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

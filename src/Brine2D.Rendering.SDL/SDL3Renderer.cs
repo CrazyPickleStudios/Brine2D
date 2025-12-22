@@ -37,8 +37,8 @@ public class SDL3Renderer : IRenderer
 
         _logger.LogInformation("Initializing SDL3 renderer");
         
-        // Initialize SDL with Video AND Gamepad support
-        var initFlags = SDL3.SDL.InitFlags.Video | SDL3.SDL.InitFlags.Gamepad;
+        // Initialize SDL with Video, Gamepad, and Audio
+        var initFlags = SDL3.SDL.InitFlags.Video | SDL3.SDL.InitFlags.Gamepad | SDL3.SDL.InitFlags.Audio;
         
         if (!SDL3.SDL.Init(initFlags))
         {
@@ -196,7 +196,7 @@ public class SDL3Renderer : IRenderer
 
     public void DrawText(string text, float x, float y, Color color)
     {
-        // TODO: Implement text rendering (requires SDL_ttf or custom solution)
+        // TODO: Implement text rendering
         _logger.LogWarning("Text rendering not yet implemented");
     }
 

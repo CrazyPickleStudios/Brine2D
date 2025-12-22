@@ -5,6 +5,7 @@
     <Project Path="samples/PlatformerGame/PlatformerGame.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Brine2D.Audio.SDL/Brine2D.Audio.SDL.csproj" Id="f5fc357d-678e-48c4-8274-492d231d3781" />
     <Project Path="src/Brine2D.Audio/Brine2D.Audio.csproj" />
     <Project Path="src/Brine2D.Content/Brine2D.Content.csproj" />
     <Project Path="src/Brine2D.Core/Brine2D.Core.csproj" />

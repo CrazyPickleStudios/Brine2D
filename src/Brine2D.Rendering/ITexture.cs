@@ -24,4 +24,9 @@ public interface ITexture : IDisposable
     /// Gets whether the texture is loaded and ready to use.
     /// </summary>
     bool IsLoaded { get; }
+
+    /// <summary>
+    /// Gets or sets the texture scale mode (linear or nearest neighbor).
+    /// </summary>
+    TextureScaleMode ScaleMode { get; set; }
 }

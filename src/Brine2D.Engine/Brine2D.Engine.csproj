@@ -12,7 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Brine2D.Audio\Brine2D.Audio.csproj" />
     <ProjectReference Include="..\Brine2D.Core\Brine2D.Core.csproj" />
+    <ProjectReference Include="..\Brine2D.Input\Brine2D.Input.csproj" />
     <ProjectReference Include="..\Brine2D.Rendering\Brine2D.Rendering.csproj" />
   </ItemGroup>
 

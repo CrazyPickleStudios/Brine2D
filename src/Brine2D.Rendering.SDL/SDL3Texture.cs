@@ -10,23 +10,50 @@ public class SDL3Texture : ITexture
     private readonly ILogger<SDL3Texture> _logger;
     private nint _texture;
     private bool _disposed;
+    private TextureScaleMode _scaleMode;
 
     public int Width { get; }
     public int Height { get; }
     public string Source { get; }
     public bool IsLoaded => _texture != IntPtr.Zero && !_disposed;
 
+    public TextureScaleMode ScaleMode
+    {
+        get => _scaleMode;
+        set
+        {
+            if (_scaleMode != value && _texture != IntPtr.Zero)
+            {
+                _scaleMode = value;
+                ApplyScaleMode();
+            }
+        }
+    }
+
     internal nint Handle => _texture;
 
-    public SDL3Texture(string source, nint texture, int width, int height, ILogger<SDL3Texture> logger)
+    public SDL3Texture(string source, nint texture, int width, int height, TextureScaleMode scaleMode, ILogger<SDL3Texture> logger)
     {
         Source = source ?? throw new ArgumentNullException(nameof(source));
         _texture = texture;
         Width = width;
         Height = height;
+        _scaleMode = scaleMode;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        _logger.LogDebug("Texture created: {Source} ({Width}x{Height})", source, width, height);
+        ApplyScaleMode();
+        _logger.LogDebug("Texture created: {Source} ({Width}x{Height}), ScaleMode: {ScaleMode}", source, width, height, scaleMode);
+    }
+
+    private void ApplyScaleMode()
+    {
+        if (_texture == IntPtr.Zero) return;
+
+        var sdlScaleMode = _scaleMode == TextureScaleMode.Nearest
+            ? SDL3.SDL.ScaleMode.Nearest
+            : SDL3.SDL.ScaleMode.Linear;
+
+        SDL3.SDL.SetTextureScaleMode(_texture, sdlScaleMode);
     }
 
     public void Dispose()

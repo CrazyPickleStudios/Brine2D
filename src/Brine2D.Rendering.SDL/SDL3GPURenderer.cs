@@ -120,7 +120,7 @@ public class SDL3GPURenderer : IRenderer
         // This will be implemented when we add vertex buffer support
 
         IsInitialized = true;
-        await Task.CompletedTask; // Satisfy async signature
+        await Task.CompletedTask;
     }
 
     public void Clear(Color color)

@@ -26,12 +26,12 @@ public class SDL3TextureLoader : ITextureLoader
         _logger.LogInformation("SDL3_image texture loader ready (PNG, JPG, BMP support)");
     }
 
-    public async Task<ITexture> LoadTextureAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ITexture> LoadTextureAsync(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear, CancellationToken cancellationToken = default)
     {
-        return await Task.Run(() => LoadTexture(path), cancellationToken);
+        return await Task.Run(() => LoadTexture(path, scaleMode), cancellationToken);
     }
 
-    public ITexture LoadTexture(string path)
+    public ITexture LoadTexture(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Path cannot be null or empty", nameof(path));
@@ -39,9 +39,8 @@ public class SDL3TextureLoader : ITextureLoader
         if (!File.Exists(path))
             throw new FileNotFoundException($"Texture file not found: {path}");
 
-        _logger.LogInformation("Loading texture: {Path}", path);
+        _logger.LogInformation("Loading texture: {Path} (ScaleMode: {ScaleMode})", path, scaleMode);
 
-        // Load surface from file using SDL_image
         var surface = SDL3.Image.Load(path);
         if (surface == IntPtr.Zero)
         {
@@ -52,7 +51,6 @@ public class SDL3TextureLoader : ITextureLoader
 
         try
         {
-            // Marshal the surface pointer to the Surface struct to read dimensions
             var surfaceStruct = Marshal.PtrToStructure<SDL3.SDL.Surface>(surface);
             var width = surfaceStruct.Width;
             var height = surfaceStruct.Height;
@@ -63,7 +61,6 @@ public class SDL3TextureLoader : ITextureLoader
                 throw new InvalidOperationException($"Invalid surface dimensions: {width}x{height}");
             }
 
-            // Create texture from surface
             var texture = SDL3.SDL.CreateTextureFromSurface(_renderer, surface);
             if (texture == IntPtr.Zero)
             {
@@ -77,6 +74,7 @@ public class SDL3TextureLoader : ITextureLoader
                 texture,
                 width,
                 height,
+                scaleMode,
                 _loggerFactory.CreateLogger<SDL3Texture>());
 
             _loadedTextures.Add(sdlTexture);
@@ -86,12 +84,11 @@ public class SDL3TextureLoader : ITextureLoader
         }
         finally
         {
-            // Always free the surface
             SDL3.SDL.DestroySurface(surface);
         }
     }
 
-    public ITexture CreateTexture(int width, int height)
+    public ITexture CreateTexture(int width, int height, TextureScaleMode scaleMode = TextureScaleMode.Linear)
     {
         if (width <= 0 || height <= 0)
             throw new ArgumentException("Width and height must be positive");
@@ -117,6 +114,7 @@ public class SDL3TextureLoader : ITextureLoader
             texture,
             width,
             height,
+            scaleMode,
             _loggerFactory.CreateLogger<SDL3Texture>());
 
         _loadedTextures.Add(sdlTexture);
@@ -143,9 +141,9 @@ public class SDL3TextureLoader : ITextureLoader
         {
             texture.Dispose();
         }
+
         _loadedTextures.Clear();
 
-        // SDL3_image no longer has quit - cleanup is automatic
         _disposed = true;
     }
 }

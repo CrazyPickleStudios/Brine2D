@@ -1,4 +1,4 @@
-﻿using Brine2D.Core.Input;
+﻿using Brine2D.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
