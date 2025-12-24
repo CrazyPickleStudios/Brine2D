@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Numerics;
+using Brine2D.SDL.Common;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Brine2D.Rendering.SDL;
@@ -6,7 +8,7 @@ namespace Brine2D.Rendering.SDL;
 /// <summary>
 /// SDL3 implementation of the renderer.
 /// </summary>
-public class SDL3Renderer : IRenderer
+public class SDL3Renderer : IRenderer, ISDL3WindowProvider
 {
     private readonly ILogger<SDL3Renderer> _logger;
     private readonly RenderingOptions _options;
@@ -20,6 +22,21 @@ public class SDL3Renderer : IRenderer
     /// Gets the internal SDL renderer handle for texture creation.
     /// </summary>
     internal nint RendererHandle => _renderer;
+
+    /// <summary>
+    /// Gets the current SDL window handle.
+    /// </summary>
+    public nint Window => _window;
+
+    private ICamera? _camera;
+
+    public ICamera? Camera
+    {
+        get => _camera;
+        set => _camera = value;
+    }
+
+    private IFont? _defaultFont;
 
     public SDL3Renderer(ILogger<SDL3Renderer> logger, IOptions<RenderingOptions> options)
     {
@@ -108,17 +125,39 @@ public class SDL3Renderer : IRenderer
     public void DrawRectangle(float x, float y, float width, float height, Color color)
     {
         ThrowIfNotInitialized();
+        
+        // Apply camera transform if camera is set
+        var position = new Vector2(x, y);
+        if (_camera != null)
+        {
+            position = _camera.WorldToScreen(position);
+            width *= _camera.Zoom;
+            height *= _camera.Zoom;
+        }
+        
+        // Enable alpha blending for translucent rectangles
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.Blend);
+        }
+        
         SDL3.SDL.SetRenderDrawColor(_renderer, color.R, color.G, color.B, color.A);
 
         var rect = new SDL3.SDL.FRect
         {
-            X = x,
-            Y = y,
+            X = position.X,
+            Y = position.Y,
             W = width,
             H = height
         };
 
         SDL3.SDL.RenderFillRect(_renderer, ref rect);
+        
+        // Reset blend mode to default
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.None);
+        }
     }
 
     public void DrawTexture(ITexture texture, float x, float y)
@@ -152,10 +191,19 @@ public class SDL3Renderer : IRenderer
         if (!sdlTexture.IsLoaded)
             throw new InvalidOperationException("Texture is not loaded");
 
+        // Apply camera transform if camera is set
+        var position = new Vector2(x, y);
+        if (_camera != null)
+        {
+            position = _camera.WorldToScreen(position);
+            width *= _camera.Zoom;
+            height *= _camera.Zoom;
+        }
+
         var destRect = new SDL3.SDL.FRect
         {
-            X = x,
-            Y = y,
+            X = position.X,
+            Y = position.Y,
             W = width,
             H = height
         };
@@ -183,10 +231,19 @@ public class SDL3Renderer : IRenderer
             H = sourceHeight
         };
 
+        // Apply camera transform
+        var position = new Vector2(destX, destY);
+        if (_camera != null)
+        {
+            position = _camera.WorldToScreen(position);
+            destWidth *= _camera.Zoom;
+            destHeight *= _camera.Zoom;
+        }
+
         var destRect = new SDL3.SDL.FRect
         {
-            X = destX,
-            Y = destY,
+            X = position.X,
+            Y = position.Y,
             W = destWidth,
             H = destHeight
         };
@@ -196,8 +253,150 @@ public class SDL3Renderer : IRenderer
 
     public void DrawText(string text, float x, float y, Color color)
     {
-        // TODO: Implement text rendering
-        _logger.LogWarning("Text rendering not yet implemented");
+        ThrowIfNotInitialized();
+
+        if (string.IsNullOrEmpty(text)) return;
+
+        // If no default font, skip rendering (or use placeholder)
+        if (_defaultFont == null || _defaultFont is not SDL3Font sdlFont || !sdlFont.IsLoaded)
+        {
+            // Fallback to simple rectangles (temporary)
+            DrawTextFallback(text, x, y, color);
+            return;
+        }
+
+        // Render text using SDL_ttf
+        var sdlColor = new SDL3.SDL.Color { R = color.R, G = color.G, B = color.B, A = color.A };
+
+        // Render to surface - ADD LENGTH PARAMETER
+        var textLength = (UIntPtr)text.Length;
+        var surface = SDL3.TTF.RenderTextBlended(sdlFont.Handle, text, textLength, sdlColor);
+        
+        if (surface == nint.Zero)
+        {
+            _logger.LogWarning("Failed to render text: {Text}", text);
+            return;
+        }
+
+        try
+        {
+            // Create texture from surface
+            var texture = SDL3.SDL.CreateTextureFromSurface(_renderer, surface);
+            if (texture == nint.Zero)
+            {
+                _logger.LogWarning("Failed to create texture from text surface");
+                return;
+            }
+
+            try
+            {
+                // Get texture size
+                SDL3.SDL.GetTextureSize(texture, out var w, out var h);
+
+                // Apply camera transform if needed
+                var position = new Vector2(x, y);
+                if (_camera != null)
+                {
+                    position = _camera.WorldToScreen(position);
+                    w *= _camera.Zoom;
+                    h *= _camera.Zoom;
+                }
+
+                var destRect = new SDL3.SDL.FRect
+                {
+                    X = position.X,
+                    Y = position.Y,
+                    W = w,
+                    H = h
+                };
+
+                SDL3.SDL.RenderTexture(_renderer, texture, IntPtr.Zero, ref destRect);
+            }
+            finally
+            {
+                SDL3.SDL.DestroyTexture(texture);
+            }
+        }
+        finally
+        {
+            SDL3.SDL.DestroySurface(surface);
+        }
+    }
+
+    private void DrawTextFallback(string text, float x, float y, Color color)
+    {
+        const int charWidth = 8;
+        const int charHeight = 12;
+        const int spacing = 2;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            var charX = x + (i * (charWidth + spacing));
+            // This now respects camera transform via DrawRectangle
+            DrawRectangle(charX, y, charWidth, charHeight, color);
+        }
+    }
+
+    public void SetDefaultFont(IFont? font)
+    {
+        _defaultFont = font;
+    }
+
+    public void DrawCircle(float centerX, float centerY, float radius, Color color)
+    {
+        ThrowIfNotInitialized();
+        
+        // Apply camera transform if camera is set
+        var center = new Vector2(centerX, centerY);
+        if (_camera != null)
+        {
+            center = _camera.WorldToScreen(center);
+            radius *= _camera.Zoom;
+        }
+        
+        // Enable alpha blending for translucent circles
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.Blend);
+        }
+        
+        SDL3.SDL.SetRenderDrawColor(_renderer, color.R, color.G, color.B, color.A);
+
+        // Draw filled circle using midpoint circle algorithm
+        int x = (int)radius;
+        int y = 0;
+        int radiusError = 1 - x;
+
+        while (x >= y)
+        {
+            // Draw horizontal lines to fill the circle
+            DrawHorizontalLine((int)center.X - x, (int)center.X + x, (int)center.Y + y);
+            DrawHorizontalLine((int)center.X - x, (int)center.X + x, (int)center.Y - y);
+            DrawHorizontalLine((int)center.X - y, (int)center.X + y, (int)center.Y + x);
+            DrawHorizontalLine((int)center.X - y, (int)center.X + y, (int)center.Y - x);
+
+            y++;
+            if (radiusError < 0)
+            {
+                radiusError += 2 * y + 1;
+            }
+            else
+            {
+                x--;
+                radiusError += 2 * (y - x + 1);
+            }
+        }
+        
+        // Reset blend mode to default
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.None);
+        }
+    }
+
+    private void DrawHorizontalLine(int x1, int x2, int y)
+    {
+        SDL3.SDL.RenderLine(_renderer, x1, y, x2, y);
     }
 
     private void ThrowIfNotInitialized()

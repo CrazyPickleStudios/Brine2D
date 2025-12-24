@@ -18,6 +18,8 @@
     <Project Path="src/Brine2D.Physics/Brine2D.Physics.csproj" />
     <Project Path="src/Brine2D.Rendering.SDL/Brine2D.Rendering.SDL.csproj" />
     <Project Path="src/Brine2D.Rendering/Brine2D.Rendering.csproj" />
+    <Project Path="src/Brine2D.SDL.Common/Brine2D.SDL.Common.csproj" Id="a506ff16-0d74-4ca6-8431-554c48f229ab" />
+    <Project Path="src/Brine2D.UI/Brine2D.UI.csproj" Id="ad1578b4-b139-4fda-9517-b75e135bb3ca" />
   </Folder>
   <Folder Name="/tests/" />
 </Solution>

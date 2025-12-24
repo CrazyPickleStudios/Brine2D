@@ -1,29 +1,12 @@
 namespace Brine2D.Input;
 
 /// <summary>
-/// Defines keyboard key codes for input handling.
+/// Keyboard key codes for input handling.
 /// </summary>
-/// <remarks>
-/// This enumeration provides a comprehensive set of keyboard keys including:
-/// <list type="bullet">
-/// <item><description>Alphabetic keys (A-Z)</description></item>
-/// <item><description>Numeric keys (0-9) on the top row</description></item>
-/// <item><description>Function keys (F1-F24)</description></item>
-/// <item><description>Arrow keys for directional navigation</description></item>
-/// <item><description>Modifier keys (Shift, Control, Alt, Super/Windows/Command)</description></item>
-/// <item><description>Special editing keys (Insert, Home, End, PageUp, PageDown)</description></item>
-/// <item><description>Punctuation and symbol keys</description></item>
-/// <item><description>Numpad keys including operators</description></item>
-/// <item><description>System keys (PrintScreen, Pause, Menu)</description></item>
-/// <item><description>Media control keys (Play, Stop, Volume)</description></item>
-/// <item><description>Browser navigation keys</description></item>
-/// <item><description>International and language-specific keys</description></item>
-/// </list>
-/// </remarks>
 public enum Keys
 {
     /// <summary>
-    /// Represents an unknown or unmapped key.
+    /// Unknown or unmapped key.
     /// </summary>
     Unknown = 0,
 

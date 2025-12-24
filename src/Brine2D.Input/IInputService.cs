@@ -97,4 +97,40 @@ public interface IInputService
     /// Gets the right stick position as a vector (-1 to 1 for each axis).
     /// </summary>
     Vector2 GetGamepadRightStick(int gamepadIndex = 0);
+    
+    /// <summary>
+    /// Starts text input mode. Call this when a text field is focused.
+    /// </summary>
+    void StartTextInput();
+    
+    /// <summary>
+    /// Stops text input mode. Call this when text field loses focus.
+    /// </summary>
+    void StopTextInput();
+    
+    /// <summary>
+    /// Gets whether text input mode is active.
+    /// </summary>
+    bool IsTextInputActive { get; }
+    
+    /// <summary>
+    /// Gets the text that was input this frame (from SDL_EVENT_TEXT_INPUT).
+    /// This properly handles Unicode, IME, and keyboard layouts.
+    /// </summary>
+    string GetTextInput();
+    
+    /// <summary>
+    /// Returns true if backspace was pressed this frame (for text editing).
+    /// </summary>
+    bool IsBackspacePressed();
+    
+    /// <summary>
+    /// Returns true if Enter/Return was pressed this frame (for text submission).
+    /// </summary>
+    bool IsReturnPressed();
+    
+    /// <summary>
+    /// Returns true if Delete was pressed this frame.
+    /// </summary>
+    bool IsDeletePressed();
 }

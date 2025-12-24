@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Brine2D.SDL.Common;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -40,6 +41,10 @@ public static class SDL3RenderingServiceCollectionExtensions
             };
         });
 
+        services.AddSingleton<ISDL3WindowProvider>(sp =>
+            (SDL3Renderer)sp.GetRequiredService<IRenderer>());
+
+
         // Register texture loader
         services.TryAddSingleton<ITextureLoader>(provider =>
         {
@@ -58,6 +63,8 @@ public static class SDL3RenderingServiceCollectionExtensions
                 provider.GetRequiredService<ILoggerFactory>(),
                 rendererHandle);
         });
+
+        services.AddSingleton<IFontLoader, SDL3FontLoader>();
 
         return services;
     }

@@ -40,6 +40,15 @@ public interface IRenderer : IDisposable
     void DrawRectangle(float x, float y, float width, float height, Color color);
 
     /// <summary>
+    /// Draws a filled circle.
+    /// </summary>
+    /// <param name="centerX">Center X position.</param>
+    /// <param name="centerY">Center Y position.</param>
+    /// <param name="radius">Circle radius.</param>
+    /// <param name="color">Fill color.</param>
+    void DrawCircle(float centerX, float centerY, float radius, Color color);
+
+    /// <summary>
     /// Draws a texture at the specified position.
     /// </summary>
     /// <param name="texture">The texture to draw.</param>
@@ -77,4 +86,10 @@ public interface IRenderer : IDisposable
     /// Draws text at the specified position.
     /// </summary>
     void DrawText(string text, float x, float y, Color color);
+
+    /// <summary>
+    /// Gets or sets the active camera for rendering.
+    /// If null, renders in screen space.
+    /// </summary>
+    ICamera? Camera { get; set; }
 }

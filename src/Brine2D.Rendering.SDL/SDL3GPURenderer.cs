@@ -230,6 +230,14 @@ public class SDL3GPURenderer : IRenderer
         // TODO: Implement text rendering
     }
 
+    public void DrawCircle(float centerX, float centerY, float radius, Color color)
+    {
+        ThrowIfNotInitialized();
+        // TODO: Implement circle drawing with vertex buffers and shaders
+    }
+
+    public ICamera? Camera { get; set; }
+
     private void ThrowIfNotInitialized()
     {
         if (!IsInitialized)

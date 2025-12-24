@@ -22,7 +22,7 @@ namespace Brine2D.Core
 
         /// <inheritdoc/>
         public bool IsActive { get; private set; }
-
+        
         protected Scene(ILogger logger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
