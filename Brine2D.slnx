@@ -9,6 +9,7 @@
     <Project Path="src/Brine2D.Audio/Brine2D.Audio.csproj" />
     <Project Path="src/Brine2D.Content/Brine2D.Content.csproj" />
     <Project Path="src/Brine2D.Core/Brine2D.Core.csproj" />
+    <Project Path="src/Brine2D.Desktop/Brine2D.Desktop.csproj" Id="098cfd8f-b0bd-41d0-9b7a-a5d361449fb0" />
     <Project Path="src/Brine2D.ECS/Brine2D.ECS.csproj" />
     <Project Path="src/Brine2D.Engine/Brine2D.Engine.csproj" />
     <Project Path="src/Brine2D.Extensions.DependencyInjection/Brine2D.Extensions.DependencyInjection.csproj" />

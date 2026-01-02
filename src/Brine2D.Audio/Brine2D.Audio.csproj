@@ -1,13 +1,29 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Version>0.3.0-alpha</Version>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Brine2D.Core\Brine2D.Core.csproj" />
-  </ItemGroup>
+		<PackageId>Brine2D.Audio</PackageId>
+		<Title>Brine2D Audio</Title>
+		<Authors>CrazyPickle Studios</Authors>
+		<Description>Audio abstractions for Brine2D. Defines IAudioService for music and sound effects. Implement your own or use Brine2D.Audio.SDL.</Description>
+		<PackageTags>gameengine;game;2d;brine2d;audio;sound;music;abstractions</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/CrazyPickleStudios/Brine2D</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Brine2D.Core\Brine2D.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
 </Project>

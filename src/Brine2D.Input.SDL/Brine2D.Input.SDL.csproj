@@ -1,19 +1,34 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Version>0.3.0-alpha</Version>
+
+		<PackageId>Brine2D.Input.SDL</PackageId>
+		<Title>Brine2D SDL3 Input</Title>
+		<Authors>CrazyPickle Studios</Authors>
+		<Description>SDL3 input implementation for Brine2D. Provides keyboard, mouse, and gamepad input handling via SDL3.</Description>
+		<PackageTags>gameengine;game;2d;brine2d;input;sdl3;keyboard;mouse;gamepad</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/CrazyPickleStudios/Brine2D</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="SDL3-CS" Version="3.3.5-preview.20251213-114652" />
 	</ItemGroup>
 
 	<ItemGroup>
-    <ProjectReference Include="..\Brine2D.Core\Brine2D.Core.csproj" />
-    <ProjectReference Include="..\Brine2D.Input\Brine2D.Input.csproj" />
-    <ProjectReference Include="..\Brine2D.SDL.Common\Brine2D.SDL.Common.csproj" />
-  </ItemGroup>
+		<ProjectReference Include="..\Brine2D.Input\Brine2D.Input.csproj" />
+		<ProjectReference Include="..\Brine2D.SDL.Common\Brine2D.SDL.Common.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
 </Project>
