@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.3.0-alpha</Version>
+		<Version>0.3.8-alpha</Version>
 
 		<PackageId>Brine2D.Input.SDL</PackageId>
 		<Title>Brine2D SDL3 Input</Title>
@@ -12,7 +12,7 @@
 		<Description>SDL3 input implementation for Brine2D. Provides keyboard, mouse, and gamepad input handling via SDL3.</Description>
 		<PackageTags>gameengine;game;2d;brine2d;input;sdl3;keyboard;mouse;gamepad</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/CrazyPickleStudios/Brine2D</PackageProjectUrl>
+		<PackageProjectUrl>https://brine2d.com</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageReadmeFile>README.md</PackageReadmeFile>

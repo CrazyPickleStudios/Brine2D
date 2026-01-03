@@ -14,7 +14,7 @@ public class GameLoop : IGameLoop
     private readonly IGameContext _gameContext;
     private readonly ISceneManager _sceneManager;
     private readonly IInputService _inputService;
-    private readonly InputLayerManager _inputLayerManager;
+    private readonly InputLayerManager? _inputLayerManager;
     private readonly Stopwatch _stopwatch;
     private CancellationTokenSource? _cancellationTokenSource;
 
@@ -26,7 +26,7 @@ public class GameLoop : IGameLoop
         IGameContext gameContext,
         ISceneManager sceneManager,
         IInputService inputService,
-        InputLayerManager inputLayerManager)
+        InputLayerManager? inputLayerManager = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _gameContext = gameContext ?? throw new ArgumentNullException(nameof(gameContext));
@@ -63,8 +63,8 @@ public class GameLoop : IGameLoop
                 // Update input (polls SDL events)
                 _inputService.Update();
                 
-                // Process input layers (like middleware)
-                _inputLayerManager.ProcessInput();
+                // Process input layers (like middleware) - only if registered
+                _inputLayerManager?.ProcessInput();
                 
                 // Check for quit event from window close
                 if (_inputService.IsQuitRequested)

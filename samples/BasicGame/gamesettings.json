@@ -7,7 +7,7 @@
     }
   },
   "Rendering": {
-    "Backend": "LegacyRenderer",
+    //"Backend": "LegacyRenderer",
     "WindowTitle": "Brine2D Game",
     "WindowWidth": 1280,
     "WindowHeight": 720,

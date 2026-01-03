@@ -4,7 +4,22 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.3.0-alpha</Version>
+		<Version>0.3.8-alpha</Version>
+
+		<PackageId>Brine2D.SDL.Common</PackageId>
+		<Title>Brine2D SDL Common Utilities</Title>
+		<Authors>CrazyPickle Studios</Authors>
+		<Description>Shared utilities and interfaces for Brine2D SDL3 implementations. This package is automatically installed as a dependency - you don't need to reference it directly.</Description>
+		<PackageTags>gameengine;game;2d;brine2d;sdl3;internal;utilities</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://brine2d.com</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
 </Project>

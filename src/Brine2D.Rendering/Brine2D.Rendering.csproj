@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.3.0-alpha</Version>
+		<Version>0.3.8-alpha</Version>
 
 		<PackageId>Brine2D.Rendering</PackageId>
 		<Title>Brine2D Rendering</Title>
@@ -12,7 +12,7 @@
 		<Description>Rendering abstractions for Brine2D. Defines IRenderer, ITexture, ICamera, and shader interfaces. Implement your own renderer or use Brine2D.Rendering.SDL.</Description>
 		<PackageTags>gameengine;game;2d;brine2d;rendering;graphics;abstractions</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/CrazyPickleStudios/Brine2D</PackageProjectUrl>
+		<PackageProjectUrl>https://brine2d.com</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageReadmeFile>README.md</PackageReadmeFile>

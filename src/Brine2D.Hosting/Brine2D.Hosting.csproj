@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.3.0-alpha</Version>
+		<Version>0.3.8-alpha</Version>
 
 		<PackageId>Brine2D.Hosting</PackageId>
 		<Title>Brine2D Hosting</Title>
@@ -12,7 +12,7 @@
 		<Description>ASP.NET-style application hosting for Brine2D. Provides GameApplicationBuilder pattern with dependency injection and configuration support.</Description>
 		<PackageTags>gameengine;game;2d;brine2d;hosting;aspnet;dependency-injection</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/CrazyPickleStudios/Brine2D</PackageProjectUrl>
+		<PackageProjectUrl>https://brine2d.com</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageReadmeFile>README.md</PackageReadmeFile>

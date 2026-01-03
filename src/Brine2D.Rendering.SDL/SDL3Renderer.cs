@@ -11,7 +11,9 @@ namespace Brine2D.Rendering.SDL;
 public class SDL3Renderer : IRenderer, ISDL3WindowProvider
 {
     private readonly ILogger<SDL3Renderer> _logger;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly RenderingOptions _options;
+    private readonly IFontLoader? _fontLoader;
     private nint _window;
     private nint _renderer;
     private bool _disposed;
@@ -38,18 +40,24 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
 
     private IFont? _defaultFont;
 
-    public SDL3Renderer(ILogger<SDL3Renderer> logger, IOptions<RenderingOptions> options)
+    public SDL3Renderer(
+        ILogger<SDL3Renderer> logger, 
+        ILoggerFactory loggerFactory, 
+        IOptions<RenderingOptions> options,
+        IFontLoader? fontLoader = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _loggerFactory = loggerFactory;
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _fontLoader = fontLoader;
     }
 
-    public Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         if (IsInitialized)
         {
             _logger.LogWarning("Renderer already initialized");
-            return Task.CompletedTask;
+            return;
         }
 
         _logger.LogInformation("Initializing SDL3 renderer");
@@ -98,10 +106,54 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
             SDL3.SDL.SetRenderVSync(_renderer, 1);
         }
 
+        // Load embedded default font using the font loader (if available)
+        if (_fontLoader != null)
+        {
+            await LoadDefaultFontAsync(cancellationToken);
+        }
+        else
+        {
+            _logger.LogInformation("No font loader available, text will use fallback rendering");
+        }
+        
         IsInitialized = true;
         _logger.LogInformation("SDL3 renderer initialized successfully (Video + Gamepad)");
+    }
 
-        return Task.CompletedTask;
+    private async Task LoadDefaultFontAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Extract embedded font to temp location
+            var assembly = typeof(SDL3Renderer).Assembly;
+            var resourceName = "Brine2D.Rendering.SDL.Fonts.Roboto.ttf";
+            
+            using var stream = assembly.GetManifestResourceStream(resourceName);
+            if (stream == null)
+            {
+                _logger.LogWarning("Default font not found in embedded resources");
+                return;
+            }
+            
+            // Write to temp file (SDL_ttf requires file path)
+            var tempPath = Path.Combine(Path.GetTempPath(), "Brine2D", "Roboto.ttf");
+            Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
+            
+            using (var fileStream = File.Create(tempPath))
+            {
+                await stream.CopyToAsync(fileStream, cancellationToken);
+            }
+            
+            _logger.LogDebug("Font extracted to: {TempPath}", tempPath);
+            
+            // Use the font loader to load the font (it handles SDL_ttf init)
+            _defaultFont = await _fontLoader!.LoadFontAsync(tempPath, 16, cancellationToken);
+            _logger.LogInformation("Default font loaded from embedded resource");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load default font, text will use fallback rendering");
+        }
     }
 
     public void Clear(Color color)
@@ -410,6 +462,13 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
         if (_disposed) return;
 
         _logger.LogInformation("Disposing SDL3 renderer");
+
+        // Unload default font using the font loader (it handles cleanup)
+        if (_defaultFont != null && _fontLoader != null)
+        {
+            _fontLoader.UnloadFont(_defaultFont);
+            _defaultFont = null;
+        }
 
         if (_renderer != nint.Zero)
         {

@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.3.0-alpha</Version>
+		<Version>0.3.8-alpha</Version>
 
 		<PackageId>Brine2D.Rendering.SDL</PackageId>
 		<Title>Brine2D SDL3 Rendering</Title>
@@ -12,11 +12,17 @@
 		<Description>SDL3 rendering implementation for Brine2D. Includes GPU renderer (alpha) and legacy renderer with texture loading, shader support, and TTF text rendering.</Description>
 		<PackageTags>gameengine;game;2d;brine2d;rendering;sdl3;opengl;vulkan;directx</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/CrazyPickleStudios/Brine2D</PackageProjectUrl>
+		<PackageProjectUrl>https://brine2d.com</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <Compile Remove="NewFolder\**" />
+	  <EmbeddedResource Remove="NewFolder\**" />
+	  <None Remove="NewFolder\**" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
@@ -37,6 +43,13 @@
 
 	<ItemGroup>
 		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+		<None Include="Fonts\OFL.txt" Pack="true" PackagePath="licenses\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Fonts\roboto.ttf">
+			<LogicalName>Brine2D.Rendering.SDL.Fonts.Roboto.ttf</LogicalName>
+		</EmbeddedResource>
 	</ItemGroup>
 
 </Project>

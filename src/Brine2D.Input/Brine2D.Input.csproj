@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.3.0-alpha</Version>
+		<Version>0.3.8-alpha</Version>
 
 		<PackageId>Brine2D.Input</PackageId>
 		<Title>Brine2D Input</Title>
@@ -12,7 +12,7 @@
 		<Description>Input abstractions for Brine2D. Defines IInputService for keyboard, mouse, and gamepad input. Implement your own or use Brine2D.Input.SDL.</Description>
 		<PackageTags>gameengine;game;2d;brine2d;input;keyboard;mouse;gamepad;abstractions</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/CrazyPickleStudios/Brine2D</PackageProjectUrl>
+		<PackageProjectUrl>https://brine2d.com</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
