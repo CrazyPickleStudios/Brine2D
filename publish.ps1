@@ -29,13 +29,17 @@ $packages = @(
     "Brine2D.Input.SDL",
     "Brine2D.Audio.SDL",
     "Brine2D.UI",
+    "Brine2D.ECS",              
+    "Brine2D.Audio.ECS",        
+    "Brine2D.Input.ECS",        
+    "Brine2D.Rendering.ECS",    
     "Brine2D.Desktop"
 )
 
 $source = "https://api.nuget.org/v3/index.json"
 
 foreach ($package in $packages) {
-    $path = "src\$package\bin\Release\$package.0.3.8-alpha.nupkg"
+    $path = "src\$package\bin\Release\$package.0.4.0-alpha.nupkg"
     
     if (Test-Path $path) {
         Write-Host "  Publishing $package..." -ForegroundColor Green

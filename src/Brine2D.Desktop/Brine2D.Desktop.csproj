@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.3.8-alpha</Version>
+		<Version>0.4.0-alpha</Version>
 
 		<PackageId>Brine2D.Desktop</PackageId>
 		<Title>Brine2D Desktop Game Engine</Title>
@@ -41,9 +41,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\Brine2D.Audio.ECS\Brine2D.Audio.ECS.csproj" />
 	  <ProjectReference Include="..\Brine2D.Audio.SDL\Brine2D.Audio.SDL.csproj" />
+	  <ProjectReference Include="..\Brine2D.ECS\Brine2D.ECS.csproj" />
 	  <ProjectReference Include="..\Brine2D.Hosting\Brine2D.Hosting.csproj" />
+	  <ProjectReference Include="..\Brine2D.Input.ECS\Brine2D.Input.ECS.csproj" />
 	  <ProjectReference Include="..\Brine2D.Input.SDL\Brine2D.Input.SDL.csproj" />
+	  <ProjectReference Include="..\Brine2D.Rendering.ECS\Brine2D.Rendering.ECS.csproj" />
 	  <ProjectReference Include="..\Brine2D.Rendering.SDL\Brine2D.Rendering.SDL.csproj" />
 	  <ProjectReference Include="..\Brine2D.UI\Brine2D.UI.csproj" />
 	</ItemGroup>
