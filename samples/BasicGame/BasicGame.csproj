@@ -8,9 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Brine2D.Audio.ECS\Brine2D.Audio.ECS.csproj" />
     <ProjectReference Include="..\..\src\Brine2D.Audio.SDL\Brine2D.Audio.SDL.csproj" />
+    <ProjectReference Include="..\..\src\Brine2D.ECS\Brine2D.ECS.csproj" />
     <ProjectReference Include="..\..\src\Brine2D.Hosting\Brine2D.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Brine2D.Input.ECS\Brine2D.Input.ECS.csproj" />
     <ProjectReference Include="..\..\src\Brine2D.Input.SDL\Brine2D.Input.SDL.csproj" />
+    <ProjectReference Include="..\..\src\Brine2D.Rendering.ECS\Brine2D.Rendering.ECS.csproj" />
     <ProjectReference Include="..\..\src\Brine2D.Rendering.SDL\Brine2D.Rendering.SDL.csproj" />
     <ProjectReference Include="..\..\src\Brine2D.UI\Brine2D.UI.csproj" />
   </ItemGroup>

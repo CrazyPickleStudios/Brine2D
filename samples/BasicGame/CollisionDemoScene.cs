@@ -20,7 +20,7 @@ public class CollisionDemoScene : Scene
     private readonly IInputService _input;
     private readonly ITextureLoader _textureLoader;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly CollisionSystem _collisionSystem; // Update constructor to inject CollisionSystem
+    private readonly CollisionSystem _collisionSystem;
     private readonly UICanvas _uiCanvas;
     private readonly InputLayerManager _inputLayerManager;
 

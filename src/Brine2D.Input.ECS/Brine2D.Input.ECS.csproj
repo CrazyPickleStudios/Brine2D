@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Brine2D.ECS\Brine2D.ECS.csproj" />
+    <ProjectReference Include="..\Brine2D.Input\Brine2D.Input.csproj" />
+  </ItemGroup>
+
+</Project>

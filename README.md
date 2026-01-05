@@ -6,6 +6,7 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 
 ## Features
 
+- **Entity Component System (ECS)** - ASP.NET-style system pipelines with automatic ordering ✨ **NEW in 0.4.0**
 - **Input System** - Keyboard, mouse, gamepad with polling and events
 - **Sprite Rendering** - Hardware-accelerated with sprite sheets and animations
 - **Animation System** - Frame-based with multiple clips and events
@@ -14,6 +15,7 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 - **Tilemap Support** - Tiled (.tmj) integration with auto-collision
 - **Collision Detection** - AABB and circle colliders with spatial partitioning
 - **Camera System** - 2D camera with zoom, rotation, and bounds
+- **Particle System** - GPU-accelerated particle effects
 - **UI Framework** - Immediate-mode UI with theming and tooltips
 - **Configuration** - JSON-based settings with hot reload support
 - **Dependency Injection** - ASP.NET Core-style DI container
@@ -39,11 +41,20 @@ builder.Services.AddSDL3Rendering(options =>
     options.WindowHeight = 720;
 });
 
+// Configure ECS systems like middleware (NEW!)
+builder.Services.ConfigureSystemPipelines(pipelines =>
+{
+    pipelines.AddSystem<PlayerControllerSystem>();
+    pipelines.AddSystem<AISystem>();
+    pipelines.AddSystem<VelocitySystem>();
+    pipelines.AddSystem<PhysicsSystem>();
+    pipelines.AddSystem<SpriteRenderingSystem>();
+});
+
 // Register your scenes like controllers
 builder.Services.AddScene<GameScene>();
 
 var game = builder.Build();
-
 await game.RunAsync<GameScene>();
 ```
 
@@ -53,7 +64,8 @@ await game.RunAsync<GameScene>();
 |---------|---------|
 | `WebApplicationBuilder` | `GameApplicationBuilder` |
 | Controllers | Scenes |
-| Middleware | Game Loop |
+| Middleware | **ECS System Pipelines** ✨ **NEW** |
+| `app.UseAuthentication()` | `pipelines.AddSystem<T>()` ✨ **NEW** |
 | `appsettings.json` | `gamesettings.json` |
 | Dependency Injection | Dependency Injection |
 | `ILogger<T>` | `ILogger<T>` |
@@ -70,7 +82,7 @@ Create a new .NET 10 console project and add Brine2D:
 ```sh
 dotnet new console -n MyGame
 cd MyGame
-dotnet add package Brine2D.Desktop --version 0.3.0-alpha
+dotnet add package Brine2D.Desktop --version 0.4.0-alpha
 ```
 
 That's it! `Brine2D.Desktop` includes everything you need to start building games.
@@ -84,14 +96,20 @@ dotnet add package Brine2D.Desktop
 
 **Advanced:** Install only what you need:
 ```sh
-# Core abstractions only
+# Core abstractions
 dotnet add package Brine2D.Core
 dotnet add package Brine2D.Engine
+dotnet add package Brine2D.ECS  # NEW!
 
 # Choose your implementations
 dotnet add package Brine2D.Rendering.SDL
 dotnet add package Brine2D.Input.SDL
 dotnet add package Brine2D.Audio.SDL
+
+# ECS bridges (optional)
+dotnet add package Brine2D.Rendering.ECS  # NEW!
+dotnet add package Brine2D.Input.ECS      # NEW!
+dotnet add package Brine2D.Audio.ECS      # NEW!
 ```
 
 ---
@@ -178,9 +196,14 @@ dotnet run
 
 ### Alpha Release Notice
 
-**⚠️ This is an alpha release (0.3.0-alpha)**
+**⚠️ This is an alpha release (0.4.0-alpha)**
 
 What works:
+- ✅ **Entity Component System (ECS)** ✨ **NEW!**
+- ✅ **System pipelines with automatic ordering** ✨ **NEW!**
+- ✅ **Prefabs and serialization** ✨ **NEW!**
+- ✅ **Transform hierarchy (parent/child)** ✨ **NEW!**
+- ✅ **Utility components (Timer, Lifetime, Tween)** ✨ **NEW!**
 - ✅ Legacy rendering (sprites, primitives, text)
 - ✅ Input system (keyboard, mouse, gamepad)
 - ✅ Audio system
@@ -189,87 +212,195 @@ What works:
 - ✅ Tilemap support
 - ✅ UI framework
 - ✅ Camera system
+- ✅ Particle system
 
 What doesn't work yet:
 - ❌ GPU renderer (use `Backend = "LegacyRenderer"` in config)
-- ❌ Entity Component System (planned for 0.4.0)
-- ❌ Scene graph (planned for 0.5.0)
+- ⚠️ Scene graph (partially implemented via ECS hierarchy)
 
 **Expect breaking changes before 1.0!**
 
-### Troubleshooting
-
-**"GPU renderer not supported"**
-- Set `"Backend": "LegacyRenderer"` in `gamesettings.json`
-- GPU renderer is incomplete in 0.3.0-alpha
-
-**"SDL3 native libraries not found"**
-- SDL3 is included via SDL3-CS NuGet package
-- Native libraries are automatically copied to output directory
-- If issues persist, manually download SDL3 from [libsdl.org](https://libsdl.org)
-
-**Performance issues**
-- Use `TextureScaleMode.Nearest` for pixel art
-- Enable VSync: `options.VSync = true`
-- Use collision spatial partitioning for many objects
-
-**Need help?**
-- [GitHub Issues](https://github.com/CrazyPickleStudios/Brine2D/issues)
-- [Discussions](https://github.com/CrazyPickleStudios/Brine2D/discussions)
-
 ---
 
-### Creating a Scene (Like an ASP.NET Controller)
+## 🆕 Entity Component System (ECS)
+
+Brine2D 0.4.0 introduces a powerful ECS framework with ASP.NET-style system pipelines.
+
+### Creating Entities
 
 ```csharp
-using Brine2D.Core;
-using Brine2D.Input;
-using Brine2D.Rendering;
-using Microsoft.Extensions.Logging;
+using Brine2D.ECS;
+using Brine2D.ECS.Components;
+using System.Numerics;
 
-// Scenes are like Controllers, they get dependencies injected.
+// Create an entity
+var player = _world.CreateEntity("Player");
+player.Tags.Add("Player");
+
+// Add components
+var transform = player.AddComponent<TransformComponent>();
+transform.Position = new Vector2(400, 300);
+
+var velocity = player.AddComponent<VelocityComponent>();
+velocity.MaxSpeed = 200f;
+
+var sprite = player.AddComponent<SpriteComponent>();
+sprite.TexturePath = "assets/player.png";
+```
+
+### Using Prefabs (Reusable Templates)
+
+```csharp
+using Brine2D.ECS;
+
+// Create a prefab
+var enemyPrefab = new EntityPrefab("Enemy");
+enemyPrefab.Tags.Add("Enemy");
+
+enemyPrefab.AddComponent<TransformComponent>();
+enemyPrefab.AddComponent<SpriteComponent>(s => 
+{
+    s.TexturePath = "assets/enemy.png";
+    s.Tint = new Color(255, 100, 100);
+});
+enemyPrefab.AddComponent<VelocityComponent>(v => v.MaxSpeed = 150f);
+enemyPrefab.AddComponent<AIControllerComponent>(ai => 
+{
+    ai.Behavior = AIBehavior.Chase;
+    ai.TargetTag = "Player";
+});
+
+// Register and instantiate
+_prefabLibrary.Register(enemyPrefab);
+var enemy = enemyPrefab.Instantiate(_world, new Vector2(500, 300));
+```
+
+### Configuring System Pipelines (ASP.NET-style!)
+
+```csharp
+using Brine2D.ECS.Systems;
+using Brine2D.Rendering.ECS;
+using Brine2D.Input.ECS;
+using Brine2D.Audio.ECS;
+
+// Configure like ASP.NET middleware!
+builder.Services.ConfigureSystemPipelines(pipelines =>
+{
+    // Update systems (run every frame)
+    pipelines.AddSystem<PlayerControllerSystem>();  // Order: 10 (input)
+    pipelines.AddSystem<AISystem>();                // Order: 50 (AI)
+    pipelines.AddSystem<VelocitySystem>();          // Order: 100 (movement)
+    pipelines.AddSystem<PhysicsSystem>();           // Order: 200 (collision)
+    pipelines.AddSystem<AudioSystem>();             // Order: 300 (audio)
+    pipelines.AddSystem<CameraSystem>();            // Order: 400 (camera)
+    
+    // Render systems (run during render phase)
+    pipelines.AddSystem<SpriteRenderingSystem>();   // Order: 0 (sprites)
+    pipelines.AddSystem<ParticleSystem>();          // Update + Render
+    pipelines.AddSystem<DebugRenderer>();           // Order: 1000 (debug overlay)
+});
+```
+
+### Using System Pipelines in Scenes
+
+```csharp
 public class GameScene : Scene
 {
-    private readonly IGameContext _gameContext;
-    private readonly IInputService _input;
-    private readonly IRenderer _renderer;
+    private readonly UpdatePipeline _updatePipeline;
+    private readonly RenderPipeline _renderPipeline;
+    private readonly IEntityWorld _world;
 
-    // Constructor injection just like ASP.NET
-    public GameScene
-    (
-        IRenderer renderer,
-        IInputService input,
-        IGameContext gameContext,
-        ILogger<GameScene> logger
-    )
-        : base(logger)
+    public GameScene(
+        UpdatePipeline updatePipeline,
+        RenderPipeline renderPipeline,
+        IEntityWorld world,
+        ILogger<GameScene> logger) : base(logger)
     {
-        _renderer = renderer;
-        _input = input;
-        _gameContext = gameContext;
-    }
-
-    protected override void OnRender(GameTime gameTime)
-    {
-        _renderer.Clear(Color.CornflowerBlue);
-        _renderer.BeginFrame();
-
-        // Your rendering code here
-
-        _renderer.EndFrame();
+        _updatePipeline = updatePipeline;
+        _renderPipeline = renderPipeline;
+        _world = world;
     }
 
     protected override void OnUpdate(GameTime gameTime)
     {
-        if (_input.IsKeyPressed(Keys.Escape))
-        {
-            _gameContext.RequestExit();
-        }
+        // Execute all update systems in order (ASP.NET-style!)
+        _updatePipeline.Execute(gameTime);
+        
+        // Update entity lifecycle
+        _world.Update(gameTime);
+    }
+
+    protected override void OnRender(GameTime gameTime)
+    {
+        _renderer.BeginFrame();
+        
+        // Execute all render systems in order
+        _renderPipeline.Execute(_renderer);
+        
+        _renderer.EndFrame();
     }
 }
 ```
 
+### Save/Load System
+
+```csharp
+using Brine2D.ECS.Serialization;
+
+// Save game state
+await _serializer.SaveWorldAsync(_world, "saves/game.json");
+
+// Load game state
+await _serializer.LoadAndRestoreWorldAsync(_world, "saves/game.json");
+```
+
+### Utility Components
+
+```csharp
+// Timer - Countdown with events
+var timer = entity.AddComponent<TimerComponent>();
+timer.Duration = 3f;
+timer.OnComplete += () => Logger.LogInfo("Timer finished!");
+
+// Lifetime - Auto-destroy after time
+var lifetime = projectile.AddComponent<LifetimeComponent>();
+lifetime.Lifetime = 5f;
+
+// Tween - Simple animations
+var tween = entity.AddComponent<TweenComponent>();
+tween.Type = TweenType.Position;
+tween.StartPosition = new Vector2(0, 0);
+tween.EndPosition = new Vector2(100, 100);
+tween.Duration = 1f;
+tween.Easing = EasingType.EaseInOutQuad;
+```
+
+### Transform Hierarchy (Parent/Child)
+
+```csharp
+// Create weapon as child of player
+var weapon = _world.CreateEntity("Sword");
+weapon.AddComponent<TransformComponent>();
+weapon.AddComponent<SpriteComponent>();
+
+// Attach weapon to player (transforms follow parent)
+weapon.SetParent(player);
+
+// When player moves/rotates, weapon follows automatically!
+```
+
+---
+
 ## Examples
+
+### ECS Quick Start Example
+
+See `samples/BasicGame/ECSQuickStartScene.cs` for a complete minimal example showing:
+- Entity creation
+- Prefabs
+- System pipelines
+- Save/load
+- Events
 
 ### Loading and Drawing Sprites
 
@@ -478,6 +609,7 @@ Brine2D follows a modular architecture with clear separation of concerns:
 - **Brine2D.Core** - Core abstractions, animation, collision, tilemap
 - **Brine2D.Engine** - Game loop and scene management
 - **Brine2D.Hosting** - ASP.NET-style application hosting
+- **Brine2D.ECS** - Entity Component System ✨ **NEW!**
 
 ### Abstraction Layers
 - **Brine2D.Rendering** - Rendering abstractions (IRenderer, ITexture, ICamera)
@@ -488,6 +620,11 @@ Brine2D follows a modular architecture with clear separation of concerns:
 - **Brine2D.Rendering.SDL** - SDL3 GPU + Legacy renderer implementation
 - **Brine2D.Input.SDL** - SDL3 input implementation
 - **Brine2D.Audio.SDL** - SDL3_mixer audio implementation
+
+### ECS Bridges ✨ **NEW!**
+- **Brine2D.Rendering.ECS** - Sprite rendering, particles, camera systems
+- **Brine2D.Input.ECS** - Player controller system
+- **Brine2D.Audio.ECS** - Audio playback system
 
 ### Extensions
 - **Brine2D.UI** - UI framework (buttons, inputs, dialogs, tabs)
@@ -534,7 +671,8 @@ Then reference the projects directly in your game:
 
 Check out the `samples/` directory for complete working examples:
 
-- **BasicGame** - Animation and input demo
+- **BasicGame** - ECS demo with entities, prefabs, systems ✨ **NEW!**
+- **ECSQuickStartScene** - Minimal ECS example ✨ **NEW!**
 - **PlatformerGame** - Coming soon
 - **AdvancedGame** - Coming soon
 
@@ -547,18 +685,25 @@ Check out the `samples/` directory for complete working examples:
 
 ### Roadmap
 
-**0.4.0-alpha**
-- Entity Component System (ECS)
-- More working samples
+**0.4.0-alpha** ✅ **CURRENT**
+- ✅ Entity Component System (ECS)
+- ✅ ASP.NET-style system pipelines
+- ✅ Prefabs and serialization
+- ✅ Transform hierarchy
+- ✅ Utility components
+- ✅ Working ECS samples
 
-**0.5.0-beta**
-- Scene graph with hierarchical transforms
+**0.5.0-beta** (Upcoming)
+- Advanced ECS queries and filters
 - Complete GPU renderer
+- More polished samples
+- Performance optimizations
 
-**1.0.0**
+**1.0.0** (Future)
 - Stable API
 - Complete documentation
 - Production-ready
+- Full platform testing
 
 See the full [roadmap](https://github.com/CrazyPickleStudios/Brine2D/milestones).
 

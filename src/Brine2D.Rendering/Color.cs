@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace Brine2D.Rendering
 {
@@ -10,10 +11,14 @@ namespace Brine2D.Rendering
     public readonly struct Color : IEquatable<Color>
     {
         public byte R { get; init; }
+        
         public byte G { get; init; }
+        
         public byte B { get; init; }
+        
         public byte A { get; init; }
 
+        [JsonConstructor]
         public Color(byte r, byte g, byte b, byte a = 255)
         {
             R = r;

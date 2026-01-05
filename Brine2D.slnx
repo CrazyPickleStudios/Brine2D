@@ -5,6 +5,7 @@
     <Project Path="samples/PlatformerGame/PlatformerGame.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Brine2D.Audio.ECS/Brine2D.Audio.ECS.csproj" Id="4ab52e0a-333c-4ed3-8852-2f849caab963" />
     <Project Path="src/Brine2D.Audio.SDL/Brine2D.Audio.SDL.csproj" Id="f5fc357d-678e-48c4-8274-492d231d3781" />
     <Project Path="src/Brine2D.Audio/Brine2D.Audio.csproj" />
     <Project Path="src/Brine2D.Content/Brine2D.Content.csproj" />
@@ -14,9 +15,11 @@
     <Project Path="src/Brine2D.Engine/Brine2D.Engine.csproj" />
     <Project Path="src/Brine2D.Extensions.DependencyInjection/Brine2D.Extensions.DependencyInjection.csproj" />
     <Project Path="src/Brine2D.Hosting/Brine2D.Hosting.csproj" />
+    <Project Path="src/Brine2D.Input.ECS/Brine2D.Input.ECS.csproj" Id="6abb7f01-c9d4-47c2-a7d1-f68e8d5778c9" />
     <Project Path="src/Brine2D.Input.SDL/Brine2D.Input.SDL.csproj" />
     <Project Path="src/Brine2D.Input/Brine2D.Input.csproj" />
     <Project Path="src/Brine2D.Physics/Brine2D.Physics.csproj" />
+    <Project Path="src/Brine2D.Rendering.ECS/Brine2D.Rendering.ECS.csproj" Id="b15f7ee4-e1db-452b-8499-7974da1be1df" />
     <Project Path="src/Brine2D.Rendering.SDL/Brine2D.Rendering.SDL.csproj" />
     <Project Path="src/Brine2D.Rendering/Brine2D.Rendering.csproj" />
     <Project Path="src/Brine2D.SDL.Common/Brine2D.SDL.Common.csproj" Id="a506ff16-0d74-4ca6-8431-554c48f229ab" />
