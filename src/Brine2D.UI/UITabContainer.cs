@@ -111,13 +111,13 @@ public class UITabContainer : IUIComponent
         // Draw content area background
         float contentY = Position.Y + TabHeight;
         float contentHeight = Size.Y - TabHeight;
-        renderer.DrawRectangle(Position.X, contentY, Size.X, contentHeight, ContentBackgroundColor);
+        renderer.DrawRectangleFilled(Position.X, contentY, Size.X, contentHeight, ContentBackgroundColor);
 
         // Draw content area border
-        renderer.DrawRectangle(Position.X, contentY, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, contentY, borderThickness, contentHeight, BorderColor);
-        renderer.DrawRectangle(Position.X + Size.X - borderThickness, contentY, borderThickness, contentHeight, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, contentY, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, contentY, borderThickness, contentHeight, BorderColor);
+        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, contentY, borderThickness, contentHeight, BorderColor);
 
         // Calculate tab width
         float tabWidth = _tabs.Count > 0 ? Size.X / _tabs.Count : Size.X;
@@ -139,17 +139,17 @@ public class UITabContainer : IUIComponent
             }
 
             // Draw tab background
-            renderer.DrawRectangle(tabX, Position.Y, tabWidth, TabHeight, tabColor);
+            renderer.DrawRectangleFilled(tabX, Position.Y, tabWidth, TabHeight, tabColor);
 
             // Draw tab border
-            renderer.DrawRectangle(tabX, Position.Y, tabWidth, borderThickness, BorderColor);
-            renderer.DrawRectangle(tabX, Position.Y, borderThickness, TabHeight, BorderColor);
-            renderer.DrawRectangle(tabX + tabWidth - borderThickness, Position.Y, borderThickness, TabHeight, BorderColor);
+            renderer.DrawRectangleFilled(tabX, Position.Y, tabWidth, borderThickness, BorderColor);
+            renderer.DrawRectangleFilled(tabX, Position.Y, borderThickness, TabHeight, BorderColor);
+            renderer.DrawRectangleFilled(tabX + tabWidth - borderThickness, Position.Y, borderThickness, TabHeight, BorderColor);
 
             // Don't draw bottom border for active tab (connects to content)
             if (i != _selectedTabIndex)
             {
-                renderer.DrawRectangle(tabX, Position.Y + TabHeight - borderThickness, tabWidth, borderThickness, BorderColor);
+                renderer.DrawRectangleFilled(tabX, Position.Y + TabHeight - borderThickness, tabWidth, borderThickness, BorderColor);
             }
 
             // Draw tab title (centered)

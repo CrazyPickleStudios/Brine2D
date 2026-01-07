@@ -24,11 +24,35 @@ namespace Brine2D.Engine
         /// Loads and activates a scene.
         /// </summary>
         Task LoadSceneAsync<TScene>(CancellationToken cancellationToken = default) where TScene : IScene;
+        
+        /// <summary>
+        /// Loads and activates a scene with a transition effect.
+        /// </summary>
+        Task LoadSceneAsync<TScene>(ISceneTransition transition, CancellationToken cancellationToken = default) 
+            where TScene : IScene;
+        
+        /// <summary>
+        /// Loads and activates a scene with a loading screen and optional transition.
+        /// </summary>
+        Task LoadSceneAsync<TScene>(LoadingScene? loadingScreen = null, ISceneTransition? transition = null, 
+                                   CancellationToken cancellationToken = default) 
+            where TScene : IScene;
 
         /// <summary>
         /// Loads and activates a scene by type.
         /// </summary>
         Task LoadSceneAsync(Type sceneType, CancellationToken cancellationToken = default);
+        
+        /// <summary>
+        /// Loads and activates a scene by type with a transition effect.
+        /// </summary>
+        Task LoadSceneAsync(Type sceneType, ISceneTransition transition, CancellationToken cancellationToken = default);
+        
+        /// <summary>
+        /// Loads and activates a scene by type with a loading screen and optional transition.
+        /// </summary>
+        Task LoadSceneAsync(Type sceneType, LoadingScene? loadingScreen = null, ISceneTransition? transition = null, 
+                           CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Updates the current scene.

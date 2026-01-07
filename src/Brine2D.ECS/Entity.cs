@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using Brine2D.Core;
+using Brine2D.ECS.Components;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.ECS;
@@ -134,6 +135,14 @@ public class Entity
     }
 
     /// <summary>
+    /// Checks if the entity has a component of the specified type.
+    /// </summary>
+    public bool HasComponent(Type componentType)
+    {
+        return _components.Any(componentType.IsInstanceOfType);
+    }
+
+    /// <summary>
     /// Removes a component from this entity.
     /// </summary>
     public bool RemoveComponent<T>() where T : Component
@@ -210,12 +219,29 @@ public class Entity
 
     /// <summary>
     /// Called when entity is destroyed.
+    /// Recursively destroys all child entities before destroying this entity.
     /// </summary>
     protected internal virtual void OnDestroy()
     {
+        // 1. Recursively destroy all children FIRST (if has TransformComponent)
+        var transform = GetComponent<TransformComponent>();
+        if (transform != null)
+        {
+            var children = transform.Children.ToList(); // Snapshot to avoid modification during iteration
+            foreach (var childTransform in children)
+            {
+                if (childTransform.Entity != null && childTransform.Entity != this)
+                {
+                    childTransform.Entity.Destroy(); // Recursive!
+                }
+            }
+        }
+        
+        // 2. Fire destroyed event
         OnDestroyed?.Invoke(this);
         World?.NotifyEntityDestroyed(this);
 
+        // 3. Clean up components (this will detach from parent)
         foreach (var component in _components.ToList())
         {
             component.OnRemoved();

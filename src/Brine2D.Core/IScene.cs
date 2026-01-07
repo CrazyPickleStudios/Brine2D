@@ -18,6 +18,18 @@ namespace Brine2D.Core
         /// Gets a value indicating whether the scene is active.
         /// </summary>
         bool IsActive { get; }
+        
+        /// <summary>
+        /// Gets whether lifecycle hooks should execute for this scene.
+        /// Set to false for complete manual control.
+        /// </summary>
+        bool EnableLifecycleHooks { get; }
+        
+        /// <summary>
+        /// Gets whether frame management (Clear/BeginFrame/EndFrame) is automatic.
+        /// Set to false for custom render targets or multi-pass rendering.
+        /// </summary>
+        bool EnableAutomaticFrameManagement { get; }
 
         /// <summary>
         /// Called when the scene is first initialized.

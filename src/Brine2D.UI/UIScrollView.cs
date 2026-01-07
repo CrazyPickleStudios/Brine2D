@@ -111,13 +111,13 @@ public class UIScrollView : IUIComponent
         float borderThickness = 2f;
 
         // Draw background
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
         // Draw border
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, Position.Y, borderThickness, Size.Y, BorderColor);
-        renderer.DrawRectangle(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, Size.Y, BorderColor);
+        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor);
 
         // TODO: Implement clipping/scissor test to prevent child rendering outside bounds
         // For now, children will render outside if they exceed bounds
@@ -228,7 +228,7 @@ public class UIScrollView : IUIComponent
         float scrollbarY = Position.Y + (_scrollOffset.Y / ContentHeight) * Size.Y;
 
         var scrollbarX = Position.X + Size.X - ScrollbarWidth;
-        renderer.DrawRectangle(scrollbarX, scrollbarY, ScrollbarWidth, scrollbarHeight, ScrollbarColor);
+        renderer.DrawRectangleFilled(scrollbarX, scrollbarY, ScrollbarWidth, scrollbarHeight, ScrollbarColor);
     }
 
     private void DrawHorizontalScrollbar(IRenderer renderer)
@@ -237,7 +237,7 @@ public class UIScrollView : IUIComponent
         float scrollbarX = Position.X + (_scrollOffset.X / ContentWidth) * Size.X;
 
         var scrollbarY = Position.Y + Size.Y - ScrollbarWidth;
-        renderer.DrawRectangle(scrollbarX, scrollbarY, scrollbarWidth, ScrollbarWidth, ScrollbarColor);
+        renderer.DrawRectangleFilled(scrollbarX, scrollbarY, scrollbarWidth, ScrollbarWidth, ScrollbarColor);
     }
 
     /// <summary>

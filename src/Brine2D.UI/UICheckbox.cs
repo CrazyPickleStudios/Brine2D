@@ -105,15 +105,15 @@ public class UICheckbox : IUIComponent
                       UncheckedColor;
 
         // Draw checkbox box
-        renderer.DrawRectangle(Position.X, Position.Y, BoxSize, BoxSize, boxColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, BoxSize, BoxSize, boxColor);
 
         // Draw border
         var borderColor = Enabled ? BorderColor : new Color(100, 100, 100);
         float borderThickness = 2f;
-        renderer.DrawRectangle(Position.X, Position.Y, BoxSize, borderThickness, borderColor); // Top
-        renderer.DrawRectangle(Position.X, Position.Y + BoxSize - borderThickness, BoxSize, borderThickness, borderColor); // Bottom
-        renderer.DrawRectangle(Position.X, Position.Y, borderThickness, BoxSize, borderColor); // Left
-        renderer.DrawRectangle(Position.X + BoxSize - borderThickness, Position.Y, borderThickness, BoxSize, borderColor); // Right
+        renderer.DrawRectangleFilled(Position.X, Position.Y, BoxSize, borderThickness, borderColor); // Top
+        renderer.DrawRectangleFilled(Position.X, Position.Y + BoxSize - borderThickness, BoxSize, borderThickness, borderColor); // Bottom
+        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, BoxSize, borderColor); // Left
+        renderer.DrawRectangleFilled(Position.X + BoxSize - borderThickness, Position.Y, borderThickness, BoxSize, borderColor); // Right
 
         // Draw checkmark if checked
         if (_isChecked)
@@ -122,7 +122,7 @@ public class UICheckbox : IUIComponent
             // Draw a filled rectangle to represent checkmark
             float checkPadding = BoxSize * 0.25f;
             float checkSize = BoxSize - (checkPadding * 2);
-            renderer.DrawRectangle(
+            renderer.DrawRectangleFilled(
                 Position.X + checkPadding,
                 Position.Y + checkPadding,
                 checkSize,

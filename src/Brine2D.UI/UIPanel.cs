@@ -45,20 +45,20 @@ public class UIPanel : IUIComponent
         if (!Visible) return;
 
         // Draw background
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
         // Draw border if specified
         if (BorderColor.HasValue && BorderThickness > 0)
         {
             var border = BorderColor.Value;
             // Top
-            renderer.DrawRectangle(Position.X, Position.Y, Size.X, BorderThickness, border);
+            renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, BorderThickness, border);
             // Bottom
-            renderer.DrawRectangle(Position.X, Position.Y + Size.Y - BorderThickness, Size.X, BorderThickness, border);
+            renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - BorderThickness, Size.X, BorderThickness, border);
             // Left
-            renderer.DrawRectangle(Position.X, Position.Y, BorderThickness, Size.Y, border);
+            renderer.DrawRectangleFilled(Position.X, Position.Y, BorderThickness, Size.Y, border);
             // Right
-            renderer.DrawRectangle(Position.X + Size.X - BorderThickness, Position.Y, BorderThickness, Size.Y, border);
+            renderer.DrawRectangleFilled(Position.X + Size.X - BorderThickness, Position.Y, BorderThickness, Size.Y, border);
         }
     }
 

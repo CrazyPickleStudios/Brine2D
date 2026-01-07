@@ -106,22 +106,22 @@ public class UIDialog : IUIComponent
         // Draw overlay
         if (ShowOverlay)
         {
-            renderer.DrawRectangle(0, 0, ScreenSize.X, ScreenSize.Y, OverlayColor);
+            renderer.DrawRectangleFilled(0, 0, ScreenSize.X, ScreenSize.Y, OverlayColor);
         }
 
         float borderThickness = 2f;
 
         // Draw dialog background
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
         // Draw title bar
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, TitleBarHeight, TitleBarColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, TitleBarHeight, TitleBarColor);
 
         // Draw border
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, Position.Y, borderThickness, Size.Y, BorderColor);
-        renderer.DrawRectangle(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, Size.Y, BorderColor);
+        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor);
 
         // Draw title text
         var titleX = Position.X + Padding;

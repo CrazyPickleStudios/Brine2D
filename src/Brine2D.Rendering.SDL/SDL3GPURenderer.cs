@@ -25,6 +25,7 @@ public class SDL3GPURenderer : IRenderer
     private bool _disposed;
 
     public bool IsInitialized { get; private set; }
+    public Color ClearColor { get; set; }
 
     public SDL3GPURenderer(ILogger<SDL3GPURenderer> logger, ILoggerFactory loggerFactory, IOptions<RenderingOptions> options)
     {
@@ -201,6 +202,31 @@ public class SDL3GPURenderer : IRenderer
         }
     }
 
+    public void DrawRectangleFilled(float x, float y, float width, float height, Color color)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void DrawCircleFilled(float centerX, float centerY, float radius, Color color)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void DrawCircleOutline(float centerX, float centerY, float radius, Color color, float thickness = 1)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1)
+    {
+        throw new NotImplementedException();
+    }
+
     public void DrawRectangle(float x, float y, float width, float height, Color color)
     {
         ThrowIfNotInitialized();
@@ -228,6 +254,11 @@ public class SDL3GPURenderer : IRenderer
     {
         ThrowIfNotInitialized();
         // TODO: Implement text rendering
+    }
+
+    public void SetDefaultFont(IFont? font)
+    {
+        throw new NotImplementedException();
     }
 
     public void DrawCircle(float centerX, float centerY, float radius, Color color)

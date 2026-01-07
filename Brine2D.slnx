@@ -1,7 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/AdvancedGame/AdvancedGame.csproj" />
-    <Project Path="samples/BasicGame/BasicGame.csproj" />
+    <Project Path="samples/FeatureDemos/FeatureDemos.csproj" Id="1b7cd93f-9929-45b5-ae7a-527111c99e68" />
     <Project Path="samples/PlatformerGame/PlatformerGame.csproj" />
   </Folder>
   <Folder Name="/src/">

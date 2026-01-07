@@ -115,20 +115,20 @@ public class UISlider : IUIComponent
         float trackY = Position.Y + (Size.Y - trackHeight) / 2;
 
         // Draw track (background)
-        renderer.DrawRectangle(Position.X, trackY, Size.X, trackHeight, TrackColor);
+        renderer.DrawRectangleFilled(Position.X, trackY, Size.X, trackHeight, TrackColor);
 
         // Draw fill (active portion)
         float fillWidth = Size.X * GetNormalizedValue();
         if (fillWidth > 0)
         {
-            renderer.DrawRectangle(Position.X, trackY, fillWidth, trackHeight, FillColor);
+            renderer.DrawRectangleFilled(Position.X, trackY, fillWidth, trackHeight, FillColor);
         }
 
         // Draw handle (thumb)
         float handleX = Position.X + (Size.X * GetNormalizedValue()) - (HandleSize / 2);
         float handleY = Position.Y + (Size.Y - HandleSize) / 2;
         var handleColor = _isHovered || _isDragging ? HandleHoverColor : HandleColor;
-        renderer.DrawRectangle(handleX, handleY, HandleSize, HandleSize, handleColor);
+        renderer.DrawRectangleFilled(handleX, handleY, HandleSize, HandleSize, handleColor);
 
         // Draw value text if enabled
         if (ShowValue)

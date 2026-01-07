@@ -87,7 +87,7 @@ public class UIProgressBar : IUIComponent
         if (!Visible) return;
 
         // Draw background
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
         // Draw fill based on direction
         float fillAmount = _value;
@@ -98,7 +98,7 @@ public class UIProgressBar : IUIComponent
                     float fillWidth = Size.X * fillAmount;
                     if (fillWidth > 0)
                     {
-                        renderer.DrawRectangle(Position.X, Position.Y, fillWidth, Size.Y, FillColor);
+                        renderer.DrawRectangleFilled(Position.X, Position.Y, fillWidth, Size.Y, FillColor);
                     }
                     break;
                 }
@@ -107,7 +107,7 @@ public class UIProgressBar : IUIComponent
                     float fillWidth = Size.X * fillAmount;
                     if (fillWidth > 0)
                     {
-                        renderer.DrawRectangle(Position.X + Size.X - fillWidth, Position.Y, fillWidth, Size.Y, FillColor);
+                        renderer.DrawRectangleFilled(Position.X + Size.X - fillWidth, Position.Y, fillWidth, Size.Y, FillColor);
                     }
                     break;
                 }
@@ -116,7 +116,7 @@ public class UIProgressBar : IUIComponent
                     float fillHeight = Size.Y * fillAmount;
                     if (fillHeight > 0)
                     {
-                        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - fillHeight, Size.X, fillHeight, FillColor);
+                        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - fillHeight, Size.X, fillHeight, FillColor);
                     }
                     break;
                 }
@@ -125,7 +125,7 @@ public class UIProgressBar : IUIComponent
                     float fillHeight = Size.Y * fillAmount;
                     if (fillHeight > 0)
                     {
-                        renderer.DrawRectangle(Position.X, Position.Y, Size.X, fillHeight, FillColor);
+                        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, fillHeight, FillColor);
                     }
                     break;
                 }
@@ -133,10 +133,10 @@ public class UIProgressBar : IUIComponent
 
         // Draw border
         float borderThickness = 2f;
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, borderThickness, BorderColor); // Top
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor); // Bottom
-        renderer.DrawRectangle(Position.X, Position.Y, borderThickness, Size.Y, BorderColor); // Left
-        renderer.DrawRectangle(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor); // Right
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, borderThickness, BorderColor); // Top
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor); // Bottom
+        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, Size.Y, BorderColor); // Left
+        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor); // Right
 
         // Draw percentage text if enabled
         if (ShowPercentage)

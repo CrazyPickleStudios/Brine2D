@@ -122,20 +122,20 @@ public class UIRadioButton : IUIComponent
         float centerY = Position.Y + radius;
 
         // Draw radio button circle
-        renderer.DrawCircle(centerX, centerY, radius, buttonColor);
+        renderer.DrawCircleFilled(centerX, centerY, radius, buttonColor);
 
         // Draw border (outer circle)
         var borderColor = Enabled ? BorderColor : new Color(100, 100, 100);
         float borderThickness = 2f;
         // Draw border as slightly larger circle (simplified, not perfect)
-        renderer.DrawCircle(centerX, centerY, radius + borderThickness / 2, borderColor);
-        renderer.DrawCircle(centerX, centerY, radius - borderThickness / 2, buttonColor);
+        renderer.DrawCircleFilled(centerX, centerY, radius + borderThickness / 2, borderColor);
+        renderer.DrawCircleFilled(centerX, centerY, radius - borderThickness / 2, buttonColor);
 
         // Draw inner dot if checked
         if (_isChecked)
         {
             float dotRadius = radius * 0.5f;
-            renderer.DrawCircle(centerX, centerY, dotRadius, DotColor);
+            renderer.DrawCircleFilled(centerX, centerY, dotRadius, DotColor);
         }
 
         // Draw label text

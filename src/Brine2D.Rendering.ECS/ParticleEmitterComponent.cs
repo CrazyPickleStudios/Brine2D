@@ -91,13 +91,18 @@ public class ParticleEmitterComponent : Component
     internal List<Particle> Particles { get; } = new();
 
     /// <summary>
+    /// Gets the current number of active particles.
+    /// </summary>
+    public int ParticleCount => Particles.Count;
+
+    /// <summary>
     /// Emission timer (managed by ParticleSystem).
     /// </summary>
     internal float EmissionTimer { get; set; }
 }
 
 /// <summary>
-/// Individual particle data.
+/// Individual particle data (managed by ParticleSystem).
 /// </summary>
 internal class Particle
 {

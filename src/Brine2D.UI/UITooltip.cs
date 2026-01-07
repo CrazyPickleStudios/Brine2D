@@ -85,14 +85,14 @@ public class UITooltip
         if (!Visible || string.IsNullOrEmpty(Text)) return;
 
         // Draw background
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
         // Draw border
         float borderThickness = 1f;
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, borderThickness, BorderColor); // Top
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor); // Bottom
-        renderer.DrawRectangle(Position.X, Position.Y, borderThickness, Size.Y, BorderColor); // Left
-        renderer.DrawRectangle(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor); // Right
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, borderThickness, BorderColor); // Top
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor); // Bottom
+        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, Size.Y, BorderColor); // Left
+        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor); // Right
 
         // Draw text
         var textX = Position.X + Padding;

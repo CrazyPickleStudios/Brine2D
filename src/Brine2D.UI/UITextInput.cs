@@ -116,15 +116,15 @@ public class UITextInput : IUIComponent
 
         // Draw background
         var bgColor = IsFocused ? FocusedBackgroundColor : BackgroundColor;
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, bgColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, bgColor);
 
         // Draw border
         var borderColor = IsFocused ? FocusedBorderColor : BorderColor;
         float borderThickness = 2f;
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, borderThickness, borderColor); // Top
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, borderColor); // Bottom
-        renderer.DrawRectangle(Position.X, Position.Y, borderThickness, Size.Y, borderColor); // Left
-        renderer.DrawRectangle(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, borderColor); // Right
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, borderThickness, borderColor); // Top
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, borderColor); // Bottom
+        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, Size.Y, borderColor); // Left
+        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, borderColor); // Right
 
         // Draw text or placeholder
         var textX = Position.X + 10;
@@ -143,7 +143,7 @@ public class UITextInput : IUIComponent
             {
                 // Calculate cursor X position based on cursor position in text
                 var cursorX = textX + (_cursorPosition * 8); // Rough character width
-                renderer.DrawRectangle(cursorX, textY, 2, 16, TextColor);
+                renderer.DrawRectangleFilled(cursorX, textY, 2, 16, TextColor);
             }
         }
     }

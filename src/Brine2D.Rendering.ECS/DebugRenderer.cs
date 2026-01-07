@@ -80,11 +80,11 @@ public class DebugRenderer : IRenderSystem
 
         if (shape is BoxCollider)
         {
-            renderer.DrawRectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height, color);
+            renderer.DrawRectangleFilled(bounds.X, bounds.Y, bounds.Width, bounds.Height, color);
         }
         else if (shape is CircleCollider circle)
         {
-            renderer.DrawCircle(
+            renderer.DrawCircleFilled(
                 bounds.X + bounds.Width / 2,
                 bounds.Y + bounds.Height / 2,
                 circle.Radius,
@@ -100,16 +100,16 @@ public class DebugRenderer : IRenderSystem
         var angle = MathF.Atan2(velocity.Y, velocity.X);
         var length = velocity.Length() * 0.1f;
 
-        renderer.DrawRectangle(position.X, position.Y - 1, length, 2, new Color(255, 255, 0, 200));
+        renderer.DrawRectangleFilled(position.X, position.Y - 1, length, 2, new Color(255, 255, 0, 200));
 
         // Draw arrowhead (small circle)
-        renderer.DrawCircle(endPos.X, endPos.Y, 3, new Color(255, 255, 0, 255));
+        renderer.DrawCircleFilled(endPos.X, endPos.Y, 3, new Color(255, 255, 0, 255));
     }
 
     private void DrawAIDebug(IRenderer renderer, Vector2 position, AIControllerComponent ai)
     {
         // Draw detection range
-        renderer.DrawCircle(position.X, position.Y, ai.DetectionRange, new Color(255, 0, 0, 50));
+        renderer.DrawCircleFilled(position.X, position.Y, ai.DetectionRange, new Color(255, 0, 0, 50));
 
         // Draw line to target
         if (ai.CurrentTarget != null)

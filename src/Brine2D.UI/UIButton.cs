@@ -69,14 +69,14 @@ public class UIButton : IUIComponent
                           NormalColor;
 
         // Draw button background
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, currentColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, currentColor);
 
         // Draw border
         var borderColor = Enabled ? new Color(150, 150, 150) : new Color(100, 100, 100);
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, 2, borderColor); // Top
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - 2, Size.X, 2, borderColor); // Bottom
-        renderer.DrawRectangle(Position.X, Position.Y, 2, Size.Y, borderColor); // Left
-        renderer.DrawRectangle(Position.X + Size.X - 2, Position.Y, 2, Size.Y, borderColor); // Right
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, 2, borderColor); // Top
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - 2, Size.X, 2, borderColor); // Bottom
+        renderer.DrawRectangleFilled(Position.X, Position.Y, 2, Size.Y, borderColor); // Left
+        renderer.DrawRectangleFilled(Position.X + Size.X - 2, Position.Y, 2, Size.Y, borderColor); // Right
 
         // Draw text (centered)
         var textX = Position.X + (Size.X / 2) - (Text.Length * 4); // Rough centering

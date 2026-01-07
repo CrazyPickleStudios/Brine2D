@@ -30,6 +30,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
     /// </summary>
     public nint Window => _window;
 
+    public Color ClearColor { get; set; } = Color.Black;
+
     private ICamera? _camera;
 
     public ICamera? Camera
@@ -173,8 +175,11 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
         ThrowIfNotInitialized();
         SDL3.SDL.RenderPresent(_renderer);
     }
-
-    public void DrawRectangle(float x, float y, float width, float height, Color color)
+    
+    /// <summary>
+    /// Draws a filled rectangle.
+    /// </summary>
+    public void DrawRectangleFilled(float x, float y, float width, float height, Color color)
     {
         ThrowIfNotInitialized();
         
@@ -206,6 +211,137 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
         SDL3.SDL.RenderFillRect(_renderer, ref rect);
         
         // Reset blend mode to default
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.None);
+        }
+    }
+
+    /// <summary>
+    /// Draws a rectangle outline (no fill).
+    /// </summary>
+    public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f)
+    {
+        ThrowIfNotInitialized();
+        
+        // Apply camera transform if camera is set
+        var position = new Vector2(x, y);
+        if (_camera != null)
+        {
+            position = _camera.WorldToScreen(position);
+            width *= _camera.Zoom;
+            height *= _camera.Zoom;
+            thickness *= _camera.Zoom;
+        }
+        
+        // Enable alpha blending
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.Blend);
+        }
+        
+        SDL3.SDL.SetRenderDrawColor(_renderer, color.R, color.G, color.B, color.A);
+
+        var rect = new SDL3.SDL.FRect
+        {
+            X = position.X,
+            Y = position.Y,
+            W = width,
+            H = height
+        };
+
+        // For thickness > 1, draw multiple rectangles
+        if (thickness > 1f)
+        {
+            for (float t = 0; t < thickness; t++)
+            {
+                var thickRect = new SDL3.SDL.FRect
+                {
+                    X = rect.X + t,
+                    Y = rect.Y + t,
+                    W = rect.W - t * 2,
+                    H = rect.H - t * 2
+                };
+                SDL3.SDL.RenderRect(_renderer, ref thickRect);
+            }
+        }
+        else
+        {
+            SDL3.SDL.RenderRect(_renderer, ref rect);
+        }
+        
+        // Reset blend mode to default
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.None);
+        }
+    }
+
+    public void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1f)
+    {
+        if (!IsInitialized)
+        {
+            _logger?.LogWarning("Attempted to draw line before renderer initialization");
+            return;
+        }
+
+        // Transform by camera if present
+        if (Camera != null)
+        {
+            var start = Camera.WorldToScreen(new Vector2(x1, y1));
+            var end = Camera.WorldToScreen(new Vector2(x2, y2));
+            x1 = start.X;
+            y1 = start.Y;
+            x2 = end.X;
+            y2 = end.Y;
+            thickness *= Camera.Zoom;
+        }
+
+        // Enable alpha blending if needed
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.Blend);
+        }
+
+        SDL3.SDL.SetRenderDrawColor(_renderer, color.R, color.G, color.B, color.A);
+
+        if (thickness <= 1f)
+        {
+            // Simple thin line
+            SDL3.SDL.RenderLine(_renderer, x1, y1, x2, y2);
+        }
+        else
+        {
+            // Thick line - draw as a rotated rectangle using multiple thin lines
+            var dx = x2 - x1;
+            var dy = y2 - y1;
+            var length = MathF.Sqrt(dx * dx + dy * dy);
+
+            if (length == 0) return;
+
+            var angle = MathF.Atan2(dy, dx);
+            var perpX = -MathF.Sin(angle);
+            var perpY = MathF.Cos(angle);
+
+            var halfThickness = thickness / 2f;
+
+            // Draw multiple parallel lines to create thickness
+            for (float offset = -halfThickness; offset <= halfThickness; offset += 0.5f)
+            {
+                var offsetX = perpX * offset;
+                var offsetY = perpY * offset;
+
+                SDL3.SDL.RenderLine(
+                    _renderer,
+                    x1 + offsetX,
+                    y1 + offsetY,
+                    x2 + offsetX,
+                    y2 + offsetY
+                );
+            }
+        }
+
+        // Reset blend mode
         if (color.A < 255)
         {
             SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.None);
@@ -385,7 +521,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
         {
             var charX = x + (i * (charWidth + spacing));
             // This now respects camera transform via DrawRectangle
-            DrawRectangle(charX, y, charWidth, charHeight, color);
+            DrawRectangleFilled(charX, y, charWidth, charHeight, color);
         }
     }
 
@@ -394,10 +530,13 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
         _defaultFont = font;
     }
 
-    public void DrawCircle(float centerX, float centerY, float radius, Color color)
+    /// <summary>
+    /// Draws a filled circle.
+    /// </summary>
+    public void DrawCircleFilled(float centerX, float centerY, float radius, Color color)
     {
         ThrowIfNotInitialized();
-        
+
         // Apply camera transform if camera is set
         var center = new Vector2(centerX, centerY);
         if (_camera != null)
@@ -405,40 +544,43 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
             center = _camera.WorldToScreen(center);
             radius *= _camera.Zoom;
         }
-        
+
         // Enable alpha blending for translucent circles
         if (color.A < 255)
         {
             SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.Blend);
         }
-        
+
         SDL3.SDL.SetRenderDrawColor(_renderer, color.R, color.G, color.B, color.A);
 
         // Draw filled circle using midpoint circle algorithm
-        int x = (int)radius;
-        int y = 0;
-        int radiusError = 1 - x;
+        float x = radius;
+        float y = 0f;
+        float radiusError = 1f - x;
+
+        float cx = center.X;
+        float cy = center.Y;
 
         while (x >= y)
         {
             // Draw horizontal lines to fill the circle
-            DrawHorizontalLine((int)center.X - x, (int)center.X + x, (int)center.Y + y);
-            DrawHorizontalLine((int)center.X - x, (int)center.X + x, (int)center.Y - y);
-            DrawHorizontalLine((int)center.X - y, (int)center.X + y, (int)center.Y + x);
-            DrawHorizontalLine((int)center.X - y, (int)center.X + y, (int)center.Y - x);
+            SDL3.SDL.RenderLine(_renderer, cx - x, cy + y, cx + x, cy + y);
+            SDL3.SDL.RenderLine(_renderer, cx - x, cy - y, cx + x, cy - y);
+            SDL3.SDL.RenderLine(_renderer, cx - y, cy + x, cx + y, cy + x);
+            SDL3.SDL.RenderLine(_renderer, cx - y, cy - x, cx + y, cy - x);
 
-            y++;
-            if (radiusError < 0)
+            y += 1f;
+            if (radiusError < 0f)
             {
-                radiusError += 2 * y + 1;
+                radiusError += 2f * y + 1f;
             }
             else
             {
-                x--;
-                radiusError += 2 * (y - x + 1);
+                x -= 1f;
+                radiusError += 2f * (y - x + 1f);
             }
         }
-        
+
         // Reset blend mode to default
         if (color.A < 255)
         {
@@ -446,9 +588,87 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider
         }
     }
 
-    private void DrawHorizontalLine(int x1, int x2, int y)
+    /// <summary>
+    /// Draws a circle outline (no fill).
+    /// </summary>
+    public void DrawCircleOutline(float centerX, float centerY, float radius, Color color, float thickness = 1f)
     {
-        SDL3.SDL.RenderLine(_renderer, x1, y, x2, y);
+        ThrowIfNotInitialized();
+
+        // Apply camera transform
+        var center = new Vector2(centerX, centerY);
+        if (_camera != null)
+        {
+            center = _camera.WorldToScreen(center);
+            radius *= _camera.Zoom;
+            thickness *= _camera.Zoom;
+        }
+
+        // Enable alpha blending
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.Blend);
+        }
+
+        SDL3.SDL.SetRenderDrawColor(_renderer, color.R, color.G, color.B, color.A);
+
+        // Fixed number of segments for smoothness (calculated based on radius)
+        int segments = Math.Max(16, (int)(radius * 2)); // More segments for larger circles
+
+        if (thickness <= 1f)
+        {
+            // Thin outline - single circle
+            var points = new SDL3.SDL.FPoint[segments + 1];
+            float angleStep = MathF.PI * 2f / segments;
+            
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = i * angleStep;
+                points[i] = new SDL3.SDL.FPoint
+                {
+                    X = center.X + MathF.Cos(angle) * radius,
+                    Y = center.Y + MathF.Sin(angle) * radius
+                };
+            }
+            points[segments] = points[0]; // Close the circle
+
+            SDL3.SDL.RenderLines(_renderer, points, points.Length);
+        }
+        else
+        {
+            // Thick outline - draw multiple concentric circles
+            float halfThickness = thickness / 2f;
+            int numCircles = Math.Max(2, (int)thickness);
+            
+            for (int t = 0; t < numCircles; t++)
+            {
+                float offset = -halfThickness + (thickness * t / (numCircles - 1));
+                float currentRadius = radius + offset;
+                
+                if (currentRadius <= 0) continue;
+                
+                var points = new SDL3.SDL.FPoint[segments + 1];
+                float angleStep = MathF.PI * 2f / segments;
+                
+                for (int i = 0; i < segments; i++)
+                {
+                    float angle = i * angleStep;
+                    points[i] = new SDL3.SDL.FPoint
+                    {
+                        X = center.X + MathF.Cos(angle) * currentRadius,
+                        Y = center.Y + MathF.Sin(angle) * currentRadius
+                    };
+                }
+                points[segments] = points[0];
+
+                SDL3.SDL.RenderLines(_renderer, points, points.Length);
+            }
+        }
+
+        if (color.A < 255)
+        {
+            SDL3.SDL.SetRenderDrawBlendMode(_renderer, SDL3.SDL.BlendMode.None);
+        }
     }
 
     private void ThrowIfNotInitialized()

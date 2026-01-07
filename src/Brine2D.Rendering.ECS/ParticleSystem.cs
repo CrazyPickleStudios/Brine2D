@@ -27,6 +27,7 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
     public void Update(GameTime gameTime)
     {
         var deltaTime = (float)gameTime.DeltaTime;
+        
         var emitters = _world.GetEntitiesWithComponent<ParticleEmitterComponent>();
 
         foreach (var entity in emitters)
@@ -129,11 +130,13 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
         foreach (var entity in emitters)
         {
             var emitter = entity.GetComponent<ParticleEmitterComponent>();
-
+            
             if (emitter == null || !emitter.IsEnabled)
                 continue;
 
-            foreach (var particle in emitter.Particles)
+            var particles = emitter.Particles.ToList();
+            
+            foreach (var particle in particles)
             {
                 // Calculate interpolation factor (0 = start, 1 = end)
                 var t = 1f - (particle.Life / particle.MaxLife);
@@ -145,7 +148,7 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
                 var size = MathHelper.Lerp(emitter.StartSize, emitter.EndSize, t);
 
                 // Draw particle as circle
-                renderer.DrawCircle(particle.Position.X, particle.Position.Y, size, color);
+                renderer.DrawCircleFilled(particle.Position.X, particle.Position.Y, size, color);
             }
         }
     }

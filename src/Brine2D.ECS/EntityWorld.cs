@@ -1,4 +1,5 @@
 ﻿using Brine2D.Core;
+using Brine2D.ECS.Query;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.ECS;
@@ -80,21 +81,24 @@ public class EntityWorld : IEntityWorld
         return _entities.FirstOrDefault(e => e.Name == name);
     }
 
-    public IEnumerable<Entity> GetEntitiesByTag(string tag)
+    public IReadOnlyList<Entity> GetEntitiesByTag(string tag)
     {
-        return _entities.Where(e => e.Tags.Contains(tag));
+        // Always return snapshot
+        return _entities.Where(e => e.Tags.Contains(tag)).ToList();
     }
 
-    public IEnumerable<Entity> GetEntitiesWithComponent<T>() where T : Component
+    public IReadOnlyList<Entity> GetEntitiesWithComponent<T>() where T : Component
     {
-        return _entities.Where(e => e.HasComponent<T>());
+        // Always return snapshot for safe iteration
+        return _entities.Where(e => e.HasComponent<T>()).ToList();
     }
 
-    public IEnumerable<Entity> GetEntitiesWithComponents<T1, T2>() 
+    public IReadOnlyList<Entity> GetEntitiesWithComponents<T1, T2>() 
         where T1 : Component 
         where T2 : Component
     {
-        return _entities.Where(e => e.HasComponent<T1>() && e.HasComponent<T2>());
+        // Always return snapshot
+        return _entities.Where(e => e.HasComponent<T1>() && e.HasComponent<T2>()).ToList();
     }
 
     public Entity? FindEntity(Func<Entity, bool> predicate)
@@ -112,11 +116,18 @@ public class EntityWorld : IEntityWorld
 
     public void Clear()
     {
-        foreach (var entity in _entities.ToList())
+        _logger?.LogDebug("Clearing all entities from world");
+        
+        // Destroy entities in REVERSE creation order to handle dependencies properly.
+        // This ensures children are destroyed before parents, spawned entities before spawners, etc.
+        var allEntities = _entities.ToList();
+        
+        for (int i = allEntities.Count - 1; i >= 0; i--)
         {
-            DestroyEntity(entity);
+            DestroyEntity(allEntities[i]);
         }
-        _entities.Clear();
+        
+        _logger?.LogInformation("World cleared: {Count} entities destroyed", allEntities.Count);
     }
 
     void IEntityWorld.NotifyComponentAdded(Entity entity, Component component)
@@ -132,5 +143,30 @@ public class EntityWorld : IEntityWorld
     void IEntityWorld.NotifyEntityDestroyed(Entity entity)
     {
         OnEntityDestroyed?.Invoke(entity);
+    }
+
+    public EntityQuery Query()
+    {
+        return new EntityQuery(this);
+    }
+
+    public CachedEntityQuery<T1> CreateCachedQuery<T1>() where T1 : Component
+    {
+        return new CachedEntityQuery<T1>(this);
+    }
+
+    public CachedEntityQuery<T1, T2> CreateCachedQuery<T1, T2>() 
+        where T1 : Component 
+        where T2 : Component
+    {
+        return new CachedEntityQuery<T1, T2>(this);
+    }
+
+    public CachedEntityQuery<T1, T2, T3> CreateCachedQuery<T1, T2, T3>() 
+        where T1 : Component 
+        where T2 : Component 
+        where T3 : Component
+    {
+        return new CachedEntityQuery<T1, T2, T3>(this);
     }
 }

@@ -1,4 +1,5 @@
-﻿using Brine2D.ECS.Serialization;
+﻿using Brine2D.Core;
+using Brine2D.ECS.Serialization;
 using Brine2D.ECS.Systems;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -34,7 +35,7 @@ public static class ECSServiceCollectionExtensions
 {
     /// <summary>
     /// Adds the object-based ECS system to the service collection.
-    /// Only registers pure ECS systems (no input/rendering dependencies).
+    /// Automatically registers lifecycle hook for pipeline execution.
     /// </summary>
     public static IServiceCollection AddObjectECS(this IServiceCollection services)
     {
@@ -50,6 +51,9 @@ public static class ECSServiceCollectionExtensions
         services.TryAddSingleton<VelocitySystem>();
         services.TryAddSingleton<PhysicsSystem>();
         services.TryAddSingleton<AISystem>();
+        
+        // Register lifecycle hook for automatic pipeline execution
+        services.AddSingleton<ISceneLifecycleHook, ECSLifecycleHook>();
         
         // Register hosted service to auto-configure pipelines
         services.AddHostedService<SystemPipelineHostedService>();

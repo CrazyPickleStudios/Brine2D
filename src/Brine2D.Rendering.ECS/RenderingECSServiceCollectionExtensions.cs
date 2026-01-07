@@ -1,4 +1,4 @@
-using Brine2D.Rendering;
+using Brine2D.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -45,6 +45,9 @@ public static class RenderingECSServiceCollectionExtensions
         
         // Add RenderPipeline
         services.TryAddSingleton<RenderPipeline>();
+        
+        // Register lifecycle hook for automatic render pipeline execution
+        services.AddSingleton<ISceneLifecycleHook, ECSRenderHook>();
         
         return services;
     }

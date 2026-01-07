@@ -102,14 +102,14 @@ public class UIDropdown : IUIComponent
         float itemHeight = Size.Y;
 
         // Draw main dropdown box
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
         // Draw border
         float borderThickness = 2f;
-        renderer.DrawRectangle(Position.X, Position.Y, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
-        renderer.DrawRectangle(Position.X, Position.Y, borderThickness, Size.Y, BorderColor);
-        renderer.DrawRectangle(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, Size.Y, BorderColor);
+        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor);
 
         // Draw selected item text
         var displayText = SelectedText ?? "(Select)";
@@ -129,13 +129,13 @@ public class UIDropdown : IUIComponent
             float listHeight = visibleCount * itemHeight;
 
             // Draw list background
-            renderer.DrawRectangle(Position.X, Position.Y + Size.Y, Size.X, listHeight, BackgroundColor);
+            renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y, Size.X, listHeight, BackgroundColor);
 
             // Draw list border
-            renderer.DrawRectangle(Position.X, Position.Y + Size.Y, Size.X, borderThickness, BorderColor);
-            renderer.DrawRectangle(Position.X, Position.Y + Size.Y + listHeight - borderThickness, Size.X, borderThickness, BorderColor);
-            renderer.DrawRectangle(Position.X, Position.Y + Size.Y, borderThickness, listHeight, BorderColor);
-            renderer.DrawRectangle(Position.X + Size.X - borderThickness, Position.Y + Size.Y, borderThickness, listHeight, BorderColor);
+            renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y, Size.X, borderThickness, BorderColor);
+            renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y + listHeight - borderThickness, Size.X, borderThickness, BorderColor);
+            renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y, borderThickness, listHeight, BorderColor);
+            renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y + Size.Y, borderThickness, listHeight, BorderColor);
 
             // Draw items
             for (int i = 0; i < visibleCount; i++)
@@ -154,7 +154,7 @@ public class UIDropdown : IUIComponent
                 }
 
                 // Draw item background
-                renderer.DrawRectangle(Position.X, itemY, Size.X, itemHeight, itemColor);
+                renderer.DrawRectangleFilled(Position.X, itemY, Size.X, itemHeight, itemColor);
 
                 // Draw item text
                 var itemTextX = Position.X + 10;

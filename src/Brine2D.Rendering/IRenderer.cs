@@ -15,6 +15,18 @@ public interface IRenderer : IDisposable
     bool IsInitialized { get; }
 
     /// <summary>
+    /// Gets or sets the clear color used when clearing the screen.
+    /// Scenes can set this in OnInitialize() to customize their background.
+    /// </summary>
+    Color ClearColor { get; set; }
+
+    /// <summary>
+    /// Gets or sets the active camera for rendering.
+    /// If null, renders in screen space.
+    /// </summary>
+    ICamera? Camera { get; set; }
+
+    /// <summary>
     /// Initializes the renderer.
     /// </summary>
     Task InitializeAsync(CancellationToken cancellationToken = default);
@@ -37,16 +49,38 @@ public interface IRenderer : IDisposable
     /// <summary>
     /// Draws a filled rectangle.
     /// </summary>
-    void DrawRectangle(float x, float y, float width, float height, Color color);
+    void DrawRectangleFilled(float x, float y, float width, float height, Color color);
+
+    /// <summary>
+    /// Draws a rectangle outline (no fill).
+    /// </summary>
+    void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f);
 
     /// <summary>
     /// Draws a filled circle.
     /// </summary>
+    void DrawCircleFilled(float centerX, float centerY, float radius, Color color);
+
+    /// <summary>
+    /// Draws a circle outline (no fill).
+    /// </summary>
     /// <param name="centerX">Center X position.</param>
     /// <param name="centerY">Center Y position.</param>
     /// <param name="radius">Circle radius.</param>
-    /// <param name="color">Fill color.</param>
-    void DrawCircle(float centerX, float centerY, float radius, Color color);
+    /// <param name="color">Outline color.</param>
+    /// <param name="thickness">Line thickness (default: 1.0f).</param>
+    void DrawCircleOutline(float centerX, float centerY, float radius, Color color, float thickness = 1f);
+
+    /// <summary>
+    /// Draws a line between two points.
+    /// </summary>
+    /// <param name="x1">Start X position.</param>
+    /// <param name="y1">Start Y position.</param>
+    /// <param name="x2">End X position.</param>
+    /// <param name="y2">End Y position.</param>
+    /// <param name="color">Line color.</param>
+    /// <param name="thickness">Line thickness (default: 1.0f).</param>
+    void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1f);
 
     /// <summary>
     /// Draws a texture at the specified position.
@@ -78,7 +112,7 @@ public interface IRenderer : IDisposable
     /// <param name="destY">Destination Y position.</param>
     /// <param name="destWidth">Destination width.</param>
     /// <param name="destHeight">Destination height.</param>
-    void DrawTexture(ITexture texture, 
+    void DrawTexture(ITexture texture,
         float sourceX, float sourceY, float sourceWidth, float sourceHeight,
         float destX, float destY, float destWidth, float destHeight);
 
@@ -88,8 +122,7 @@ public interface IRenderer : IDisposable
     void DrawText(string text, float x, float y, Color color);
 
     /// <summary>
-    /// Gets or sets the active camera for rendering.
-    /// If null, renders in screen space.
+    /// Sets the default font used for text rendering.
     /// </summary>
-    ICamera? Camera { get; set; }
+    void SetDefaultFont(IFont? font);
 }
