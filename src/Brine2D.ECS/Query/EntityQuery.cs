@@ -1,6 +1,8 @@
 using System.Numerics;
 using Brine2D.Core;
+using Brine2D.Core.Animation;
 using Brine2D.ECS.Components;
+using System.Buffers;
 
 namespace Brine2D.ECS.Query;
 
@@ -514,12 +516,27 @@ public class EntityQuery
     /// </example>
     public Entity? Random()
     {
-        var results = Execute().ToList();
-        if (results.Count == 0)
+        // Get count first
+        var count = Execute().Count();
+        if (count == 0)
             return null;
 
-        _random ??= new Random();
-        return results[_random.Next(results.Count)];
+        var array = ArrayPool<Entity>.Shared.Rent(count);
+        try
+        {
+            int index = 0;
+            foreach (var entity in Execute())
+            {
+                array[index++] = entity;
+            }
+
+            _random ??= new Random();
+            return array[_random.Next(count)];
+        }
+        finally
+        {
+            ArrayPool<Entity>.Shared.Return(array, clearArray: true);
+        }
     }
 
     /// <summary>
@@ -587,24 +604,5 @@ public class EntityQuery
         {
             action(entity);
         }
-    }
-}
-
-/// <summary>
-/// Simple rectangle struct for spatial queries.
-/// </summary>
-public struct Rectangle
-{
-    public float X { get; set; }
-    public float Y { get; set; }
-    public float Width { get; set; }
-    public float Height { get; set; }
-
-    public Rectangle(float x, float y, float width, float height)
-    {
-        X = x;
-        Y = y;
-        Width = width;
-        Height = height;
     }
 }

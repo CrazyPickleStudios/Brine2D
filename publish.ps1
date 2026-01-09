@@ -39,7 +39,7 @@ $packages = @(
 $source = "https://api.nuget.org/v3/index.json"
 
 foreach ($package in $packages) {
-    $path = "src\$package\bin\Release\$package.0.5.0-beta.nupkg"
+    $path = "src\$package\bin\Release\$package.0.6.0-beta.nupkg"
     
     if (Test-Path $path) {
         Write-Host "  Publishing $package..." -ForegroundColor Green

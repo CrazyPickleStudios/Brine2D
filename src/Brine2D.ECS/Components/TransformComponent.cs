@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using System.Text.Json.Serialization;
+using System.Buffers;
 
 namespace Brine2D.ECS.Components;
 
@@ -302,9 +303,22 @@ public class TransformComponent : Component
     /// </summary>
     public void ClearChildren()
     {
-        foreach (var child in _children.ToList())
+        var count = _children.Count;
+        if (count == 0) return;
+
+        var array = ArrayPool<TransformComponent>.Shared.Rent(count);
+        try
         {
-            child.SetParent(null);
+            _children.CopyTo(array, 0);
+
+            for (int i = 0; i < count; i++)
+            {
+                array[i].SetParent(null);
+            }
+        }
+        finally
+        {
+            ArrayPool<TransformComponent>.Shared.Return(array, clearArray: true);
         }
     }
 

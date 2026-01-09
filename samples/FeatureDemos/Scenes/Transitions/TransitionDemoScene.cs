@@ -25,7 +25,7 @@ public class TransitionDemoScene : DemoSceneBase
         ISceneManager sceneManager,
         IGameContext gameContext,
         ILogger<TransitionDemoScene> logger) 
-        : base(input, sceneManager, gameContext, logger, world: null)
+        : base(input, sceneManager, gameContext, logger, renderer, world: null)
     {
         _renderer = renderer;
         

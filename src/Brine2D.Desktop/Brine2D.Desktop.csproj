@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.5.0-beta</Version>
+		<Version>0.6.0-beta</Version>
 
 		<PackageId>Brine2D.Desktop</PackageId>
 		<Title>Brine2D Desktop Game Engine</Title>
@@ -16,28 +16,6 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-
-		<PackageReleaseNotes>
-			Alpha release (0.3.0) - Core features working, GPU renderer incomplete.
-
-			WORKING:
-			- Legacy rendering (sprites, primitives, text)
-			- Input system (keyboard, mouse, gamepad)
-			- Audio system (sound effects, music)
-			- Animation system
-			- Collision detection
-			- Tilemap support (Tiled .tmj format)
-			- UI framework
-			- Camera system with zoom/rotation
-			- Scene management
-
-			NOT YET READY:
-			- GPU renderer (use LegacyRenderer backend)
-			- Entity Component System (planned for 0.4.0)
-			- Scene graph (planned for 0.5.0)
-
-			This is an ALPHA release - expect breaking changes before 1.0.
-		</PackageReleaseNotes>
 	</PropertyGroup>
 
 	<ItemGroup>

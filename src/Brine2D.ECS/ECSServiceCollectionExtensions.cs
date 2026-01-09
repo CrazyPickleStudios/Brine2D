@@ -1,4 +1,5 @@
 ﻿using Brine2D.Core;
+using Brine2D.Core.Pooling;
 using Brine2D.ECS.Serialization;
 using Brine2D.ECS.Systems;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,7 +36,7 @@ public static class ECSServiceCollectionExtensions
 {
     /// <summary>
     /// Adds the object-based ECS system to the service collection.
-    /// Automatically registers lifecycle hook for pipeline execution.
+    /// Automatically registers lifecycle hook for pipeline execution and object pooling.
     /// </summary>
     public static IServiceCollection AddObjectECS(this IServiceCollection services)
     {
@@ -57,6 +58,9 @@ public static class ECSServiceCollectionExtensions
         
         // Register hosted service to auto-configure pipelines
         services.AddHostedService<SystemPipelineHostedService>();
+        
+        // Add object pooling infrastructure (automatic!)
+        services.AddObjectPooling();
         
         return services;
     }

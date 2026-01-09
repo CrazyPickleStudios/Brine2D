@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Buffers;
+using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS.Components;
 using Microsoft.Extensions.Logging;
@@ -175,17 +176,37 @@ public class Entity
 
     /// <summary>
     /// Called every frame to update entity logic.
+    /// Uses ArrayPool to avoid allocations while safely handling component modifications.
     /// </summary>
     protected internal virtual void OnUpdate(GameTime gameTime)
     {
         if (!IsActive) return;
 
-        foreach (var component in _components.ToList())
+        var count = _components.Count;
+        if (count == 0) return;
+
+        // Rent array from pool (reuses existing arrays, minimal allocation)
+        var componentsArray = ArrayPool<Component>.Shared.Rent(count);
+        
+        try
         {
-            if (component.IsEnabled)
+            // Create snapshot of components
+            _components.CopyTo(componentsArray, 0);
+
+            // Iterate snapshot (safe from add/remove during OnUpdate)
+            for (int i = 0; i < count; i++)
             {
-                component.OnUpdate(gameTime);
+                var component = componentsArray[i];
+                if (component.IsEnabled)
+                {
+                    component.OnUpdate(gameTime);
+                }
             }
+        }
+        finally
+        {
+            // Return to pool for reuse (clearArray ensures no memory leaks)
+            ArrayPool<Component>.Shared.Return(componentsArray, clearArray: true);
         }
     }
 
@@ -194,12 +215,27 @@ public class Entity
     /// </summary>
     private void OnActivated()
     {
-        foreach (var component in _components.ToList())
+        var count = _components.Count;
+        if (count == 0) return;
+
+        var componentsArray = ArrayPool<Component>.Shared.Rent(count);
+        
+        try
         {
-            if (component.IsEnabled)
+            _components.CopyTo(componentsArray, 0);
+
+            for (int i = 0; i < count; i++)
             {
-                component.OnEnabled();
+                var component = componentsArray[i];
+                if (component.IsEnabled)
+                {
+                    component.OnEnabled();
+                }
             }
+        }
+        finally
+        {
+            ArrayPool<Component>.Shared.Return(componentsArray, clearArray: true);
         }
     }
 
@@ -208,12 +244,27 @@ public class Entity
     /// </summary>
     private void OnDeactivated()
     {
-        foreach (var component in _components.ToList())
+        var count = _components.Count;
+        if (count == 0) return;
+
+        var componentsArray = ArrayPool<Component>.Shared.Rent(count);
+        
+        try
         {
-            if (component.IsEnabled)
+            _components.CopyTo(componentsArray, 0);
+
+            for (int i = 0; i < count; i++)
             {
-                component.OnDisabled();
+                var component = componentsArray[i];
+                if (component.IsEnabled)
+                {
+                    component.OnDisabled();
+                }
             }
+        }
+        finally
+        {
+            ArrayPool<Component>.Shared.Return(componentsArray, clearArray: true);
         }
     }
 

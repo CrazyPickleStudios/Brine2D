@@ -5,6 +5,7 @@ using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
 using Brine2D.Rendering.ECS;
+using Brine2D.Rendering.Performance;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
 
@@ -41,8 +42,9 @@ public class ParticleDemoScene : DemoSceneBase
         IInputService input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        ILogger<ParticleDemoScene> logger) 
-        : base(input, sceneManager, gameContext, logger, world)
+        ILogger<ParticleDemoScene> logger,
+        PerformanceOverlay? perfOverlay = null) 
+        : base(input, sceneManager, gameContext, logger, renderer, world, perfOverlay)
     {
         _world = world;
         _renderer = renderer;
@@ -68,6 +70,7 @@ public class ParticleDemoScene : DemoSceneBase
 
     protected override void OnUpdate(GameTime gameTime)
     {
+        HandlePerformanceHotkeys();
         if (CheckReturnToMenu()) return;
 
         // Switch effects
@@ -123,6 +126,8 @@ public class ParticleDemoScene : DemoSceneBase
 
         // Just draw scene-specific UI
         DrawUI();
+
+        RenderPerformanceOverlay();
     }
 
     private void DrawUI()

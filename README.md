@@ -8,15 +8,18 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 
 - **Entity Component System (ECS)** - ASP.NET-style system pipelines with automatic ordering
 - **Scene Management** - Async loading, transitions, loading screens, and lifecycle hooks
-- **Advanced Queries** - Fluent API for complex entity searches
+- **Advanced Queries** - Fluent API with spatial queries, filtering, sorting, and caching
+- **Performance Monitoring** - Built-in FPS counter, frame time graphs, and rendering statistics
+- **Object Pooling** - Zero-allocation systems using `ArrayPool<T>` and custom object pools
+- **Sprite Batching** - Automatic batching with layer sorting and frustum culling
 - **Input System** - Keyboard, mouse, gamepad with polling and events
 - **Sprite Rendering** - Hardware-accelerated with sprite sheets and animations
 - **Animation System** - Frame-based with multiple clips and events
 - **Audio System** - Sound effects and music via SDL3_mixer
 - **Tilemap Support** - Tiled (.tmj) integration with auto-collision
 - **Collision Detection** - AABB and circle colliders with spatial partitioning
-- **Camera System** - 2D camera with zoom, rotation, and bounds
-- **Particle System** - GPU-accelerated particle effects
+- **Camera System** - 2D camera with follow, zoom, rotation, and bounds
+- **Particle System** - Pooled particle effects with customizable emitters
 - **UI Framework** - Complete component library with tooltips, tabs, dialogs, and more
 - **Configuration** - JSON-based settings with hot reload support
 - **Dependency Injection** - ASP.NET Core-style DI container
@@ -201,6 +204,9 @@ What works:
 - ✅ **Entity Component System (ECS)**
 - ✅ **System pipelines with automatic ordering**
 - ✅ **Advanced query system with fluent API**
+- ✅ **Performance monitoring and profiling**
+- ✅ **Object pooling (ArrayPool, custom pools)**
+- ✅ **Sprite batching with frustum culling**
 - ✅ **Scene transitions and loading screens**
 - ✅ **Lifecycle hooks with opt-out for power users**
 - ✅ **Prefabs and serialization**
@@ -213,13 +219,95 @@ What works:
 - ✅ Collision detection with physics response
 - ✅ Tilemap support
 - ✅ UI framework (complete component library)
-- ✅ Camera system
-- ✅ Particle system
+- ✅ Camera system with follow behavior
+- ✅ Particle system with pooling
 
 What doesn't work yet:
 - ❌ GPU renderer (use `Backend = "LegacyRenderer"` in config)
 
 **Expect breaking changes before 1.0!**
+
+---
+
+## Performance & Optimization
+
+Brine2D is built for performance with zero-allocation hot paths and efficient memory management.
+
+### Performance Monitoring
+
+Built-in performance overlay with real-time statistics:
+
+~~~csharp
+// Enable performance monitoring
+builder.Services.AddPerformanceMonitoring(options =>
+{
+    options.EnableOverlay = true;
+    options.ShowFPS = true;
+    options.ShowFrameTime = true;
+    options.ShowMemory = true;
+});
+~~~
+
+**Features:**
+- FPS counter with min/max/average tracking
+- Frame time graph (60-frame history)
+- Memory usage monitoring
+- Rendering statistics (sprites, draw calls, batches)
+- Per-system profiling
+
+**Hotkeys (in scenes):**
+- `F3` - Toggle performance overlay
+- `F4` - Toggle frame time graph
+- `F5` - Toggle memory stats
+
+### Zero-Allocation Systems
+
+Brine2D uses `ArrayPool<T>` and custom object pools to minimize GC pressure:
+
+~~~csharp
+// Entity updates use ArrayPool for safe iteration
+protected internal virtual void OnUpdate(GameTime gameTime)
+{
+    var array = ArrayPool<Component>.Shared.Rent(count);
+    try
+    {
+        _components.CopyTo(array, 0);
+        // Process components without allocation
+    }
+    finally
+    {
+        ArrayPool<Component>.Shared.Return(array, clearArray: true);
+    }
+}
+
+// Particle system uses object pooling
+private readonly ObjectPool<Particle> _particlePool;
+
+// Get from pool instead of 'new'
+var particle = _particlePool.Get();
+// ... use particle ...
+_particlePool.Return(particle);
+~~~
+
+### Sprite Batching
+
+Automatic batching with layer sorting and texture grouping:
+
+~~~csharp
+// SpriteRenderingSystem automatically batches sprites
+// - Groups by texture to minimize draw calls
+// - Sorts by layer for correct rendering order
+// - Frustum culling for off-screen sprites
+
+var sprite = entity.AddComponent<SpriteComponent>();
+sprite.TexturePath = "assets/player.png";
+sprite.Layer = 10; // Higher layers render on top
+sprite.Tint = Color.White;
+
+// Check batching stats
+var (renderedCount, drawCalls) = spriteSystem.GetBatchStats();
+Logger.LogInfo($"Rendered {renderedCount} sprites in {drawCalls} draw calls");
+~~~
 
 ---
 
@@ -332,6 +420,43 @@ var weakEnemies = _world.Query()
     .Execute();
 ~~~
 
+### Spatial Queries
+
+Query entities within a radius or bounds:
+
+~~~csharp
+// Find all entities within 200 units of player
+var nearbyEntities = _world.Query()
+    .WithinRadius(playerPosition, 200f)
+    .With<EnemyComponent>()
+    .Execute();
+
+// Find entities within screen bounds
+var visibleEntities = _world.Query()
+    .WithinBounds(new Rectangle(0, 0, 1280, 720))
+    .Execute();
+~~~
+
+### Sorting and Pagination
+
+~~~csharp
+// Get 5 nearest enemies
+var nearestEnemies = _world.Query()
+    .With<EnemyComponent>()
+    .OrderBy(e => Vector2.Distance(
+        e.GetComponent<TransformComponent>().Position, 
+        playerPosition))
+    .Take(5)
+    .Execute();
+
+// Get second page of results
+var page2 = _world.Query()
+    .With<ItemComponent>()
+    .Skip(10)
+    .Take(10)
+    .Execute();
+~~~
+
 ### Cached Queries for Performance
 
 ~~~csharp
@@ -339,9 +464,15 @@ var weakEnemies = _world.Query()
 var movingEntities = _world.CreateCachedQuery<TransformComponent, VelocityComponent>();
 
 // Use in systems (no allocation!)
-foreach (var (transform, velocity) in movingEntities)
+public void Update(GameTime gameTime)
 {
-    transform.Position += velocity.Velocity * deltaTime;
+    foreach (var entity in movingEntities.Execute())
+    {
+        var transform = entity.GetComponent<TransformComponent>();
+        var velocity = entity.GetComponent<VelocityComponent>();
+        
+        transform.Position += velocity.Velocity * deltaTime;
+    }
 }
 ~~~
 
@@ -424,6 +555,50 @@ builder.Services.ConfigureSystemPipelines(pipelines =>
     pipelines.AddSystem<ParticleSystem>();          // Update + Render
     pipelines.AddSystem<DebugRenderer>();           // Order: 1000 (debug overlay)
 });
+~~~
+
+### Camera System
+
+Automatic camera following with smooth movement and constraints:
+
+~~~csharp
+// Make camera follow player
+var cameraFollow = player.AddComponent<CameraFollowComponent>();
+cameraFollow.CameraName = "Main";
+cameraFollow.Smoothing = 5f; // Higher = slower follow
+cameraFollow.Offset = new Vector2(0, -50); // Camera offset from target
+cameraFollow.Deadzone = new Vector2(50, 30); // Don't move if within deadzone
+cameraFollow.FollowX = true;
+cameraFollow.FollowY = true;
+cameraFollow.Priority = 10; // Higher priority targets take precedence
+~~~
+
+### Particle System
+
+Pooled particle effects with customizable emitters:
+
+~~~csharp
+// Create particle emitter
+var emitter = entity.AddComponent<ParticleEmitterComponent>();
+emitter.IsEmitting = true;
+emitter.EmissionRate = 50f; // Particles per second
+emitter.MaxParticles = 200;
+emitter.ParticleLifetime = 2f;
+
+// Configure appearance
+emitter.StartColor = new Color(255, 200, 0, 255);
+emitter.EndColor = new Color(255, 50, 0, 0); // Fade to transparent
+emitter.StartSize = 8f;
+emitter.EndSize = 2f;
+
+// Configure physics
+emitter.InitialVelocity = new Vector2(0, -50);
+emitter.VelocitySpread = 30f; // Random angle variance
+emitter.Gravity = new Vector2(0, 100);
+emitter.SpawnRadius = 10f; // Random spawn area
+
+// Get stats
+Logger.LogInfo($"Active particles: {emitter.ParticleCount}");
 ~~~
 
 ### Save/Load System
@@ -643,6 +818,7 @@ protected override void OnUpdate(GameTime gameTime)
 }
 ~~~
 
+
 ## Configuration
 
 Create a `gamesettings.json` file in your project:
@@ -662,6 +838,12 @@ Create a `gamesettings.json` file in your project:
     "VSync": true,
     "Fullscreen": false,
     "Backend": "LegacyRenderer"
+  },
+  "Performance": {
+    "EnableOverlay": true,
+    "ShowFPS": true,
+    "ShowFrameTime": true,
+    "ShowMemory": true
   }
 }
 ~~~
@@ -671,7 +853,7 @@ Create a `gamesettings.json` file in your project:
 Brine2D follows a modular architecture with clear separation of concerns:
 
 ### Core Packages
-- **Brine2D.Core** - Core abstractions, animation, collision, tilemap
+- **Brine2D.Core** - Core abstractions, animation, collision, tilemap, pooling
 - **Brine2D.Engine** - Game loop, scene management, transitions
 - **Brine2D.Hosting** - ASP.NET-style application hosting
 - **Brine2D.ECS** - Entity Component System
@@ -740,18 +922,24 @@ Check out the `samples/` directory for complete working examples:
 
 Interactive demo menu showcasing all major features:
 
-- **Query System Demo** - Advanced entity queries with fluent API
-- **Particle System Demo** - GPU-accelerated particle effects
+- **Query System Demo** - Advanced entity queries with spatial filtering, sorting, and pagination
+- **Particle System Demo** - Pooled particle effects with fire, explosions, smoke, and trails
 - **Collision Demo** - AABB and circle colliders with physics response
-- **Scene Transitions Demo** - Fade transitions and loading screens
+- **Scene Transitions Demo** - Fade transitions and custom loading screens
 - **UI Components Demo** - Complete UI framework showcase
 - **Manual Control Demo** - Power user lifecycle hook examples
+- **Performance Benchmark** - Sprite batching stress test with 10,000+ sprites
 
 Run the demos:
 ~~~sh
 cd samples/FeatureDemos
 dotnet run
 ~~~
+
+**Performance hotkeys (in any demo scene):**
+- `F3` - Toggle performance overlay
+- `F4` - Toggle frame time graph  
+- `F5` - Toggle memory statistics
 
 ---
 
@@ -775,31 +963,37 @@ dotnet run
 
 **0.5.0-beta** ✅ **RELEASED**
 - ✅ Advanced ECS queries and filters
-- ✅ Query builder pattern for complex entity searches
+- ✅ Spatial queries (WithinRadius, WithinBounds)
+- ✅ Query builder pattern with sorting and pagination
 - ✅ Cached queries for performance
 - ✅ Scene transitions (FadeTransition)
 - ✅ Loading screens
 - ✅ Lifecycle hooks with opt-out for power users
 - ✅ Automatic system execution
-- ✅ 6 polished interactive demos
+- ✅ Performance monitoring and profiling
+- ✅ Object pooling (ArrayPool, custom pools)
+- ✅ Sprite batching with frustum culling
+- ✅ Camera follow system
+- ✅ Particle system with pooling
+- ✅ 7 polished interactive demos
 - ✅ Complete UI framework (dialogs, tabs, tooltips, scroll views)
 - ✅ Collision detection with physics response
 - ✅ Bug fixes and stability improvements
 
 **0.6.0-beta** (Next Release)
 - Complete GPU renderer with SDL3
-- Batched sprite rendering
-- Advanced particle effects
+- Advanced batching with texture atlases
 - Post-processing effects
-- Performance profiling tools
-- Object pooling system
-- Render culling optimization
+- Enhanced particle system (textures, rotation, trails)
+- Spatial audio
+- Multi-threaded ECS systems
+- Comprehensive documentation
 
 **1.0.0** (Stable Release)
 - Stable, production-ready API
 - Complete documentation and tutorials
 - Full platform testing (Windows, Linux, macOS)
-- Advanced ECS optimizations (pooling, multi-threading)
+- Advanced ECS optimizations
 - Comprehensive sample games
 - Migration guides from alpha/beta
 

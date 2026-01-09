@@ -1,10 +1,12 @@
 ﻿using Brine2D.Core;
+using Brine2D.Core.Animation;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Query;
 using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
+using Brine2D.Rendering.Performance;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -51,8 +53,9 @@ public class QueryDemoScene : DemoSceneBase
         IInputService input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        ILogger<QueryDemoScene> logger) 
-        : base(input, sceneManager, gameContext, logger, world)
+        ILogger<QueryDemoScene> logger,
+        PerformanceOverlay? perfOverlay = null)
+        : base(input, sceneManager, gameContext, logger, renderer, world, perfOverlay)
     {
         _world = world;
         _renderer = renderer;
@@ -110,6 +113,7 @@ public class QueryDemoScene : DemoSceneBase
 
     protected override void OnUpdate(GameTime gameTime)
     {
+        HandlePerformanceHotkeys();
         var deltaTime = (float)gameTime.DeltaTime;
 
         if (CheckReturnToMenu()) return;
@@ -156,7 +160,6 @@ public class QueryDemoScene : DemoSceneBase
     protected override void OnRender(GameTime gameTime)
     {
         _renderer.Clear(new Color(20, 20, 30));
-        _renderer.BeginFrame();
 
         // Draw all entities (gray)
         foreach (var entity in _entities)
@@ -216,7 +219,7 @@ public class QueryDemoScene : DemoSceneBase
         _renderer.DrawText($"Results: {results.Count()} entities", 10, 35, Color.Yellow);
         _renderer.DrawText("SPACE: Refresh | WASD: Move Player", 10, 60, Color.Gray);
 
-        _renderer.EndFrame();
+        RenderPerformanceOverlay();
     }
 
     private void RunCurrentDemo()

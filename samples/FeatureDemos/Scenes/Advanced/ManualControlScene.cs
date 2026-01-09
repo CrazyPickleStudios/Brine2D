@@ -36,7 +36,7 @@ public class ManualControlScene : DemoSceneBase
         IEntityWorld world,
         ISceneManager sceneManager,
         ILogger<ManualControlScene> logger)
-        : base(input, sceneManager, gameContext, logger, world)
+        : base(input, sceneManager, gameContext, logger, renderer, world)
     {
         _renderer = renderer;
         _input = input;

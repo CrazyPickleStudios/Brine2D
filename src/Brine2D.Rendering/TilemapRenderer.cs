@@ -1,13 +1,18 @@
 using Brine2D.Core.Tilemap;
+using System.Numerics;
+using Brine2D.Core.Animation;
 
 namespace Brine2D.Rendering;
 
 /// <summary>
-/// Handles rendering of tilemaps. Separates rendering from core tilemap data.
+/// Handles rendering of tilemaps with sprite batching.
+/// Separates rendering from core tilemap data.
+/// Uses SpriteBatcher for optimal performance.
 /// </summary>
 public class TilemapRenderer
 {
     private readonly Dictionary<string, ITexture> _tilesetTextures = new();
+    private readonly SpriteBatcher _batcher = new();
 
     /// <summary>
     /// Loads the tileset texture for a tilemap.
@@ -29,18 +34,24 @@ public class TilemapRenderer
     }
 
     /// <summary>
-    /// Renders a tilemap using the specified renderer and camera.
+    /// Renders a tilemap using sprite batching and frustum culling.
+    /// All tiles are batched together for maximum performance.
     /// </summary>
     public void Render(Tilemap tilemap, IRenderer renderer, ICamera? camera = null)
     {
         if (tilemap.Tileset == null || !_tilesetTextures.TryGetValue(tilemap.Tileset.ImagePath, out var texture))
             return;
 
+        // Calculate visible tile range (frustum culling)
         var visibleRect = GetVisibleTileRange(tilemap, camera);
 
+        // Queue all visible tiles to the batcher
         foreach (var layer in tilemap.Layers)
         {
             if (!layer.Visible) continue;
+
+            // Use layer Z-order for proper depth sorting
+            int layerDepth = layer.ZOrder;
 
             for (int y = visibleRect.minY; y <= visibleRect.maxY; y++)
             {
@@ -54,17 +65,31 @@ public class TilemapRenderer
                     var worldX = x * tilemap.TileWidth;
                     var worldY = y * tilemap.TileHeight;
 
-                    renderer.DrawTexture(
-                        texture,
-                        sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height,
-                        worldX, worldY, tilemap.TileWidth, tilemap.TileHeight);
+                    // Add tile to batch
+                    _batcher.Draw(
+                        texture: texture,
+                        position: new Vector2(worldX, worldY),
+                        sourceRect: new Rectangle(
+                            sourceRect.x, 
+                            sourceRect.y, 
+                            sourceRect.width, 
+                            sourceRect.height),
+                        scale: Vector2.One,
+                        rotation: 0f,
+                        origin: Vector2.Zero, // Tiles render from top-left
+                        tint: Color.White,
+                        layer: layerDepth);
                 }
             }
         }
+
+        // Flush all batched tiles (renders them sorted and grouped by texture)
+        _batcher.Flush(renderer, camera);
     }
 
     /// <summary>
     /// Calculates which tiles are visible based on camera position.
+    /// Uses frustum culling to skip off-screen tiles.
     /// </summary>
     private (int minX, int minY, int maxX, int maxY) GetVisibleTileRange(Tilemap tilemap, ICamera? camera)
     {
@@ -84,6 +109,14 @@ public class TilemapRenderer
         var maxY = Math.Min(tilemap.Height - 1, (int)(cameraBottom / tilemap.TileHeight) + 1);
 
         return (minX, minY, maxX, maxY);
+    }
+
+    /// <summary>
+    /// Gets batching statistics for tilemaps.
+    /// </summary>
+    public (int TileCount, int DrawCalls) GetBatchStats()
+    {
+        return (_batcher.Count, _batcher.EstimatedDrawCalls);
     }
 
     /// <summary>

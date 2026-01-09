@@ -10,18 +10,18 @@ public class SDL3TextureLoader : ITextureLoader
 {
     private readonly ILogger<SDL3TextureLoader> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly nint _renderer;
+    private readonly Func<nint> _getRendererHandle; // Changed to lazy getter
     private readonly List<SDL3Texture> _loadedTextures = new();
     private bool _disposed;
 
     public SDL3TextureLoader(
         ILogger<SDL3TextureLoader> logger,
         ILoggerFactory loggerFactory,
-        nint renderer)
+        Func<nint> getRendererHandle) // Changed parameter
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _renderer = renderer;
+        _getRendererHandle = getRendererHandle ?? throw new ArgumentNullException(nameof(getRendererHandle));
         
         _logger.LogInformation("SDL3_image texture loader ready (PNG, JPG, BMP support)");
     }
@@ -40,6 +40,14 @@ public class SDL3TextureLoader : ITextureLoader
             throw new FileNotFoundException($"Texture file not found: {path}");
 
         _logger.LogInformation("Loading texture: {Path} (ScaleMode: {ScaleMode})", path, scaleMode);
+
+        // Get renderer handle lazily (after initialization)
+        var renderer = _getRendererHandle();
+        if (renderer == nint.Zero)
+        {
+            throw new InvalidOperationException(
+                "SDL renderer is not initialized. Ensure the game has started (RunAsync called) before loading textures.");
+        }
 
         var surface = SDL3.Image.Load(path);
         if (surface == IntPtr.Zero)
@@ -61,7 +69,7 @@ public class SDL3TextureLoader : ITextureLoader
                 throw new InvalidOperationException($"Invalid surface dimensions: {width}x{height}");
             }
 
-            var texture = SDL3.SDL.CreateTextureFromSurface(_renderer, surface);
+            var texture = SDL3.SDL.CreateTextureFromSurface(renderer, surface);
             if (texture == IntPtr.Zero)
             {
                 var error = SDL3.SDL.GetError();
@@ -95,8 +103,16 @@ public class SDL3TextureLoader : ITextureLoader
 
         _logger.LogDebug("Creating blank texture: {Width}x{Height}", width, height);
 
+        // Get renderer handle lazily
+        var renderer = _getRendererHandle();
+        if (renderer == nint.Zero)
+        {
+            throw new InvalidOperationException(
+                "SDL renderer is not initialized. Ensure the game has started before creating textures.");
+        }
+
         var texture = SDL3.SDL.CreateTexture(
-            _renderer,
+            renderer,
             SDL3.SDL.PixelFormat.RGBA8888,
             SDL3.SDL.TextureAccess.Target,
             width,

@@ -1,6 +1,7 @@
-using System.Numerics;
+using Brine2D.Core.Pooling;
 using Brine2D.ECS;
 using Brine2D.Rendering;
+using System.Numerics;
 
 namespace Brine2D.Rendering.ECS;
 
@@ -104,11 +105,20 @@ public class ParticleEmitterComponent : Component
 /// <summary>
 /// Individual particle data (managed by ParticleSystem).
 /// </summary>
-internal class Particle
+internal class Particle : IPoolable
 {
     public Vector2 Position;
     public Vector2 Velocity;
     public float Life;
     public float MaxLife;
     public float Size;
+
+    public void Reset()
+    {
+        Position = Vector2.Zero;
+        Velocity = Vector2.Zero;
+        Life = 0;
+        MaxLife = 0;
+        Size = 0;
+    }
 }

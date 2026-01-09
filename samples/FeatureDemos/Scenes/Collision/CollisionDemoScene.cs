@@ -3,6 +3,7 @@ using Brine2D.Core.Collision;
 using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
+using Brine2D.Rendering.Performance;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
 
@@ -61,8 +62,9 @@ public class CollisionDemoScene : DemoSceneBase
         ISceneManager sceneManager,
         IGameContext gameContext,
         CollisionSystem collisionSystem,
-        ILogger<CollisionDemoScene> logger)
-        : base(input, sceneManager, gameContext, logger, world: null)
+        ILogger<CollisionDemoScene> logger,
+        PerformanceOverlay? perfOverlay = null)
+        : base(input, sceneManager, gameContext, logger, renderer, world: null, perfOverlay)
     {
         _renderer = renderer;
         _collisionSystem = collisionSystem;
@@ -155,6 +157,8 @@ public class CollisionDemoScene : DemoSceneBase
 
     protected override void OnUpdate(GameTime gameTime)
     {
+        HandlePerformanceHotkeys();
+
         // Check for return to menu
         if (CheckReturnToMenu()) return;
         
@@ -439,6 +443,8 @@ public class CollisionDemoScene : DemoSceneBase
         _renderer.DrawText($"Colliders: {(_showColliders ? "ON" : "OFF")} (F1)", 10, 60, Color.Gray);
         _renderer.DrawText($"Velocity: {(_showVelocity ? "ON" : "OFF")} (F2)", 10, 85, Color.Gray);
         _renderer.DrawText("WASD: Move | R: Kick Ball | SPACE: Reset | ESC: Menu", 10, 680, Color.Gray);
+
+        RenderPerformanceOverlay();
     }
 
     private void DrawArrow(Vector2 start, Vector2 end, Color color)

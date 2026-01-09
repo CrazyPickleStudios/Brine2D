@@ -1,9 +1,11 @@
 using System.Numerics;
 using Brine2D.Core;
+using Brine2D.Core.Pooling;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Systems;
 using Brine2D.Rendering;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Brine2D.Rendering.ECS;
 
@@ -18,10 +20,16 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
 
     private readonly IEntityWorld _world;
     private readonly Random _random = new();
+    private readonly ObjectPool<Particle> _particlePool;
 
-    public ParticleSystem(IEntityWorld world)
+    public ParticleSystem(
+        IEntityWorld world, 
+        ObjectPoolProvider poolProvider)
     {
         _world = world;
+        
+        // Create particle pool
+        _particlePool = poolProvider.Create(new PoolableObjectPolicy<Particle>());
     }
 
     public void Update(GameTime gameTime)
@@ -54,12 +62,12 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
         for (int i = emitter.Particles.Count - 1; i >= 0; i--)
         {
             var particle = emitter.Particles[i];
-
-            // Update lifetime
             particle.Life -= deltaTime;
 
             if (particle.Life <= 0)
             {
+                // Return to pool instead of GC
+                _particlePool.Return(particle);
                 emitter.Particles.RemoveAt(i);
                 continue;
             }
@@ -112,14 +120,15 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
             var lifetime = emitter.ParticleLifetime;
             lifetime += ((float)_random.NextDouble() - 0.5f) * emitter.LifetimeVariation * emitter.ParticleLifetime;
 
-            emitter.Particles.Add(new Particle
-            {
-                Position = spawnPos,
-                Velocity = velocity,
-                Life = lifetime,
-                MaxLife = lifetime,
-                Size = emitter.StartSize
-            });
+            // Get from pool instead of new
+            var particle = _particlePool.Get();
+            particle.Position = spawnPos;
+            particle.Velocity = velocity;
+            particle.Life = lifetime;
+            particle.MaxLife = lifetime;
+            particle.Size = emitter.StartSize;
+            
+            emitter.Particles.Add(particle);
         }
     }
 
@@ -131,23 +140,15 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
         {
             var emitter = entity.GetComponent<ParticleEmitterComponent>();
             
-            if (emitter == null || !emitter.IsEnabled)
+            if (emitter is not { IsEnabled: true })
                 continue;
 
-            var particles = emitter.Particles.ToList();
-            
-            foreach (var particle in particles)
+            foreach (var particle in emitter.Particles)
             {
-                // Calculate interpolation factor (0 = start, 1 = end)
                 var t = 1f - (particle.Life / particle.MaxLife);
-
-                // Lerp color
                 var color = LerpColor(emitter.StartColor, emitter.EndColor, t);
-
-                // Lerp size
                 var size = MathHelper.Lerp(emitter.StartSize, emitter.EndSize, t);
-
-                // Draw particle as circle
+                
                 renderer.DrawCircleFilled(particle.Position.X, particle.Position.Y, size, color);
             }
         }

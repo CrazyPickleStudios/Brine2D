@@ -1,25 +1,39 @@
 ﻿using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Rendering;
+using System.Numerics;
 
 namespace Brine2D.Rendering.ECS;
 
 /// <summary>
 /// System that renders all entities with SpriteComponent.
-/// This is the bridge between ECS and Rendering.
+/// Uses batching for optimal performance on both Legacy and GPU renderers.
+/// Includes frustum culling to only render visible sprites.
 /// </summary>
-public class SpriteRenderingSystem: IRenderSystem
+public class SpriteRenderingSystem : IRenderSystem
 {
     public int RenderOrder => 0;
 
     private readonly IEntityWorld _world;
     private readonly ITextureLoader _textureLoader;
+    private readonly ICamera? _camera;
     private readonly Dictionary<string, ITexture> _textureCache = new();
+    private readonly SpriteBatcher _batcher = new();
+    
+    // Track stats for performance monitoring
+    private int _lastRenderedCount = 0;
+    private int _lastTotalCount = 0;
 
-    public SpriteRenderingSystem(IEntityWorld world, ITextureLoader textureLoader)
+    private List<(Entity Entity, SpriteComponent Sprite)> _cachedSprites = new();
+
+    public SpriteRenderingSystem(
+        IEntityWorld world, 
+        ITextureLoader textureLoader,
+        ICamera? camera = null)
     {
         _world = world;
         _textureLoader = textureLoader;
+        _camera = camera;
     }
 
     /// <summary>
@@ -44,7 +58,7 @@ public class SpriteRenderingSystem: IRenderSystem
                     cancellationToken);
 
                 _textureCache[sprite.TexturePath] = texture;
-                sprite.Texture = texture; // Direct assignment to ITexture
+                sprite.Texture = texture;
             }
             else if (sprite.Texture == null && _textureCache.ContainsKey(sprite.TexturePath))
             {
@@ -55,53 +69,116 @@ public class SpriteRenderingSystem: IRenderSystem
     }
 
     /// <summary>
-    /// Renders all entities with SpriteComponent.
+    /// Renders all entities with SpriteComponent using batching.
+    /// Automatically culls off-screen sprites when a camera is present.
     /// </summary>
     public void Render(IRenderer renderer)
     {
-        var sprites = _world.GetEntitiesWithComponent<SpriteComponent>()
-            .Select(e => new { Entity = e, Sprite = e.GetComponent<SpriteComponent>() })
-            .Where(x => x.Sprite != null)
-            .OrderBy(x => x.Sprite!.Layer);
-
-        foreach (var item in sprites)
+        _cachedSprites.Clear();
+        
+        var sprites = _world.GetEntitiesWithComponent<SpriteComponent>();
+        
+        foreach (var entity in sprites)
         {
-            var sprite = item.Sprite!;
-            var transform = item.Entity.GetComponent<TransformComponent>();
-
-            // Use Texture property directly (not TextureHandle)
-            if (sprite.Texture == null || transform == null)
-                continue;
-
-            var position = transform.WorldPosition + sprite.Offset;
-            var scale = transform.Scale * sprite.Scale;
-
-            if (sprite.SourceRect.HasValue)
+            var sprite = entity.GetComponent<SpriteComponent>();
+            if (sprite != null && sprite.Texture != null)
             {
-                var src = sprite.SourceRect.Value;
-                var destWidth = src.Width * scale.X;
-                var destHeight = src.Height * scale.Y;
-
-                var drawX = position.X - destWidth / 2;
-                var drawY = position.Y - destHeight / 2;
-
-                renderer.DrawTexture(
-                    sprite.Texture,
-                    src.X, src.Y, src.Width, src.Height,
-                    drawX, drawY, destWidth, destHeight
-                );
-            }
-            else
-            {
-                var destWidth = sprite.Texture.Width * scale.X;
-                var destHeight = sprite.Texture.Height * scale.Y;
-
-                var drawX = position.X - destWidth / 2;
-                var drawY = position.Y - destHeight / 2;
-
-                renderer.DrawTexture(sprite.Texture, drawX, drawY, destWidth, destHeight);
+                _cachedSprites.Add((entity, sprite));
             }
         }
+        
+        _lastTotalCount = _cachedSprites.Count;
+        int culledCount = 0;
+
+        // Queue all visible sprites to the batcher
+        foreach (var item in _cachedSprites)
+        {
+            var sprite = item.Sprite;
+            var transform = item.Entity.GetComponent<TransformComponent>();
+
+            if (transform == null || !sprite.IsEnabled)
+            {
+                culledCount++;
+                continue;
+            }
+
+            // Frustum culling (if camera exists)
+            if (_camera != null && !IsVisible(transform.WorldPosition, sprite, _camera))
+            {
+                culledCount++;
+                continue;
+            }
+
+            // Calculate final scale (transform scale * sprite scale)
+            var finalScale = transform.Scale * sprite.Scale;
+            
+            // Apply flip by negating scale
+            if (sprite.FlipX)
+                finalScale.X *= -1;
+            if (sprite.FlipY)
+                finalScale.Y *= -1;
+
+            // Add to batch
+            _batcher.Draw(
+                texture: sprite.Texture!,
+                position: transform.WorldPosition + sprite.Offset,
+                sourceRect: sprite.SourceRect,
+                scale: finalScale,
+                rotation: transform.Rotation,
+                origin: new Vector2(0.5f, 0.5f), // Center origin
+                tint: sprite.Tint,
+                layer: sprite.Layer
+            );
+        }
+        
+        _lastRenderedCount = _lastTotalCount - culledCount;
+
+        // Flush batch (sorts by layer/texture and renders)
+        _batcher.Flush(renderer, _camera);
+    }
+
+    /// <summary>
+    /// Checks if a sprite is visible within the camera frustum.
+    /// Uses simple AABB (Axis-Aligned Bounding Box) culling.
+    /// </summary>
+    private bool IsVisible(Vector2 position, SpriteComponent sprite, ICamera camera)
+    {
+        // Calculate sprite bounds in world space
+        var textureWidth = sprite.SourceRect?.Width ?? sprite.Texture?.Width ?? 0;
+        var textureHeight = sprite.SourceRect?.Height ?? sprite.Texture?.Height ?? 0;
+        
+        var halfWidth = textureWidth * sprite.Scale / 2f;
+        var halfHeight = textureHeight * sprite.Scale / 2f;
+
+        // Calculate camera frustum bounds in world space
+        // Camera position is CENTER of the view, not top-left!
+        var cameraLeft = camera.Position.X - (camera.ViewportWidth / 2f / camera.Zoom);
+        var cameraRight = camera.Position.X + (camera.ViewportWidth / 2f / camera.Zoom);
+        var cameraTop = camera.Position.Y - (camera.ViewportHeight / 2f / camera.Zoom);
+        var cameraBottom = camera.Position.Y + (camera.ViewportHeight / 2f / camera.Zoom);
+
+        // AABB overlap test
+        return position.X + halfWidth >= cameraLeft &&
+               position.X - halfWidth <= cameraRight &&
+               position.Y + halfHeight >= cameraTop &&
+               position.Y - halfHeight <= cameraBottom;
+    }
+
+    /// <summary>
+    /// Gets batching statistics for performance monitoring.
+    /// Returns (rendered sprites, batch/draw call count).
+    /// </summary>
+    public (int RenderedCount, int DrawCalls) GetBatchStats()
+    {
+        return (_lastRenderedCount, _batcher.EstimatedDrawCalls);
+    }
+    
+    /// <summary>
+    /// Gets the total sprite count (before culling).
+    /// </summary>
+    public int GetTotalSpriteCount()
+    {
+        return _lastTotalCount;
     }
 
     /// <summary>

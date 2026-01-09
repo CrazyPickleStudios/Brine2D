@@ -1,6 +1,8 @@
 ﻿using Brine2D.Audio.ECS;
 using Brine2D.Audio.SDL;
+using Brine2D.Core;
 using Brine2D.Core.Collision;
+using Brine2D.Core.Performance;
 using Brine2D.Core.Tilemap;
 using Brine2D.ECS;
 using Brine2D.ECS.Systems;
@@ -11,6 +13,8 @@ using Brine2D.Input;
 using Brine2D.Input.SDL;
 using Brine2D.Rendering;
 using Brine2D.Rendering.ECS;
+using Brine2D.Rendering.ECS.Performance;
+using Brine2D.Rendering.Performance;
 using Brine2D.Rendering.SDL;
 using Brine2D.UI;
 using Microsoft.Extensions.Configuration;
@@ -19,7 +23,9 @@ using FeatureDemos.Scenes.ECS;
 using FeatureDemos.Scenes.Transitions;
 using FeatureDemos.Scenes.Advanced;
 using FeatureDemos.Scenes.Collision;
+using FeatureDemos.Scenes.Performance;
 using FeatureDemos.Scenes.UI;
+using Microsoft.Extensions.DependencyInjection;
 
 // Create the game application builder
 var builder = GameApplication.CreateBuilder(args);
@@ -37,7 +43,7 @@ builder.Services.AddSDL3Rendering(options =>
     options.VSync = true;
 });
 
-// ECS services
+// ECS services (includes automatic object pooling!)
 builder.Services.AddObjectECS();
 builder.Services.AddECSRendering(); 
 builder.Services.AddECSInput();
@@ -57,7 +63,7 @@ builder.Services.ConfigureSystemPipelines(pipelines =>
     // Render systems
     pipelines.AddSystem<SpriteRenderingSystem>();
     pipelines.AddSystem<DebugRenderer>();
-    pipelines.AddSystem<ParticleSystem>();
+    pipelines.AddSystem<ParticleSystem>();  // Automatically uses pooling internally!
 });
 
 // Other services
@@ -86,7 +92,18 @@ builder.Services.AddScene<UIDemoScene>();
 // Advanced Demos
 builder.Services.AddScene<ManualControlScene>();
 
+builder.Services.AddScene<SpriteBenchmarkScene>();
+
 builder.Services.AddScene<MainMenuScene>();
+
+// Add performance monitoring
+builder.Services.AddPerformanceMonitoring(); // Core tracking
+
+// Add performance overlay (optional, for debugging)
+builder.Services.AddPerformanceOverlay(); // Rendering overlay
+
+// If using ECS rendering, add stats collector
+builder.Services.AddSingleton<ISceneLifecycleHook, RenderingStatsCollector>();
 
 // Build and run
 var game = builder.Build();

@@ -11,4 +11,10 @@
     <ProjectReference Include="..\..\src\Brine2D.Desktop\Brine2D.Desktop.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+	  <None Update="Assets\**\*">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+  </ItemGroup>
+
 </Project>

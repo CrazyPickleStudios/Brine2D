@@ -56,20 +56,21 @@ public static class SDL3RenderingServiceCollectionExtensions
 
         services.TryAddSingleton<ITextureLoader>(provider =>
         {
-            var renderer = provider.GetRequiredService<IRenderer>();
-
-            var rendererHandle = renderer switch
-            {
-                SDL3Renderer legacyRenderer => legacyRenderer.RendererHandle,
-                SDL3GPURenderer gpuRenderer => throw new NotSupportedException(
-                    "Texture loading not yet supported for GPU renderer"),
-                _ => throw new NotSupportedException($"Unknown renderer type: {renderer.GetType()}")
-            };
-
             return new SDL3TextureLoader(
                 provider.GetRequiredService<ILogger<SDL3TextureLoader>>(),
                 provider.GetRequiredService<ILoggerFactory>(),
-                rendererHandle);
+                () =>
+                {
+                    // Get renderer FRESH each time (inside the lambda)
+                    var renderer = provider.GetRequiredService<IRenderer>();
+                    return renderer switch
+                    {
+                        SDL3Renderer legacyRenderer => legacyRenderer.RendererHandle,
+                        SDL3GPURenderer gpuRenderer => throw new NotSupportedException(
+                            "Texture loading not yet supported for GPU renderer"),
+                        _ => throw new NotSupportedException($"Unknown renderer type: {renderer.GetType()}")
+                    };
+                });
         });
 
         return services;

@@ -38,7 +38,7 @@ public class UIDemoScene : DemoSceneBase
         UICanvas uiCanvas,
         InputLayerManager inputLayerManager,
         ILogger<UIDemoScene> logger)
-        : base(input, sceneManager, gameContext, logger, world: null)
+        : base(input, sceneManager, gameContext, logger, renderer, world: null)
     {
         _renderer = renderer;
         _uiCanvas = uiCanvas;

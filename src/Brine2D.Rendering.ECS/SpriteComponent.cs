@@ -8,7 +8,7 @@ namespace Brine2D.Rendering.ECS;
 /// <summary>
 /// Component for sprite rendering data.
 /// Contains all information needed to render a sprite.
-/// Rendering logic is handled by SpriteRenderingSystem.
+/// Rendering logic is handled by SpriteRenderingSystem with batching.
 /// </summary>
 public class SpriteComponent : Component
 {
@@ -24,6 +24,7 @@ public class SpriteComponent : Component
 
     /// <summary>
     /// Source rectangle in the texture (null = entire texture).
+    /// Use this for sprite sheets and texture atlases.
     /// </summary>
     public Rectangle? SourceRect { get; set; }
 
@@ -54,6 +55,7 @@ public class SpriteComponent : Component
 
     /// <summary>
     /// Rendering layer/order (higher = drawn on top).
+    /// Used by the batching system to sort sprites.
     /// </summary>
     public int Layer { get; set; } = 0;
 }
