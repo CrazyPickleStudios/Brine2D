@@ -256,9 +256,8 @@ builder.Services.AddPerformanceMonitoring(options =>
 - Per-system profiling
 
 **Hotkeys (in scenes):**
-- `F3` - Toggle performance overlay
-- `F4` - Toggle frame time graph
-- `F5` - Toggle memory stats
+- `F1` - Toggle performance overlay visibility
+- `F3` - Toggle detailed stats (includes frame time graph and memory)
 
 ### Zero-Allocation Systems
 
