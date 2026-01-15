@@ -44,8 +44,7 @@ public class RenderingOptions
     /// <summary>
     /// Gets or sets the graphics backend to use.
     /// </summary>
-    /// TODO: Need to switch back to GPU once stable.
-    public GraphicsBackend Backend { get; set; } = GraphicsBackend.LegacyRenderer;
+    public GraphicsBackend Backend { get; set; } = GraphicsBackend.GPU;
 
     /// <summary>
     /// Gets or sets the preferred GPU driver (Vulkan, Metal, D3D11, D3D12).

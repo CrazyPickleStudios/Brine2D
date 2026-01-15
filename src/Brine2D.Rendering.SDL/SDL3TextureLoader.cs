@@ -4,29 +4,30 @@ using System.Runtime.InteropServices;
 namespace Brine2D.Rendering.SDL;
 
 /// <summary>
-/// SDL3 implementation of texture loader using SDL3_image.
+/// SDL3 texture loader that works with any renderer through ITextureContext abstraction.
+/// Modern, renderer-agnostic design following ASP.NET patterns.
 /// </summary>
 public class SDL3TextureLoader : ITextureLoader
 {
     private readonly ILogger<SDL3TextureLoader> _logger;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly Func<nint> _getRendererHandle; // Changed to lazy getter
-    private readonly List<SDL3Texture> _loadedTextures = new();
+    private readonly ITextureContext _textureContext;
+    private readonly List<ITexture> _loadedTextures = new();
     private bool _disposed;
 
     public SDL3TextureLoader(
         ILogger<SDL3TextureLoader> logger,
-        ILoggerFactory loggerFactory,
-        Func<nint> getRendererHandle) // Changed parameter
+        ITextureContext textureContext)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _getRendererHandle = getRendererHandle ?? throw new ArgumentNullException(nameof(getRendererHandle));
+        _textureContext = textureContext ?? throw new ArgumentNullException(nameof(textureContext));
         
-        _logger.LogInformation("SDL3_image texture loader ready (PNG, JPG, BMP support)");
+        _logger.LogInformation("SDL3 texture loader initialized");
     }
 
-    public async Task<ITexture> LoadTextureAsync(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear, CancellationToken cancellationToken = default)
+    public async Task<ITexture> LoadTextureAsync(
+        string path, 
+        TextureScaleMode scaleMode = TextureScaleMode.Linear, 
+        CancellationToken cancellationToken = default)
     {
         return await Task.Run(() => LoadTexture(path, scaleMode), cancellationToken);
     }
@@ -41,14 +42,7 @@ public class SDL3TextureLoader : ITextureLoader
 
         _logger.LogInformation("Loading texture: {Path} (ScaleMode: {ScaleMode})", path, scaleMode);
 
-        // Get renderer handle lazily (after initialization)
-        var renderer = _getRendererHandle();
-        if (renderer == nint.Zero)
-        {
-            throw new InvalidOperationException(
-                "SDL renderer is not initialized. Ensure the game has started (RunAsync called) before loading textures.");
-        }
-
+        // Load image surface using SDL_image
         var surface = SDL3.Image.Load(path);
         if (surface == IntPtr.Zero)
         {
@@ -69,26 +63,13 @@ public class SDL3TextureLoader : ITextureLoader
                 throw new InvalidOperationException($"Invalid surface dimensions: {width}x{height}");
             }
 
-            var texture = SDL3.SDL.CreateTextureFromSurface(renderer, surface);
-            if (texture == IntPtr.Zero)
-            {
-                var error = SDL3.SDL.GetError();
-                _logger.LogError("Failed to create texture from surface {Path}: {Error}", path, error);
-                throw new InvalidOperationException($"Failed to create texture: {error}");
-            }
-
-            var sdlTexture = new SDL3Texture(
-                path,
-                texture,
-                width,
-                height,
-                scaleMode,
-                _loggerFactory.CreateLogger<SDL3Texture>());
-
-            _loadedTextures.Add(sdlTexture);
+            // Use the context to create texture - renderer handles implementation details!
+            var texture = _textureContext.CreateTextureFromSurface(surface, width, height, scaleMode);
+            
+            _loadedTextures.Add(texture);
             _logger.LogInformation("Texture loaded: {Path} ({Width}x{Height})", path, width, height);
 
-            return sdlTexture;
+            return texture;
         }
         finally
         {
@@ -103,48 +84,22 @@ public class SDL3TextureLoader : ITextureLoader
 
         _logger.LogDebug("Creating blank texture: {Width}x{Height}", width, height);
 
-        // Get renderer handle lazily
-        var renderer = _getRendererHandle();
-        if (renderer == nint.Zero)
-        {
-            throw new InvalidOperationException(
-                "SDL renderer is not initialized. Ensure the game has started before creating textures.");
-        }
-
-        var texture = SDL3.SDL.CreateTexture(
-            renderer,
-            SDL3.SDL.PixelFormat.RGBA8888,
-            SDL3.SDL.TextureAccess.Target,
-            width,
-            height);
-
-        if (texture == IntPtr.Zero)
-        {
-            var error = SDL3.SDL.GetError();
-            _logger.LogError("Failed to create texture: {Error}", error);
-            throw new InvalidOperationException($"Failed to create texture: {error}");
-        }
-
-        var sdlTexture = new SDL3Texture(
-            $"blank_{width}x{height}",
-            texture,
-            width,
-            height,
-            scaleMode,
-            _loggerFactory.CreateLogger<SDL3Texture>());
-
-        _loadedTextures.Add(sdlTexture);
-        return sdlTexture;
+        var texture = _textureContext.CreateBlankTexture(width, height, scaleMode);
+        _loadedTextures.Add(texture);
+        
+        return texture;
     }
 
     public void UnloadTexture(ITexture texture)
     {
-        if (texture is SDL3Texture sdlTexture)
-        {
-            _loadedTextures.Remove(sdlTexture);
-            sdlTexture.Dispose();
-            _logger.LogDebug("Texture unloaded: {Source}", texture.Source);
-        }
+        if (texture == null)
+            return;
+
+        _textureContext.ReleaseTexture(texture);
+        _loadedTextures.Remove(texture);
+        texture.Dispose();
+        
+        _logger.LogDebug("Texture unloaded: {Source}", texture.Source);
     }
 
     public void Dispose()
@@ -155,11 +110,11 @@ public class SDL3TextureLoader : ITextureLoader
 
         foreach (var texture in _loadedTextures.ToList())
         {
+            _textureContext.ReleaseTexture(texture);
             texture.Dispose();
         }
 
         _loadedTextures.Clear();
-
         _disposed = true;
     }
 }

@@ -77,7 +77,6 @@ public class ManualControlScene : DemoSceneBase
     protected override void OnRender(GameTime gameTime)
     {
         // Manually control frame management
-        _renderer.Clear(_renderer.ClearColor);
         _renderer.BeginFrame();
         
         // Manually control rendering order

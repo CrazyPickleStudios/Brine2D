@@ -1,6 +1,8 @@
 ﻿using Brine2D.Core;
+using Brine2D.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Brine2D.Engine;
 
@@ -18,7 +20,17 @@ public static class EngineServiceCollectionExtensions
 
         // Register core engine services
         services.TryAddSingleton<IGameEngine, GameEngine>();
-        services.TryAddSingleton<IGameLoop, GameLoop>();
+        
+        services.TryAddSingleton<IGameLoop>(sp => new GameLoop(
+            sp.GetRequiredService<ILogger<GameLoop>>(),
+            sp.GetRequiredService<IGameContext>(),
+            sp.GetRequiredService<ISceneManager>(),
+            sp.GetRequiredService<IInputService>(),
+            sp.GetRequiredService<IApplicationLifetime>(),
+            sp.GetService<InputLayerManager>(),
+            sp.GetService<IEventPump>()
+        ));
+        
         services.TryAddSingleton<IGameContext, GameContext>();
         services.TryAddSingleton<ISceneManager, SceneManager>();
 

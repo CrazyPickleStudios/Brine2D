@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Logging;
 
-namespace Brine2D.ECS;
+namespace Brine2D.Core;
 
 /// <summary>
 /// Global event bus for publish/subscribe pattern.
-/// Allows decoupled communication between systems and entities.
+/// Allows decoupled communication between systems and components.
+/// Follows ASP.NET's event notification patterns.
 /// </summary>
 public class EventBus
 {
@@ -55,7 +56,7 @@ public class EventBus
 
         if (_subscribers.TryGetValue(eventType, out var handlers))
         {
-            _logger?.LogDebug("Publishing event: {EventType} to {Count} subscribers", eventType.Name, handlers.Count);
+            _logger?.LogTrace("Publishing event: {EventType} to {Count} subscribers", eventType.Name, handlers.Count);
 
             foreach (var handler in handlers.ToList())
             {

@@ -269,7 +269,6 @@ namespace Brine2D.Engine
             {
                 if (_renderer != null)
                 {
-                    _renderer.Clear(_renderer.ClearColor);
                     _renderer.BeginFrame();
                 }
             }

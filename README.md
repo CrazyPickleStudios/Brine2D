@@ -12,6 +12,7 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 - **Performance Monitoring** - Built-in FPS counter, frame time graphs, and rendering statistics
 - **Object Pooling** - Zero-allocation systems using `ArrayPool<T>` and custom object pools
 - **Sprite Batching** - Automatic batching with layer sorting and frustum culling
+- **Event System** - Type-safe EventBus for decoupled component communication
 - **Input System** - Keyboard, mouse, gamepad with polling and events
 - **Sprite Rendering** - Hardware-accelerated with sprite sheets and animations
 - **Animation System** - Frame-based with multiple clips and events
@@ -24,7 +25,7 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 - **Configuration** - JSON-based settings with hot reload support
 - **Dependency Injection** - ASP.NET Core-style DI container
 - **Logging** - Structured logging with Microsoft.Extensions.Logging
-- **Multiple Backends** - SDL3 GPU (alpha) and Legacy renderer
+- **Multiple Backends** - SDL3 GPU (modern, high-performance) and Legacy renderer (compatibility)
 
 ## Why Brine2D?
 
@@ -43,6 +44,13 @@ builder.Services.AddSDL3Rendering(options =>
     options.WindowTitle = "My Game";
     options.WindowWidth = 1280;
     options.WindowHeight = 720;
+    
+    // Choose your backend
+    options.Backend = GraphicsBackend.GPU;              // Modern SDL3 GPU API (recommended)
+    // options.Backend = GraphicsBackend.LegacyRenderer; // SDL_Renderer API (fallback)
+    
+    options.PreferredGPUDriver = "vulkan"; // or "d3d12", "metal"
+    options.VSync = true;
 });
 
 // Configure ECS systems like middleware
@@ -87,7 +95,7 @@ Create a new .NET 10 console project and add Brine2D:
 ~~~sh
 dotnet new console -n MyGame
 cd MyGame
-dotnet add package Brine2D.Desktop --version 0.5.0-beta
+dotnet add package Brine2D.Desktop
 ~~~
 
 That's it! `Brine2D.Desktop` includes everything you need to start building games.
@@ -198,7 +206,7 @@ dotnet run
 
 ### Beta Release Notice
 
-**⚠️ This is a beta release (0.5.0-beta)**
+**⚠️ This is a beta release (0.7.0-beta)**
 
 What works:
 - ✅ **Entity Component System (ECS)**
@@ -209,10 +217,13 @@ What works:
 - ✅ **Sprite batching with frustum culling**
 - ✅ **Scene transitions and loading screens**
 - ✅ **Lifecycle hooks with opt-out for power users**
+- ✅ **EventBus for component communication**
 - ✅ **Prefabs and serialization**
 - ✅ **Transform hierarchy (parent/child)**
 - ✅ **Utility components (Timer, Lifetime, Tween)**
-- ✅ Legacy rendering (sprites, primitives, text, lines)
+- ✅ **GPU rendering** (SDL3 GPU API with Vulkan/D3D12/Metal)
+- ✅ **Legacy rendering** (SDL_Renderer API for compatibility)
+- ✅ Sprites, primitives, text, lines
 - ✅ Input system (keyboard, mouse, gamepad)
 - ✅ Audio system
 - ✅ Animation system
@@ -222,8 +233,11 @@ What works:
 - ✅ Camera system with follow behavior
 - ✅ Particle system with pooling
 
-What doesn't work yet:
-- ❌ GPU renderer (use `Backend = "LegacyRenderer"` in config)
+What's coming next:
+- 🔄 Texture atlasing for advanced batching
+- 🔄 Post-processing effects
+- 🔄 Multi-threaded ECS systems
+- 🔄 Enhanced particle system (rotation, trails)
 
 **Expect breaking changes before 1.0!**
 
@@ -633,6 +647,31 @@ tween.Duration = 1f;
 tween.Easing = EasingType.EaseInOutQuad;
 ~~~
 
+### Event System
+
+Decouple components with the type-safe EventBus:
+
+~~~csharp
+using Brine2D.SDL.Common;
+using Brine2D.SDL.Common.Events;
+
+// Subscribe to events
+_eventBus.Subscribe<PlayerDeathEvent>(OnPlayerDeath);
+_eventBus.Subscribe<WindowResizedEvent>(OnWindowResized);
+
+// Publish events
+_eventBus.Publish(new PlayerDeathEvent { PlayerName = "Player1" });
+
+// Unsubscribe
+_eventBus.Unsubscribe<PlayerDeathEvent>(OnPlayerDeath);
+~~~
+
+**Built-in Events:**
+- `WindowResizedEvent` - Window size changes
+- `WindowMinimizedEvent`, `WindowMaximizedEvent`
+- `WindowFocusGainedEvent`, `WindowFocusLostEvent`
+- Custom events - Create your own event types
+
 ### Transform Hierarchy (Parent/Child)
 
 ~~~csharp
@@ -836,7 +875,8 @@ Create a `gamesettings.json` file in your project:
     "WindowHeight": 720,
     "VSync": true,
     "Fullscreen": false,
-    "Backend": "LegacyRenderer"
+    "Backend": "GPU",
+    "PreferredGPUDriver": "vulkan"
   },
   "Performance": {
     "EnableOverlay": true,
@@ -846,6 +886,15 @@ Create a `gamesettings.json` file in your project:
   }
 }
 ~~~
+
+**Backend Options:**
+- `"GPU"` - Modern SDL3 GPU API (Vulkan, D3D12, Metal)
+- `"LegacyRenderer"` - SDL_Renderer API (older hardware, compatibility)
+
+**GPU Drivers:**
+- `"vulkan"` - Windows, Linux (recommended)
+- `"d3d12"` - Windows (native DirectX)
+- `"metal"` - macOS (native Metal)
 
 ## Architecture
 
@@ -917,7 +966,7 @@ Then reference the projects directly in your game:
 
 Check out the `samples/` directory for complete working examples:
 
-### FeatureDemos (0.5.0)
+### FeatureDemos
 
 Interactive demo menu showcasing all major features:
 
@@ -951,38 +1000,30 @@ dotnet run
 
 ### Roadmap
 
-**0.4.0-alpha** ✅ **RELEASED**
-- ✅ Entity Component System (ECS)
-- ✅ ASP.NET-style system pipelines
-- ✅ Prefabs and serialization
-- ✅ Transform hierarchy
-- ✅ Utility components (Timer, Lifetime, Tween)
-- ✅ Event system (EventBus, component lifecycle)
-- ✅ Working ECS samples
-
 **0.5.0-beta** ✅ **RELEASED**
 - ✅ Advanced ECS queries and filters
-- ✅ Spatial queries (WithinRadius, WithinBounds)
-- ✅ Query builder pattern with sorting and pagination
-- ✅ Cached queries for performance
-- ✅ Scene transitions (FadeTransition)
-- ✅ Loading screens
-- ✅ Lifecycle hooks with opt-out for power users
-- ✅ Automatic system execution
+- ✅ Scene transitions and loading screens
+- ✅ Lifecycle hooks with opt-out
 - ✅ Performance monitoring and profiling
-- ✅ Object pooling (ArrayPool, custom pools)
-- ✅ Sprite batching with frustum culling
-- ✅ Camera follow system
-- ✅ Particle system with pooling
-- ✅ 7 polished interactive demos
-- ✅ Complete UI framework (dialogs, tabs, tooltips, scroll views)
-- ✅ Collision detection with physics response
-- ✅ Bug fixes and stability improvements
+- ✅ Object pooling and sprite batching
+- ✅ Camera follow and particle systems
+- ✅ Complete UI framework
 
-**0.6.0-beta** (Next Release)
-- Complete GPU renderer with SDL3
-- Advanced batching with texture atlases
-- Post-processing effects
+**0.6.0-beta** ✅ **RELEASED**
+- ✅ Bug fixes and stability improvements
+- ✅ Font atlas system for improved text rendering
+- ✅ Enhanced SDL3 integration
+
+**0.7.0-beta** ✅ **RELEASED** (Current)
+- ✅ SDL3 GPU renderer (Vulkan, D3D12, Metal)
+- ✅ EventBus integration for decoupled communication
+- ✅ Window event handling (resize, minimize, etc.)
+- ✅ Improved renderer architecture
+- ✅ Both GPU and Legacy renderer backends stable
+
+**0.8.0-beta** (Next Release)
+- Texture atlasing for advanced batching
+- Post-processing effects (bloom, blur, etc.)
 - Enhanced particle system (textures, rotation, trails)
 - Spatial audio
 - Multi-threaded ECS systems
@@ -994,7 +1035,7 @@ dotnet run
 - Full platform testing (Windows, Linux, macOS)
 - Advanced ECS optimizations
 - Comprehensive sample games
-- Migration guides from alpha/beta
+- Migration guides from beta
 
 See the full [roadmap](https://github.com/CrazyPickleStudios/Brine2D/milestones).
 

@@ -27,7 +27,7 @@ public class SDL3Shader : IShader
     /// <summary>
     /// Compiles the shader from bytecode.
     /// </summary>
-    public bool Compile(nint device, byte[] bytecode, string entryPoint)
+    public bool Compile(nint device, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format = SDL3.SDL.GPUShaderFormat.SPIRV)
     {
         if (IsCompiled)
         {
@@ -39,15 +39,18 @@ public class SDL3Shader : IShader
         {
             Code = Marshal.UnsafeAddrOfPinnedArrayElement(bytecode, 0),
             CodeSize = (nuint)bytecode.Length,
-            Entrypoint = SDL3.SDL.StringToPointer(entryPoint),
-            Format = SDL3.SDL.GPUShaderFormat.SPIRV,
+            Entrypoint = entryPoint,
+            Format = format,
             Stage = Stage == ShaderStage.Vertex 
                 ? SDL3.SDL.GPUShaderStage.Vertex 
                 : SDL3.SDL.GPUShaderStage.Fragment,
-            NumSamplers = 0,
+            
+            // Fragment shader: 1 texture sampler (space2)
+            // Vertex shader: 1 uniform buffer (space1)
+            NumSamplers = Stage == ShaderStage.Fragment ? 1u : 0u,
             NumStorageTextures = 0,
             NumStorageBuffers = 0,
-            NumUniformBuffers = 1 // For projection/view matrices
+            NumUniformBuffers = Stage == ShaderStage.Vertex ? 1u : 0u
         };
 
         _shaderHandle = SDL3.SDL.CreateGPUShader(device, ref createInfo);
@@ -60,7 +63,7 @@ public class SDL3Shader : IShader
         }
 
         IsCompiled = true;
-        _logger.LogDebug("Compiled shader: {Name}", Name);
+        _logger.LogDebug("Compiled shader: {Name} (format: {Format})", Name, format);
         return true;
     }
 

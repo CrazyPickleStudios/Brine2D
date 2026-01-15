@@ -30,12 +30,7 @@ public interface IRenderer : IDisposable
     /// Initializes the renderer.
     /// </summary>
     Task InitializeAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Clears the screen with the specified color.
-    /// </summary>
-    void Clear(Color color);
-
+    
     /// <summary>
     /// Begins a new frame. Call this before drawing.
     /// </summary>

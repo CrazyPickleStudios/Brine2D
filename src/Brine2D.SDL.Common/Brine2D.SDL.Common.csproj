@@ -4,7 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>0.6.0-beta</Version>
+		<Version>0.7.0-beta</Version>
 
 		<PackageId>Brine2D.SDL.Common</PackageId>
 		<Title>Brine2D SDL Common Utilities</Title>
@@ -19,7 +19,19 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="SDL3-CS" Version="3.5.0-preview.20260112-122507" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Brine2D.Core\Brine2D.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="Brine2D.Input.SDL" />
 	</ItemGroup>
 
 </Project>

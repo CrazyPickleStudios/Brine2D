@@ -14,11 +14,6 @@ public interface IInputService
     void Update();
     
     /// <summary>
-    /// Gets whether a quit/exit event has been requested (e.g., window close button).
-    /// </summary>
-    bool IsQuitRequested { get; }
-    
-    /// <summary>
     /// Returns true if the key is currently pressed.
     /// </summary>
     bool IsKeyDown(Keys key);

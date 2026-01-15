@@ -1,23 +1,30 @@
+using Brine2D.Core;
+using Brine2D.Core.Events;
 using Brine2D.Input;
-using System.Text;
+using Brine2D.SDL.Common;
+using Brine2D.SDL.Common.Events;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
-using Brine2D.SDL.Common;
+using System.Text;
 
 namespace Brine2D.Input.SDL;
 
 /// <summary>
 /// SDL3 implementation of the input service.
+/// Subscribes to internal SDL events and maintains input state.
+/// Publishes high-level, framework-agnostic input events for user code.
 /// </summary>
-public class SDL3InputService : IInputService
+public class SDL3InputService : IInputService, IDisposable
 {
     private readonly ILogger<SDL3InputService> _logger;
+    private readonly EventBus _publicEventBus;
+    private readonly EventBus _internalEventBus;
     private readonly ISDL3WindowProvider? _windowProvider;
 
     private readonly HashSet<Keys> _keysDown = new();
     private readonly HashSet<Keys> _keysPressed = new();
     private readonly HashSet<Keys> _keysReleased = new();
-    private readonly HashSet<Keys> _keysPressedThisFrame = new(); // Includes repeats for text input
+    private readonly HashSet<Keys> _keysPressedThisFrame = new();
 
     private Vector2 _mousePosition;
     private Vector2 _mouseDelta;
@@ -35,21 +42,41 @@ public class SDL3InputService : IInputService
     private readonly StringBuilder _textInputBuffer = new();
     private bool _backspacePressedThisFrame;
     private bool _returnPressedThisFrame;
-
-    // Add field for delete tracking
     private bool _deletePressedThisFrame;
 
     public Vector2 MousePosition => _mousePosition;
     public Vector2 MouseDelta => _mouseDelta;
     public float ScrollWheelDelta => _scrollWheelDelta;
-    public bool IsQuitRequested { get; private set; }
     public bool IsTextInputActive => _textInputActive;
 
-    public SDL3InputService(ILogger<SDL3InputService> logger, ISDL3WindowProvider? windowProvider = null)
+    public SDL3InputService(
+        ILogger<SDL3InputService> logger,
+        EventBus publicEventBus,
+        EventBus internalEventBus,
+        ISDL3WindowProvider? windowProvider = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _publicEventBus = publicEventBus ?? throw new ArgumentNullException(nameof(publicEventBus));
+        _internalEventBus = internalEventBus ?? throw new ArgumentNullException(nameof(internalEventBus));
         _windowProvider = windowProvider;
+
+        SubscribeToInternalEvents();
         EnumerateGamepads();
+    }
+
+    private void SubscribeToInternalEvents()
+    {
+        _internalEventBus.Subscribe<SDL3KeyDownEvent>(OnKeyDown);
+        _internalEventBus.Subscribe<SDL3KeyUpEvent>(OnKeyUp);
+        _internalEventBus.Subscribe<SDL3MouseButtonDownEvent>(OnMouseButtonDown);
+        _internalEventBus.Subscribe<SDL3MouseButtonUpEvent>(OnMouseButtonUp);
+        _internalEventBus.Subscribe<SDL3MouseWheelEvent>(OnMouseWheel);
+        _internalEventBus.Subscribe<SDL3MouseMotionEvent>(OnMouseMotion);
+        _internalEventBus.Subscribe<SDL3TextInputEvent>(OnTextInput);
+        _internalEventBus.Subscribe<SDL3GamepadButtonDownEvent>(OnGamepadButtonDown);
+        _internalEventBus.Subscribe<SDL3GamepadButtonUpEvent>(OnGamepadButtonUp);
+        _internalEventBus.Subscribe<SDL3GamepadAddedEvent>(OnGamepadAdded);
+        _internalEventBus.Subscribe<SDL3GamepadRemovedEvent>(OnGamepadRemoved);
     }
 
     private void EnumerateGamepads()
@@ -87,9 +114,6 @@ public class SDL3InputService : IInputService
         }
     }
 
-    /// <summary>
-    /// Called at the beginning of each frame to poll SDL events and update input state.
-    /// </summary>
     public void Update()
     {
         // Clear per-frame state
@@ -110,78 +134,30 @@ public class SDL3InputService : IInputService
         foreach (var set in _gamepadButtonsReleased.Values)
             set.Clear();
 
-        // Poll all SDL events
-        while (SDL3.SDL.PollEvent(out var evt))
-        {
-            ProcessEvent(evt);
-        }
-
-        // Update mouse position
+        // Update mouse position directly (not event-based for polling queries)
         SDL3.SDL.GetMouseState(out float mx, out float my);
         var newMousePos = new Vector2(mx, my);
         _mouseDelta = newMousePos - _mousePosition;
         _mousePosition = newMousePos;
     }
 
-    private void ProcessEvent(SDL3.SDL.Event evt)
-    {
-        switch ((SDL3.SDL.EventType)evt.Type)
-        {
-            case SDL3.SDL.EventType.Quit:
-                IsQuitRequested = true;
-                _logger.LogInformation("Quit event received");
-                break;
-            case SDL3.SDL.EventType.KeyDown:
-                HandleKeyDown(evt.Key);
-                break;
-            case SDL3.SDL.EventType.KeyUp:
-                HandleKeyUp(evt.Key);
-                break;
-            case SDL3.SDL.EventType.MouseButtonDown:
-                HandleMouseButtonDown(evt.Button);
-                break;
-            case SDL3.SDL.EventType.MouseButtonUp:
-                HandleMouseButtonUp(evt.Button);
-                break;
-            case SDL3.SDL.EventType.MouseWheel:
-                HandleMouseWheel(evt.Wheel);
-                break;
-            case SDL3.SDL.EventType.GamepadButtonDown:
-                HandleGamepadButtonDown(evt.GButton);
-                break;
-            case SDL3.SDL.EventType.GamepadButtonUp:
-                HandleGamepadButtonUp(evt.GButton);
-                break;
-            case SDL3.SDL.EventType.GamepadAdded:
-                HandleGamepadAdded(evt.GDevice);
-                break;
-            case SDL3.SDL.EventType.GamepadRemoved:
-                HandleGamepadRemoved(evt.GDevice);
-                break;
-            case SDL3.SDL.EventType.TextInput:
-                HandleTextInput(evt.Text);
-                break;
-        }
-    }
+    // ===== Internal Event Handlers =====
 
-    private void HandleKeyDown(SDL3.SDL.KeyboardEvent keyEvent)
+    private void OnKeyDown(SDL3KeyDownEvent evt)
     {
-        var key = MapSDLKeyToKeys(keyEvent.Key);
+        var key = MapSDLKeyToKeys(evt.KeyEvent.Key);
         if (key == Keys.Unknown) return;
 
-        // Check if this is a key repeat event
-        bool isRepeat = keyEvent.Repeat;
+        bool isRepeat = evt.KeyEvent.Repeat;
 
-        // Always track key as down
         _keysDown.Add(key);
 
-        // Only add to pressed on FIRST press (ignore repeats for game input)
         if (!isRepeat)
         {
             _keysPressed.Add(key);
+            _publicEventBus.Publish(new KeyPressedEvent(key, IsRepeat: false));
         }
 
-        // For text input, handle special keys with repeat support
         if (_textInputActive)
         {
             if (key == Keys.Backspace && !_backspacePressedThisFrame)
@@ -199,75 +175,96 @@ public class SDL3InputService : IInputService
         }
     }
 
-    private void HandleKeyUp(SDL3.SDL.KeyboardEvent keyEvent)
+    private void OnKeyUp(SDL3KeyUpEvent evt)
     {
-        var key = MapSDLKeyToKeys(keyEvent.Key);
-        if (key != Keys.Unknown)
-        {
-            _keysDown.Remove(key);
-            _keysReleased.Add(key);
-        }
+        var key = MapSDLKeyToKeys(evt.KeyEvent.Key);
+        if (key == Keys.Unknown) return;
+
+        _keysDown.Remove(key);
+        _keysReleased.Add(key);
+
+        _publicEventBus.Publish(new KeyReleasedEvent(key));
     }
 
-    private void HandleMouseButtonDown(SDL3.SDL.MouseButtonEvent mouseEvent)
+    private void OnMouseButtonDown(SDL3MouseButtonDownEvent evt)
     {
-        var button = MapSDLMouseButton(mouseEvent.Button);
-        if (!_mouseButtonsDown.Contains(button))
-        {
-            _mouseButtonsDown.Add(button);
-            _mouseButtonsPressed.Add(button);
-        }
+        var button = MapSDLMouseButton(evt.ButtonEvent.Button);
+        if (button == MouseButton.Unknown) return;
+
+        _mouseButtonsDown.Add(button);
+        _mouseButtonsPressed.Add(button);
+
+        _publicEventBus.Publish(new MouseButtonPressedEvent(button, _mousePosition));
     }
 
-    private void HandleMouseButtonUp(SDL3.SDL.MouseButtonEvent mouseEvent)
+    private void OnMouseButtonUp(SDL3MouseButtonUpEvent evt)
     {
-        var button = MapSDLMouseButton(mouseEvent.Button);
+        var button = MapSDLMouseButton(evt.ButtonEvent.Button);
+        if (button == MouseButton.Unknown) return;
+
         _mouseButtonsDown.Remove(button);
         _mouseButtonsReleased.Add(button);
+
+        _publicEventBus.Publish(new MouseButtonReleasedEvent(button, _mousePosition));
     }
 
-    private void HandleMouseWheel(SDL3.SDL.MouseWheelEvent wheelEvent)
+    private void OnMouseWheel(SDL3MouseWheelEvent evt)
     {
-        _scrollWheelDelta = wheelEvent.Y;
+        _scrollWheelDelta = evt.WheelEvent.Y;
+        _publicEventBus.Publish(new MouseScrolledEvent(evt.WheelEvent.X, evt.WheelEvent.Y));
     }
 
-    private void HandleGamepadButtonDown(SDL3.SDL.GamepadButtonEvent buttonEvent)
+    private void OnMouseMotion(SDL3MouseMotionEvent evt)
     {
-        var deviceId = buttonEvent.Which;
+        // Position is updated in Update() method for polling
+        var delta = new Vector2(evt.MotionEvent.XRel, evt.MotionEvent.YRel);
+        _publicEventBus.Publish(new MouseMovedEvent(_mousePosition, delta));
+    }
 
-        // Ensure we have dictionaries for this device
+    private void OnTextInput(SDL3TextInputEvent evt)
+    {
+        if (_textInputActive && !string.IsNullOrEmpty(SDL3.SDL.PointerToString(evt.TextEvent.Text)))
+        {
+            _textInputBuffer.Append(evt.TextEvent.Text);
+            _logger.LogTrace("Text input: {Text}", evt.TextEvent.Text);
+        }
+    }
+
+    private void OnGamepadButtonDown(SDL3GamepadButtonDownEvent evt)
+    {
+        var deviceId = evt.ButtonEvent.Which;
+        var button = MapSDLGamepadButton((SDL3.SDL.GamepadButton)evt.ButtonEvent.Button);
+
         if (!_gamepadButtonsDown.ContainsKey(deviceId))
         {
             _logger.LogWarning("Received button event for unknown gamepad device {DeviceId}", deviceId);
             return;
         }
 
-        var button = MapSDLGamepadButton((SDL3.SDL.GamepadButton)buttonEvent.Button);
+        _gamepadButtonsDown[deviceId].Add(button);
+        _gamepadButtonsPressed[deviceId].Add(button);
 
-        if (!_gamepadButtonsDown[deviceId].Contains(button))
-        {
-            _gamepadButtonsDown[deviceId].Add(button);
-            _gamepadButtonsPressed[deviceId].Add(button);
-            _logger.LogTrace("Gamepad {DeviceId} button {Button} pressed", deviceId, button);
-        }
+        _publicEventBus.Publish(new GamepadButtonPressedEvent(button, (int)deviceId));
+        _logger.LogTrace("Gamepad {DeviceId} button {Button} pressed", deviceId, button);
     }
 
-    private void HandleGamepadButtonUp(SDL3.SDL.GamepadButtonEvent buttonEvent)
+    private void OnGamepadButtonUp(SDL3GamepadButtonUpEvent evt)
     {
-        var deviceId = buttonEvent.Which;
+        var deviceId = evt.ButtonEvent.Which;
+        var button = MapSDLGamepadButton((SDL3.SDL.GamepadButton)evt.ButtonEvent.Button);
 
         if (!_gamepadButtonsDown.ContainsKey(deviceId))
             return;
 
-        var button = MapSDLGamepadButton((SDL3.SDL.GamepadButton)buttonEvent.Button);
-
         _gamepadButtonsDown[deviceId].Remove(button);
         _gamepadButtonsReleased[deviceId].Add(button);
+
+        _publicEventBus.Publish(new GamepadButtonReleasedEvent(button, (int)deviceId));
     }
 
-    private void HandleGamepadAdded(SDL3.SDL.GamepadDeviceEvent deviceEvent)
+    private void OnGamepadAdded(SDL3GamepadAddedEvent evt)
     {
-        var deviceId = deviceEvent.Which;
+        var deviceId = evt.DeviceEvent.Which;
         var gamepad = SDL3.SDL.OpenGamepad(deviceId);
 
         if (gamepad != IntPtr.Zero)
@@ -279,12 +276,14 @@ public class SDL3InputService : IInputService
 
             var name = SDL3.SDL.GetGamepadName(gamepad);
             _logger.LogInformation("Gamepad {DeviceId} connected: {Name}", deviceId, name);
+
+            _publicEventBus.Publish(new GamepadConnectedEvent((int)deviceId, name ?? "Unknown"));
         }
     }
 
-    private void HandleGamepadRemoved(SDL3.SDL.GamepadDeviceEvent deviceEvent)
+    private void OnGamepadRemoved(SDL3GamepadRemovedEvent evt)
     {
-        var deviceId = deviceEvent.Which;
+        var deviceId = evt.DeviceEvent.Which;
 
         if (_gamepads.TryGetValue(deviceId, out var gamepad))
         {
@@ -293,9 +292,14 @@ public class SDL3InputService : IInputService
             _gamepadButtonsDown.Remove(deviceId);
             _gamepadButtonsPressed.Remove(deviceId);
             _gamepadButtonsReleased.Remove(deviceId);
+
             _logger.LogInformation("Gamepad {DeviceId} disconnected", deviceId);
+
+            _publicEventBus.Publish(new GamepadDisconnectedEvent((int)deviceId));
         }
     }
+
+    // ===== Input Query Methods =====
 
     public bool IsKeyDown(Keys key) => _keysDown.Contains(key);
     public bool IsKeyPressed(Keys key) => _keysPressed.Contains(key);
@@ -307,7 +311,6 @@ public class SDL3InputService : IInputService
 
     public bool IsGamepadConnected(int gamepadIndex = 0)
     {
-        // Use the first connected gamepad for index 0
         return _gamepads.Count > gamepadIndex;
     }
 
@@ -315,7 +318,6 @@ public class SDL3InputService : IInputService
     {
         var deviceId = GetDeviceIdByIndex(gamepadIndex);
         if (deviceId == null) return false;
-
         return _gamepadButtonsDown.TryGetValue(deviceId.Value, out var buttons) && buttons.Contains(button);
     }
 
@@ -323,7 +325,6 @@ public class SDL3InputService : IInputService
     {
         var deviceId = GetDeviceIdByIndex(gamepadIndex);
         if (deviceId == null) return false;
-
         return _gamepadButtonsPressed.TryGetValue(deviceId.Value, out var buttons) && buttons.Contains(button);
     }
 
@@ -331,7 +332,6 @@ public class SDL3InputService : IInputService
     {
         var deviceId = GetDeviceIdByIndex(gamepadIndex);
         if (deviceId == null) return false;
-
         return _gamepadButtonsReleased.TryGetValue(deviceId.Value, out var buttons) && buttons.Contains(button);
     }
 
@@ -345,8 +345,6 @@ public class SDL3InputService : IInputService
 
         var sdlAxis = MapGamepadAxisToSDL(axis);
         var value = SDL3.SDL.GetGamepadAxis(gamepad, sdlAxis);
-
-        // Normalize from -32768 to 32767 range to -1.0 to 1.0
         return value / 32767f;
     }
 
@@ -366,17 +364,46 @@ public class SDL3InputService : IInputService
         );
     }
 
+    public void StartTextInput()
+    {
+        if (!_textInputActive)
+        {
+            var window = _windowProvider?.Window ?? IntPtr.Zero;
+            SDL3.SDL.StartTextInput(window);
+            _textInputActive = true;
+            _logger.LogDebug("Text input started");
+        }
+    }
+
+    public void StopTextInput()
+    {
+        if (_textInputActive)
+        {
+            var window = _windowProvider?.Window ?? IntPtr.Zero;
+            SDL3.SDL.StopTextInput(window);
+            _textInputActive = false;
+            _logger.LogDebug("Text input stopped");
+        }
+    }
+
+    public string GetTextInput() => _textInputBuffer.ToString();
+
+    public bool IsBackspacePressed() => _backspacePressedThisFrame;
+    public bool IsReturnPressed() => _returnPressedThisFrame;
+    public bool IsDeletePressed() => _deletePressedThisFrame;
+
+    // ===== Helper Methods =====
+
     private uint? GetDeviceIdByIndex(int index)
     {
         if (index < 0 || index >= _gamepads.Count)
             return null;
-
         return _gamepads.Keys.ElementAtOrDefault(index);
     }
 
-    private Keys MapSDLKeyToKeys(SDL3.SDL.Keycode sdlKey)
+    private static Keys MapSDLKeyToKeys(SDL3.SDL.Keycode key)
     {
-        return sdlKey switch
+        return key switch
         {
             // Letters
             SDL3.SDL.Keycode.A => Keys.A,
@@ -501,22 +528,22 @@ public class SDL3InputService : IInputService
         };
     }
 
-    private MouseButton MapSDLMouseButton(byte sdlButton)
+    private static MouseButton MapSDLMouseButton(byte button)
     {
-        return sdlButton switch
+        return button switch
         {
             1 => MouseButton.Left,
             2 => MouseButton.Middle,
             3 => MouseButton.Right,
             4 => MouseButton.X1,
             5 => MouseButton.X2,
-            _ => MouseButton.Left
+            _ => MouseButton.Unknown
         };
     }
 
-    private GamepadButton MapSDLGamepadButton(SDL3.SDL.GamepadButton sdlButton)
+    private static GamepadButton MapSDLGamepadButton(SDL3.SDL.GamepadButton button)
     {
-        return sdlButton switch
+        return button switch
         {
             SDL3.SDL.GamepadButton.South => GamepadButton.A,
             SDL3.SDL.GamepadButton.East => GamepadButton.B,
@@ -537,7 +564,7 @@ public class SDL3InputService : IInputService
         };
     }
 
-    private SDL3.SDL.GamepadAxis MapGamepadAxisToSDL(GamepadAxis axis)
+    private static SDL3.SDL.GamepadAxis MapGamepadAxisToSDL(GamepadAxis axis)
     {
         return axis switch
         {
@@ -551,57 +578,12 @@ public class SDL3InputService : IInputService
         };
     }
 
-    public void StartTextInput()
+    public void Dispose()
     {
-        if (_windowProvider?.Window == nint.Zero || _windowProvider == null)
+        foreach (var gamepad in _gamepads.Values)
         {
-            _logger.LogWarning("Cannot start text input: SDL window not available");
-            return;
+            SDL3.SDL.CloseGamepad(gamepad);
         }
-
-        if (!_textInputActive)
-        {
-            // Always queries current window - handles recreation automatically!
-            SDL3.SDL.StartTextInput(_windowProvider.Window);
-            _textInputActive = true;
-            _logger.LogDebug("Text input started");
-        }
-    }
-
-    public void StopTextInput()
-    {
-        if (_windowProvider?.Window == nint.Zero || _windowProvider == null)
-            return;
-
-        if (_textInputActive)
-        {
-            SDL3.SDL.StopTextInput(_windowProvider.Window);
-            _textInputActive = false;
-            _logger.LogDebug("Text input stopped");
-        }
-    }
-
-    public string GetTextInput()
-    {
-        var text = _textInputBuffer.ToString();
-        _textInputBuffer.Clear();
-        return text;
-    }
-
-    public bool IsBackspacePressed() => _backspacePressedThisFrame;
-    public bool IsReturnPressed() => _returnPressedThisFrame;
-
-    // Add public method to check Delete
-    public bool IsDeletePressed() => _deletePressedThisFrame;
-
-    private void HandleTextInput(SDL3.SDL.TextInputEvent textEvent)
-    {
-        if (_textInputActive)
-        {
-            var text = SDL3.SDL.PointerToString(textEvent.Text);
-
-            _textInputBuffer.Append(text);
-            _logger.LogTrace("Text input: {Text}", text);
-        }
+        _gamepads.Clear();
     }
 }

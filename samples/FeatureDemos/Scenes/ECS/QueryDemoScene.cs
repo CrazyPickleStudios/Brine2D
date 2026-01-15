@@ -74,6 +74,8 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("");
         Logger.LogInformation("Current Demo: {Demo}", _currentDemo);
 
+        _renderer.ClearColor = new Color(20, 20, 30);
+
         // Create player
         _player = _world.CreateEntity("Player");
         _player.Tags.Add("Player");
@@ -159,8 +161,6 @@ public class QueryDemoScene : DemoSceneBase
 
     protected override void OnRender(GameTime gameTime)
     {
-        _renderer.Clear(new Color(20, 20, 30));
-
         // Draw all entities (gray)
         foreach (var entity in _entities)
         {

@@ -78,7 +78,9 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         _logger.LogInformation("Shader compiled successfully for {Driver} backend ({Size} bytes)",
             driverName, bytecode.Length);
 
-        return LoadFromBytecode($"{source.Stage}Shader", source.Stage, bytecode, source.EntryPoint);
+        // Pass the correct format to the internal helper
+        var shaderFormat = GetShaderFormat(targetFormat);
+        return LoadFromBytecodeInternal($"{source.Stage}Shader", source.Stage, bytecode, source.EntryPoint, shaderFormat);
     }
 
     private bool CompileFromHLSL(ShaderSource source, GraphicsShaderTarget target, out byte[]? bytecode)
@@ -349,18 +351,44 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         return true;
     }
 
-    public IShader LoadFromBytecode(string name, ShaderStage stage, byte[] bytecode, string entryPoint = "main")
+    private IShader LoadFromBytecodeInternal(string name, ShaderStage stage, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format)
     {
-        _logger.LogDebug("Loading shader {Name} from bytecode", name);
+        _logger.LogDebug("Loading shader {Name} from bytecode (format: {Format})", name, format);
 
         var shader = new SDL3Shader(name, stage, _loggerFactory.CreateLogger<SDL3Shader>());
 
-        if (!shader.Compile(_device, bytecode, entryPoint))
+        if (!shader.Compile(_device, bytecode, entryPoint, format))
         {
             throw new InvalidOperationException($"Failed to load shader: {name}");
         }
 
         return shader;
+    }
+
+    public IShader LoadFromBytecode(string name, ShaderStage stage, byte[] bytecode, string entryPoint = "main")
+    {
+        _logger.LogDebug("Loading shader {Name} from bytecode (using default SPIRV format)", name);
+
+        var shader = new SDL3Shader(name, stage, _loggerFactory.CreateLogger<SDL3Shader>());
+
+        if (!shader.Compile(_device, bytecode, entryPoint, SDL3.SDL.GPUShaderFormat.SPIRV))
+        {
+            throw new InvalidOperationException($"Failed to load shader: {name}");
+        }
+
+        return shader;
+    }
+
+    private SDL3.SDL.GPUShaderFormat GetShaderFormat(GraphicsShaderTarget target)
+    {
+        return target switch
+        {
+            GraphicsShaderTarget.SPIRV => SDL3.SDL.GPUShaderFormat.SPIRV,
+            GraphicsShaderTarget.MSL => SDL3.SDL.GPUShaderFormat.MSL,
+            GraphicsShaderTarget.DXBC => SDL3.SDL.GPUShaderFormat.DXBC,
+            GraphicsShaderTarget.DXIL => SDL3.SDL.GPUShaderFormat.DXIL,
+            _ => SDL3.SDL.GPUShaderFormat.SPIRV
+        };
     }
 
     public async Task<IShader> LoadFromFileAsync(string path, ShaderStage stage, CancellationToken cancellationToken = default)
@@ -396,23 +424,123 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         return LoadFromSource(source);
     }
 
+    /// <summary>
+    /// Checks if runtime shader compilation is available (ShaderCross DLLs present).
+    /// </summary>
+    private bool IsRuntimeCompilationAvailable()
+    {
+        // ShaderCross initialization already happened in constructor
+        // If we got here, it's available
+        return _shaderCrossInitialized;
+    }
+
     public (IShader vertex, IShader fragment) CreateDefaultShaders()
     {
         _logger.LogInformation("Creating default shaders");
 
-        var vertexSource = ShaderSource.FromHLSL(
-            DefaultShaders.SimpleVertexShaderHLSL,
-            ShaderStage.Vertex,
-            "main"
-        );
+        // Determine the correct shader format based on the GPU backend
+        var driverName = SDL3.SDL.GetGPUDeviceDriver(_device);
+        var targetFormat = GetTargetFormat(driverName);
+        var shaderFormat = GetShaderFormat(targetFormat);
 
-        var fragmentSource = ShaderSource.FromHLSL(
-            DefaultShaders.SimpleFragmentShaderHLSL,
-            ShaderStage.Fragment,
-            "main"
-        );
+        // Strategy: Try pre-compiled first (always reliable), fallback to runtime compilation
+        try
+        {
+            _logger.LogInformation("Loading pre-compiled {Format} shaders from embedded resources", targetFormat);
+            
+            byte[]? vertexBytecode = null;
+            byte[]? fragmentBytecode = null;
 
-        return (LoadFromSource(vertexSource), LoadFromSource(fragmentSource));
+            // Load the correct pre-compiled shader format based on the backend
+            switch (targetFormat)
+            {
+                case GraphicsShaderTarget.SPIRV:
+                    vertexBytecode = DefaultShaders.LoadVertexShaderSPIRV();
+                    fragmentBytecode = DefaultShaders.LoadFragmentShaderSPIRV();
+                    break;
+                    
+                case GraphicsShaderTarget.DXIL:
+                    vertexBytecode = DefaultShaders.LoadVertexShaderDXIL();
+                    fragmentBytecode = DefaultShaders.LoadFragmentShaderDXIL();
+                    break;
+                    
+                case GraphicsShaderTarget.DXBC:
+                    vertexBytecode = DefaultShaders.LoadVertexShaderDXBC();
+                    fragmentBytecode = DefaultShaders.LoadFragmentShaderDXBC();
+                    break;
+                    
+                case GraphicsShaderTarget.MSL:
+                    vertexBytecode = DefaultShaders.LoadVertexShaderMSL();
+                    fragmentBytecode = DefaultShaders.LoadFragmentShaderMSL();
+                    break;
+            }
+
+            if (vertexBytecode == null || fragmentBytecode == null)
+            {
+                throw new InvalidOperationException(
+                    $"Pre-compiled {targetFormat} shader resources not found for {driverName} backend. " +
+                    $"Expected embedded resources not available.");
+            }
+
+            var vertexShader = LoadFromBytecodeInternal(
+                "VertexShader", 
+                ShaderStage.Vertex, 
+                vertexBytecode, 
+                "main",
+                shaderFormat);
+            
+            var fragmentShader = LoadFromBytecodeInternal(
+                "FragmentShader", 
+                ShaderStage.Fragment, 
+                fragmentBytecode, 
+                "main",
+                shaderFormat);
+
+            _logger.LogInformation("Successfully loaded pre-compiled {Format} shaders ({VertexSize} + {FragmentSize} bytes)",
+                targetFormat, vertexBytecode.Length, fragmentBytecode.Length);
+            
+            return (vertexShader, fragmentShader);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load pre-compiled shaders, attempting runtime compilation");
+            
+            // Fallback to runtime compilation if available
+            if (IsRuntimeCompilationAvailable())
+            {
+                _logger.LogInformation("Attempting runtime shader compilation from HLSL");
+                
+                try
+                {
+                    var vertexSource = ShaderSource.FromHLSL(
+                        DefaultShaders.SimpleVertexShaderHLSL,
+                        ShaderStage.Vertex,
+                        "main"
+                    );
+
+                    var fragmentSource = ShaderSource.FromHLSL(
+                        DefaultShaders.SimpleFragmentShaderHLSL,
+                        ShaderStage.Fragment,
+                        "main"
+                    );
+
+                    return (LoadFromSource(vertexSource), LoadFromSource(fragmentSource));
+                }
+                catch (Exception compileEx)
+                {
+                    _logger.LogError(compileEx, "Runtime shader compilation also failed");
+                    throw new InvalidOperationException(
+                        "Failed to load shaders. Both pre-compiled and runtime compilation failed. " +
+                        "Ensure ShaderCross compiler DLLs (glslang.dll, SPIRV-Tools.dll) are present for runtime compilation.",
+                        compileEx);
+                }
+            }
+            
+            throw new InvalidOperationException(
+                "No shaders available. Pre-compiled shaders failed to load and runtime compilation is unavailable. " +
+                "This may indicate missing embedded resources or a GPU driver issue.", 
+                ex);
+        }
     }
 
     private static SDL3.ShaderCross.ShaderStage MapToShaderCrossStage(ShaderStage stage)
@@ -444,7 +572,7 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
             _ => GraphicsShaderTarget.SPIRV
         };
 
-        _logger.LogDebug("Selected shader target {Target} for driver {Driver}", target, driverName);
+        _logger.LogInformation("Selected shader target {Target} for driver {Driver}", target, driverName);
         return target;
     }
 

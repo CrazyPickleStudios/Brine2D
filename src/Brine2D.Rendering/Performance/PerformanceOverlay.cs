@@ -95,11 +95,11 @@ public class PerformanceOverlay
             UpdateDisplayedValues();
             _updateTimer.Restart();
         }
-        
-        // CRITICAL: Temporarily disable camera for UI rendering
+
+        // Disable camera to render UI in screen space
         var previousCamera = renderer.Camera;
-        renderer.Camera = null; // Render in screen space!
-        
+        renderer.Camera = null;
+
         try
         {
             RenderOverlay(renderer, screenWidth, screenHeight);

@@ -1,4 +1,5 @@
 ﻿using Brine2D.SDL.Common;
+using Brine2D.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -24,54 +25,47 @@ public static class SDL3RenderingServiceCollectionExtensions
 
         services.TryAddSingleton<IFontLoader, SDL3FontLoader>();
 
+        // Register renderer
         services.TryAddSingleton<IRenderer>(provider =>
         {
             var options = provider.GetRequiredService<IOptions<RenderingOptions>>();
-            var logger = provider.GetRequiredService<ILogger<SDL3Renderer>>();
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
-
-            var fontLoader = provider.GetService<IFontLoader>();
+            var fontLoader = provider.GetService<IFontLoader>();  // Get font loader
+            var eventBus = provider.GetService<EventBus>();  // Get public EventBus
 
             return options.Value.Backend switch
             {
                 GraphicsBackend.GPU => new SDL3GPURenderer(
                     provider.GetRequiredService<ILogger<SDL3GPURenderer>>(),
                     loggerFactory,
-                    options),
+                    options,
+                    fontLoader,
+                    eventBus), 
                 GraphicsBackend.LegacyRenderer => new SDL3Renderer(
-                    logger,
+                    provider.GetRequiredService<ILogger<SDL3Renderer>>(),
                     loggerFactory,
                     options,
-                    fontLoader),
+                    fontLoader,
+                    eventBus),
                 GraphicsBackend.Auto => new SDL3GPURenderer(
                     provider.GetRequiredService<ILogger<SDL3GPURenderer>>(),
                     loggerFactory,
-                    options),
+                    options,
+                    fontLoader,
+                    eventBus), 
                 _ => throw new NotSupportedException($"Backend {options.Value.Backend} not supported")
             };
         });
 
         services.AddSingleton<ISDL3WindowProvider>(sp =>
-            (SDL3Renderer)sp.GetRequiredService<IRenderer>());
+            (ISDL3WindowProvider)sp.GetRequiredService<IRenderer>());
 
-        services.TryAddSingleton<ITextureLoader>(provider =>
-        {
-            return new SDL3TextureLoader(
-                provider.GetRequiredService<ILogger<SDL3TextureLoader>>(),
-                provider.GetRequiredService<ILoggerFactory>(),
-                () =>
-                {
-                    // Get renderer FRESH each time (inside the lambda)
-                    var renderer = provider.GetRequiredService<IRenderer>();
-                    return renderer switch
-                    {
-                        SDL3Renderer legacyRenderer => legacyRenderer.RendererHandle,
-                        SDL3GPURenderer gpuRenderer => throw new NotSupportedException(
-                            "Texture loading not yet supported for GPU renderer"),
-                        _ => throw new NotSupportedException($"Unknown renderer type: {renderer.GetType()}")
-                    };
-                });
-        });
+        // Register texture context from renderer (both renderers implement ITextureContext)
+        services.TryAddSingleton<ITextureContext>(provider => 
+            (ITextureContext)provider.GetRequiredService<IRenderer>());
+
+        // Simple, clean texture loader registration - no type checking, no Func<> gymnastics!
+        services.TryAddSingleton<ITextureLoader, SDL3TextureLoader>();
 
         return services;
     }

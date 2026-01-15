@@ -6,29 +6,36 @@ using Brine2D.Core.Performance;
 using Brine2D.Core.Tilemap;
 using Brine2D.ECS;
 using Brine2D.ECS.Systems;
-using Brine2D.Input.ECS;
 using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Input;
+using Brine2D.Input.ECS;
 using Brine2D.Input.SDL;
 using Brine2D.Rendering;
 using Brine2D.Rendering.ECS;
 using Brine2D.Rendering.ECS.Performance;
 using Brine2D.Rendering.Performance;
 using Brine2D.Rendering.SDL;
+using Brine2D.SDL.Common;
 using Brine2D.UI;
-using Microsoft.Extensions.Configuration;
 using FeatureDemos.Scenes;
-using FeatureDemos.Scenes.ECS;
-using FeatureDemos.Scenes.Transitions;
 using FeatureDemos.Scenes.Advanced;
 using FeatureDemos.Scenes.Collision;
+using FeatureDemos.Scenes.ECS;
 using FeatureDemos.Scenes.Performance;
+using FeatureDemos.Scenes.Transitions;
 using FeatureDemos.Scenes.UI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 // Create the game application builder
 var builder = GameApplication.CreateBuilder(args);
+
+builder.Services.AddBrineCore();
+
+builder.Services.AddSDL3ApplicationLifetime();
+
+builder.Services.AddBrineEngine();
 
 // Core services
 builder.Services.AddInputLayerManager().AddSDL3Input();
@@ -40,6 +47,12 @@ builder.Services.AddSDL3Rendering(options =>
     options.WindowTitle = "Brine2D - Feature Demos";
     options.WindowWidth = 1280;
     options.WindowHeight = 720;
+
+    //options.Backend = GraphicsBackend.LegacyRenderer;
+
+    options.Backend = GraphicsBackend.GPU;
+    options.PreferredGPUDriver = "vulkan";
+
     options.VSync = true;
 });
 
@@ -95,6 +108,8 @@ builder.Services.AddScene<ManualControlScene>();
 builder.Services.AddScene<SpriteBenchmarkScene>();
 
 builder.Services.AddScene<MainMenuScene>();
+
+builder.Services.AddScene<RendererTestScene>();
 
 // Add performance monitoring
 builder.Services.AddPerformanceMonitoring(); // Core tracking

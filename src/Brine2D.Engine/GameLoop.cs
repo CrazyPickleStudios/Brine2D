@@ -7,6 +7,7 @@ namespace Brine2D.Engine;
 
 /// <summary>
 /// Default implementation of the game loop.
+/// Processes events, updates game state, and renders frames.
 /// </summary>
 public class GameLoop : IGameLoop
 {
@@ -15,6 +16,8 @@ public class GameLoop : IGameLoop
     private readonly ISceneManager _sceneManager;
     private readonly IInputService _inputService;
     private readonly InputLayerManager? _inputLayerManager;
+    private readonly IApplicationLifetime _applicationLifetime;
+    private readonly IEventPump? _eventPump; 
     private readonly Stopwatch _stopwatch;
     private CancellationTokenSource? _cancellationTokenSource;
 
@@ -26,13 +29,17 @@ public class GameLoop : IGameLoop
         IGameContext gameContext,
         ISceneManager sceneManager,
         IInputService inputService,
-        InputLayerManager? inputLayerManager = null)
+        IApplicationLifetime applicationLifetime,
+        InputLayerManager? inputLayerManager = null,
+        IEventPump? eventPump = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _gameContext = gameContext ?? throw new ArgumentNullException(nameof(gameContext));
         _sceneManager = sceneManager ?? throw new ArgumentNullException(nameof(sceneManager));
         _inputService = inputService ?? throw new ArgumentNullException(nameof(inputService));
+        _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
         _inputLayerManager = inputLayerManager;
+        _eventPump = eventPump;
         _stopwatch = new Stopwatch();
     }
 
@@ -58,20 +65,19 @@ public class GameLoop : IGameLoop
 
         try
         {
-            while (IsRunning && !token.IsCancellationRequested && _gameContext.IsRunning)
+            while (IsRunning
+                && !token.IsCancellationRequested
+                && _gameContext.IsRunning
+                && !_applicationLifetime.IsExitRequested)
             {
-                // Update input (polls SDL events)
+                // Update input state (clears per-frame data, updates mouse position)
                 _inputService.Update();
+
+                // Process platform events FIRST (window, input, etc.)
+                _eventPump?.ProcessEvents();
                 
-                // Process input layers (like middleware) - only if registered
+                // Process input layers (middleware pattern)
                 _inputLayerManager?.ProcessInput();
-                
-                // Check for quit event from window close
-                if (_inputService.IsQuitRequested)
-                {
-                    _logger.LogInformation("Quit event detected");
-                    _gameContext.RequestExit();
-                }
 
                 var currentTime = _stopwatch.Elapsed;
                 var elapsedTime = currentTime - lastFrameTime;
@@ -86,10 +92,10 @@ public class GameLoop : IGameLoop
                     context.GameTime = gameTime;
                 }
 
-                // Update
+                // Update game logic
                 _sceneManager.Update(gameTime);
 
-                // Render
+                // Render frame
                 _sceneManager.Render(gameTime);
 
                 // Frame limiting
@@ -101,7 +107,7 @@ public class GameLoop : IGameLoop
                     {
                         Thread.Sleep(sleepTime - TimeSpan.FromMilliseconds(1));
                     }
-                    
+
                     // Spin for precision timing on the last millisecond
                     while (_stopwatch.Elapsed - currentTime < targetFrameTime)
                     {
@@ -125,7 +131,7 @@ public class GameLoop : IGameLoop
             IsRunning = false;
             _logger.LogInformation("Game loop stopped");
         }
-        
+
         await Task.CompletedTask;
     }
 
