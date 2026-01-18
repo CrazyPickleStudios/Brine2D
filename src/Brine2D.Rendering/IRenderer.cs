@@ -30,7 +30,7 @@ public interface IRenderer : IDisposable
     /// Initializes the renderer.
     /// </summary>
     Task InitializeAsync(CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Begins a new frame. Call this before drawing.
     /// </summary>
@@ -86,30 +86,36 @@ public interface IRenderer : IDisposable
     void DrawTexture(ITexture texture, float x, float y);
 
     /// <summary>
-    /// Draws a texture with scaling.
+    /// Draws a texture with optional scaling, rotation, and tint.
     /// </summary>
     /// <param name="texture">The texture to draw.</param>
-    /// <param name="x">X position.</param>
-    /// <param name="y">Y position.</param>
+    /// <param name="x">X position (top-left corner, or center if rotated).</param>
+    /// <param name="y">Y position (top-left corner, or center if rotated).</param>
     /// <param name="width">Destination width.</param>
     /// <param name="height">Destination height.</param>
-    void DrawTexture(ITexture texture, float x, float y, float width, float height);
+    /// <param name="rotation">Rotation angle in radians (default: 0). Rotates around center.</param>
+    /// <param name="color">Tint color (default: white).</param>
+    void DrawTexture(ITexture texture, float x, float y, float width, float height,
+        float rotation = 0f, Color? color = null);
 
     /// <summary>
-    /// Draws a portion of a texture (for sprite sheets).
+    /// Draws a portion of a texture with optional rotation and tint.
     /// </summary>
     /// <param name="texture">The texture to draw.</param>
     /// <param name="sourceX">Source X position in the texture.</param>
     /// <param name="sourceY">Source Y position in the texture.</param>
     /// <param name="sourceWidth">Source width.</param>
     /// <param name="sourceHeight">Source height.</param>
-    /// <param name="destX">Destination X position.</param>
-    /// <param name="destY">Destination Y position.</param>
+    /// <param name="destX">Destination X position (top-left corner, or center if rotated).</param>
+    /// <param name="destY">Destination Y position (top-left corner, or center if rotated).</param>
     /// <param name="destWidth">Destination width.</param>
     /// <param name="destHeight">Destination height.</param>
+    /// <param name="rotation">Rotation angle in radians (default: 0). Rotates around center.</param>
+    /// <param name="color">Tint color (default: white).</param>
     void DrawTexture(ITexture texture,
         float sourceX, float sourceY, float sourceWidth, float sourceHeight,
-        float destX, float destY, float destWidth, float destHeight);
+        float destX, float destY, float destWidth, float destHeight,
+        float rotation = 0f, Color? color = null);
 
     /// <summary>
     /// Draws text at the specified position.
@@ -120,4 +126,9 @@ public interface IRenderer : IDisposable
     /// Sets the default font used for text rendering.
     /// </summary>
     void SetDefaultFont(IFont? font);
+
+    /// <summary>
+    /// Sets the blend mode for subsequent draw calls.
+    /// </summary>
+    void SetBlendMode(BlendMode blendMode);
 }

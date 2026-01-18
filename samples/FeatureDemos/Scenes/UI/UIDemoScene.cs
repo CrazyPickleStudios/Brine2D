@@ -45,7 +45,7 @@ public class UIDemoScene : DemoSceneBase
         _inputLayerManager = inputLayerManager;
     }
 
-    protected override void OnInitialize()
+    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== UI Components Demo ===");
         Logger.LogInformation("Controls:");
@@ -59,6 +59,8 @@ public class UIDemoScene : DemoSceneBase
         
         // Register UI canvas as input layer
         _inputLayerManager.RegisterLayer(_uiCanvas);
+
+        return Task.CompletedTask;
     }
 
     private void BuildUI()

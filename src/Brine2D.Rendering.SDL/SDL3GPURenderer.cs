@@ -49,6 +49,9 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private Matrix4x4 _projectionMatrix;
     private Color _clearColor = Color.CornflowerBlue;
 
+    private readonly Dictionary<BlendMode, nint> _graphicsPipelines = new();
+    private BlendMode _currentBlendMode = BlendMode.Alpha;
+
     public Color ClearColor
     {
         get => _clearColor;
@@ -319,7 +322,17 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     private void CreateGraphicsPipeline()
     {
-        _logger.LogDebug("Creating graphics pipeline");
+        _logger.LogDebug("Creating default graphics pipeline");
+
+        // Create default Alpha blend mode pipeline
+        var defaultPipeline = CreateGraphicsPipelineForBlendMode(BlendMode.Alpha);
+        _graphicsPipelines[BlendMode.Alpha] = defaultPipeline;
+        _graphicsPipeline = defaultPipeline;
+    }
+
+    private nint CreateGraphicsPipelineForBlendMode(BlendMode blendMode)
+    {
+        _logger.LogDebug("Creating graphics pipeline for blend mode: {BlendMode}", blendMode);
 
         var vertexShader = (_vertexShader as SDL3Shader)?.Handle ?? nint.Zero;
         var fragmentShader = (_fragmentShader as SDL3Shader)?.Handle ?? nint.Zero;
@@ -347,25 +360,72 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
             }
         };
 
+        // Create blend state based on mode
+        var blendState = blendMode switch
+        {
+            BlendMode.Alpha => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = true,
+                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.SrcAlpha,
+                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
+                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
+                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
+                               SDL3.SDL.GPUColorComponentFlags.G |
+                               SDL3.SDL.GPUColorComponentFlags.B |
+                               SDL3.SDL.GPUColorComponentFlags.A
+            },
+
+            BlendMode.Additive => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = true,
+                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.SrcAlpha,
+                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
+                               SDL3.SDL.GPUColorComponentFlags.G |
+                               SDL3.SDL.GPUColorComponentFlags.B |
+                               SDL3.SDL.GPUColorComponentFlags.A
+            },
+
+            BlendMode.Multiply => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = true,
+                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.DstColor,
+                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.Zero,
+                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.Zero,
+                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
+                               SDL3.SDL.GPUColorComponentFlags.G |
+                               SDL3.SDL.GPUColorComponentFlags.B |
+                               SDL3.SDL.GPUColorComponentFlags.A
+            },
+
+            BlendMode.None => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = false,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
+                               SDL3.SDL.GPUColorComponentFlags.G |
+                               SDL3.SDL.GPUColorComponentFlags.B |
+                               SDL3.SDL.GPUColorComponentFlags.A
+            },
+
+            _ => throw new ArgumentException($"Unsupported blend mode: {blendMode}")
+        };
+
         var colorTargetDescriptions = new SDL3.SDL.GPUColorTargetDescription[]
         {
             new()
             {
                 Format = SDL3.SDL.GPUTextureFormat.B8G8R8A8Unorm,
-                BlendState = new SDL3.SDL.GPUColorTargetBlendState
-                {
-                    EnableBlend = true,
-                    AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                    ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                    SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.SrcAlpha,
-                    DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
-                    SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
-                    DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
-                    ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
-                                   SDL3.SDL.GPUColorComponentFlags.G |
-                                   SDL3.SDL.GPUColorComponentFlags.B |
-                                   SDL3.SDL.GPUColorComponentFlags.A
-                }
+                BlendState = blendState
             }
         };
 
@@ -414,16 +474,17 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
                 }
             };
 
-            _graphicsPipeline = SDL3.SDL.CreateGPUGraphicsPipeline(_device, ref pipelineCreateInfo);
+            var pipeline = SDL3.SDL.CreateGPUGraphicsPipeline(_device, ref pipelineCreateInfo);
 
-            if (_graphicsPipeline == nint.Zero)
+            if (pipeline == nint.Zero)
             {
                 var error = SDL3.SDL.GetError();
-                _logger.LogError("Failed to create graphics pipeline: {Error}", error);
+                _logger.LogError("Failed to create graphics pipeline for {BlendMode}: {Error}", blendMode, error);
                 throw new InvalidOperationException($"Failed to create graphics pipeline: {error}");
             }
 
-            _logger.LogInformation("Graphics pipeline created successfully");
+            _logger.LogInformation("Graphics pipeline created successfully for blend mode: {BlendMode}", blendMode);
+            return pipeline;
         }
         finally
         {
@@ -583,8 +644,8 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
                 {
                     X = 0,
                     Y = 0,
-                    W = _viewport.Width,      
-                    H = _viewport.Height,      
+                    W = _viewport.Width,
+                    H = _viewport.Height,
                     MinDepth = 0.0f,
                     MaxDepth = 1.0f
                 };
@@ -594,8 +655,8 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
                 {
                     X = 0,
                     Y = 0,
-                    W = _viewport.Width,       
-                    H = _viewport.Height       
+                    W = _viewport.Width,
+                    H = _viewport.Height
                 };
                 SDL3.SDL.SetGPUScissor(_renderPass, ref scissor);
 
@@ -629,6 +690,8 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         {
             colorTargetHandle.Free();
         }
+
+        _vertexBatch.Clear();
     }
 
     private void UploadVertexData()
@@ -711,14 +774,60 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
     }
 
-    private void AddVertex(float x, float y, Color color, float u = 0, float v = 0)
+    private void AddQuad(float x, float y, float width, float height, Color color,
+        float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1)
     {
-        if (_vertexBatch.Count >= MaxVertices)
+        if (_vertexBatch.Count + 6 > MaxVertices)
         {
             FlushBatch();
-            _vertexBatch.Clear();
         }
 
+        AddVertex(x, y, color, u1, v1);
+        AddVertex(x + width, y, color, u2, v1);
+        AddVertex(x, y + height, color, u1, v2);
+
+        AddVertex(x + width, y, color, u2, v1);
+        AddVertex(x + width, y + height, color, u2, v2);
+        AddVertex(x, y + height, color, u1, v2);
+    }
+
+    private void AddQuadRotated(float x, float y, float width, float height, float rotation, Color color,
+        float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1)
+    {
+        EnsureVertexCapacity(6);
+
+        float centerX = x + width / 2f;
+        float centerY = y + height / 2f;
+        float halfW = width / 2f;
+        float halfH = height / 2f;
+
+        float cos = MathF.Cos(rotation);
+        float sin = MathF.Sin(rotation);
+
+        var topLeft = RotatePoint(-halfW, -halfH, cos, sin, centerX, centerY);
+        var topRight = RotatePoint(halfW, -halfH, cos, sin, centerX, centerY);
+        var bottomLeft = RotatePoint(-halfW, halfH, cos, sin, centerX, centerY);
+        var bottomRight = RotatePoint(halfW, halfH, cos, sin, centerX, centerY);
+
+        AddVertex(topLeft.X, topLeft.Y, color, u1, v1);
+        AddVertex(topRight.X, topRight.Y, color, u2, v1);
+        AddVertex(bottomLeft.X, bottomLeft.Y, color, u1, v2);
+
+        AddVertex(topRight.X, topRight.Y, color, u2, v1);
+        AddVertex(bottomRight.X, bottomRight.Y, color, u2, v2);
+        AddVertex(bottomLeft.X, bottomLeft.Y, color, u1, v2);
+    }
+
+    private static (float X, float Y) RotatePoint(float x, float y, float cos, float sin, float centerX, float centerY)
+    {
+        return (
+            x * cos - y * sin + centerX,
+            x * sin + y * cos + centerY
+        );
+    }
+
+    private void AddVertex(float x, float y, Color color, float u = 0, float v = 0)
+    {
         var position = new Vector2(x, y);
 
         if (Camera != null)
@@ -736,29 +845,42 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         });
     }
 
-    private void AddQuad(float x, float y, float width, float height, Color color,
-        float u1 = 0, float v1 = 0, float u2 = 1, float v2 = 1)
-    {
-        AddVertex(x, y, color, u1, v1);
-        AddVertex(x + width, y, color, u2, v1);
-        AddVertex(x, y + height, color, u1, v2);
-
-        AddVertex(x + width, y, color, u2, v1);
-        AddVertex(x + width, y + height, color, u2, v2);
-        AddVertex(x, y + height, color, u1, v2);
-    }
-
     private void EnsureTextureBound(nint textureHandle, TextureScaleMode scaleMode)
     {
         if (_currentBoundTexture != nint.Zero &&
             (_currentBoundTexture != textureHandle || _currentTextureScaleMode != scaleMode))
         {
             FlushBatch();
-            _vertexBatch.Clear();
         }
 
         _currentBoundTexture = textureHandle;
         _currentTextureScaleMode = scaleMode;
+    }
+
+    private void EnsureVertexCapacity(int verticesNeeded)
+    {
+        if (_vertexBatch.Count + verticesNeeded > MaxVertices)
+        {
+            FlushBatch();
+        }
+    }
+
+    public void SetBlendMode(BlendMode blendMode)
+    {
+        if (_currentBlendMode == blendMode)
+            return;
+
+        FlushBatch();
+
+        if (!_graphicsPipelines.TryGetValue(blendMode, out var pipeline))
+        {
+            pipeline = CreateGraphicsPipelineForBlendMode(blendMode);
+            _graphicsPipelines[blendMode] = pipeline;
+            _logger.LogDebug("Lazily created graphics pipeline for blend mode: {BlendMode}", blendMode);
+        }
+
+        _graphicsPipeline = pipeline;
+        _currentBlendMode = blendMode;
     }
 
     private static Vector4 ColorToVector4(Color color) =>
@@ -787,6 +909,7 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1)
     {
         ThrowIfNotInitialized();
+        EnsureVertexCapacity(6);
         EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode);
 
         var dx = x2 - x1;
@@ -812,9 +935,11 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public void DrawCircleFilled(float centerX, float centerY, float radius, Color color)
     {
         ThrowIfNotInitialized();
-        EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode);
 
         int segments = CalculateCircleSegments(radius);
+        EnsureVertexCapacity(segments * 3);
+        EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode);
+
         float angleStep = MathF.PI * 2f / segments;
 
         for (int i = 0; i < segments; i++)
@@ -833,6 +958,8 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         ThrowIfNotInitialized();
 
         int segments = CalculateCircleSegments(radius);
+        EnsureVertexCapacity(segments * 6);
+
         float angleStep = MathF.PI * 2f / segments;
 
         for (int i = 0; i < segments; i++)
@@ -857,7 +984,8 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         DrawTexture(texture, x, y, texture.Width, texture.Height);
     }
 
-    public void DrawTexture(ITexture texture, float x, float y, float width, float height)
+    public void DrawTexture(ITexture texture, float x, float y, float width, float height,
+        float rotation = 0f, Color? color = null)
     {
         ThrowIfNotInitialized();
 
@@ -868,11 +996,22 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
 
         EnsureTextureBound(gpuTexture.Handle, texture.ScaleMode);
-        AddQuad(x, y, width, height, Color.White);
+
+        var tintColor = color ?? Color.White;
+
+        if (rotation != 0f)
+        {
+            AddQuadRotated(x, y, width, height, rotation, tintColor);
+        }
+        else
+        {
+            AddQuad(x, y, width, height, tintColor);
+        }
     }
 
     public void DrawTexture(ITexture texture, float sourceX, float sourceY, float sourceWidth, float sourceHeight,
-                       float destX, float destY, float destWidth, float destHeight)
+                       float destX, float destY, float destWidth, float destHeight,
+                       float rotation = 0f, Color? color = null)
     {
         ThrowIfNotInitialized();
 
@@ -889,7 +1028,16 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         float u2 = (sourceX + sourceWidth) / texture.Width;
         float v2 = (sourceY + sourceHeight) / texture.Height;
 
-        AddQuad(destX, destY, destWidth, destHeight, Color.White, u1, v1, u2, v2);
+        var tintColor = color ?? Color.White;
+
+        if (rotation != 0f)
+        {
+            AddQuadRotated(destX, destY, destWidth, destHeight, rotation, tintColor, u1, v1, u2, v2);
+        }
+        else
+        {
+            AddQuad(destX, destY, destWidth, destHeight, tintColor, u1, v1, u2, v2);
+        }
     }
 
     public void DrawText(string text, float x, float y, Color color)
@@ -1230,11 +1378,15 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
             _vertexBuffer = nint.Zero;
         }
 
-        if (_graphicsPipeline != nint.Zero)
+        foreach (var pipeline in _graphicsPipelines.Values)
         {
-            SDL3.SDL.ReleaseGPUGraphicsPipeline(_device, _graphicsPipeline);
-            _graphicsPipeline = nint.Zero;
+            if (pipeline != nint.Zero)
+            {
+                SDL3.SDL.ReleaseGPUGraphicsPipeline(_device, pipeline);
+            }
         }
+        _graphicsPipelines.Clear();
+        _graphicsPipeline = nint.Zero;
 
         if (_device != nint.Zero)
         {
@@ -1255,10 +1407,6 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         _disposed = true;
     }
 
-    /// <summary>
-    /// Encapsulates runtime viewport/window size separate from configuration.
-    /// Follows ASP.NET principle of separating config (immutable) from runtime state (mutable).
-    /// </summary>
     private sealed class ViewportState
     {
         public int Width { get; private set; }

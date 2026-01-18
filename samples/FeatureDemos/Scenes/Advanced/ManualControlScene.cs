@@ -46,13 +46,15 @@ public class ManualControlScene : DemoSceneBase
         _world = world;
     }
 
-    protected override void OnInitialize()
+    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Manual Control Scene (Power User Mode) ===");
         Logger.LogInformation("Lifecycle hooks: DISABLED (manual control)");
         Logger.LogInformation("Frame management: DISABLED (manual control)");
         
         _renderer.ClearColor = new Color(20, 20, 40);
+
+        return Task.CompletedTask;
     }
 
     protected override void OnUpdate(GameTime gameTime)

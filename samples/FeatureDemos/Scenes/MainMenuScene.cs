@@ -3,13 +3,16 @@ using Brine2D.Engine;
 using Brine2D.Engine.Transitions;
 using Brine2D.Input;
 using Brine2D.Rendering;
+using Brine2D.Rendering.ECS;
 using Microsoft.Extensions.Logging;
 using FeatureDemos.Scenes.ECS;
 using FeatureDemos.Scenes.Transitions;
 using FeatureDemos.Scenes.Advanced;
+using FeatureDemos.Scenes.Audio;
 using FeatureDemos.Scenes.Collision;
 using FeatureDemos.Scenes.UI;
 using FeatureDemos.Scenes.Performance;
+using FeatureDemos.Scenes.Rendering;
 
 namespace FeatureDemos.Scenes;
 
@@ -42,12 +45,15 @@ public class MainMenuScene : Scene
         IInputService input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        ILogger<MainMenuScene> logger) : base(logger)
+        ILogger<MainMenuScene> logger,
+        DebugRenderer debugRenderer) : base(logger)
     {
         _renderer = renderer;
         _input = input;
         _sceneManager = sceneManager;
         _gameContext = gameContext;
+
+        debugRenderer.ShowEntityNames = false;
         
         // Define all demos organized by category
         _demos = new List<DemoEntry>
@@ -56,9 +62,15 @@ public class MainMenuScene : Scene
             new("Query System", typeof(QueryDemoScene), "Advanced entity queries", "ECS"),
             new("Particle System", typeof(ParticleDemoScene), "Pooled particle effects", "ECS"),
             
+            // Rendering Demos (Left Column)
+            new("Texture Atlasing", typeof(TextureAtlasDemoScene), "Sprite batching & atlases", "Rendering"),
+            
             // Collision Demos (Left Column)
             new("Collision Detection", typeof(CollisionDemoScene), "Physics & colliders", "Collision"),
-            
+
+            // Audio Demos (Left Column)
+            new("Spatial Audio", typeof(SpatialAudioDemoScene), "2D spatial audio with panning", "Audio"),
+
             // UI Demos (Right Column)
             new("UI Components", typeof(UIDemoScene), "Complete UI framework", "UI"),
             
@@ -69,11 +81,11 @@ public class MainMenuScene : Scene
             new("Performance Benchmark", typeof(SpriteBenchmarkScene), "Batching & culling test", "Performance"),
             
             // Advanced Demos (Right Column)
-            new("Manual Control", typeof(ManualControlScene), "Opt-out lifecycle hooks", "Advanced"),
+            new("Manual Control", typeof(ManualControlScene), "Opt-out lifecycle hooks", "Advanced")
         };
     }
 
-    protected override void OnInitialize()
+    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
         _renderer.ClearColor = new Color(15, 20, 35);
         
@@ -84,6 +96,8 @@ public class MainMenuScene : Scene
         Logger.LogInformation("  Enter/Space - Select");
         Logger.LogInformation("  1-{Max} - Quick select", _demos.Count);
         Logger.LogInformation("  ESC - Exit");
+
+        return Task.CompletedTask;
     }
 
     protected override void OnUpdate(GameTime gameTime)

@@ -26,12 +26,23 @@ public interface IAudioService : IDisposable
     Task<ISoundEffect> LoadSoundAsync(string path, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Plays a sound effect.
+    /// Plays a sound effect with optional volume and panning.
     /// </summary>
     /// <param name="sound">The sound to play.</param>
     /// <param name="volume">Volume override (0.0 to 1.0), or null to use default.</param>
     /// <param name="loops">Number of times to loop (-1 for infinite, 0 for once).</param>
-    void PlaySound(ISoundEffect sound, float? volume = null, int loops = 0);
+    /// <param name="pan">Stereo panning (-1.0 = left, 0 = center, 1.0 = right).</param>
+    void PlaySound(ISoundEffect sound, float? volume = null, int loops = 0, float pan = 0f);
+
+    /// <summary>
+    /// Plays a sound effect and returns the track handle for lifecycle tracking.
+    /// </summary>
+    nint PlaySoundWithTrack(ISoundEffect sound, float? volume = null, int loops = 0, float pan = 0f);
+
+    /// <summary>
+    /// Stops a specific track by handle.
+    /// </summary>
+    void StopTrack(nint track);
 
     /// <summary>
     /// Stops all playing sound effects.
@@ -49,12 +60,14 @@ public interface IAudioService : IDisposable
     Task<IMusic> LoadMusicAsync(string path, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Plays music.
+    /// Plays background music.
     /// </summary>
-    /// <param name="music">The music to play.</param>
-    /// <param name="loops">Number of times to loop (-1 for infinite).</param>
-    /// <param name="fadeInMs">Fade in duration in milliseconds (0 for no fade).</param>
-    void PlayMusic(IMusic music, int loops = -1, int fadeInMs = 0);
+    void PlayMusic(IMusic music, int loops = -1);
+
+    /// <summary>
+    /// Stops the currently playing music.
+    /// </summary>
+    void StopMusic();
 
     /// <summary>
     /// Pauses the currently playing music.
@@ -67,23 +80,17 @@ public interface IAudioService : IDisposable
     void ResumeMusic();
 
     /// <summary>
-    /// Stops the currently playing music.
-    /// </summary>
-    /// <param name="fadeOutMs">Fade out duration in milliseconds (0 for immediate stop).</param>
-    void StopMusic(int fadeOutMs = 0);
-
-    /// <summary>
-    /// Gets whether music is currently playing.
-    /// </summary>
-    bool IsMusicPlaying { get; }
-
-    /// <summary>
-    /// Gets whether music is currently paused.
-    /// </summary>
-    bool IsMusicPaused { get; }
-
-    /// <summary>
     /// Unloads music.
     /// </summary>
     void UnloadMusic(IMusic music);
+
+    /// <summary>
+    /// Updates a playing track's spatial audio properties in real-time.
+    /// </summary>
+    void UpdateTrackSpatialAudio(nint track, float volume, float pan);
+
+    /// <summary>
+    /// Event fired when a track finishes playing (may be called from audio thread).
+    /// </summary>
+    event Action<nint>? OnTrackStopped;
 }

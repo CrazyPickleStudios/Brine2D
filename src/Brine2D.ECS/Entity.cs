@@ -112,6 +112,39 @@ public class Entity
     }
 
     /// <summary>
+    /// Adds a pre-configured component instance to this entity.
+    /// Useful for complex components that require configuration before adding.
+    /// </summary>
+    /// <param name="component">The component instance to add.</param>
+    /// <typeparam name="T">The component type.</typeparam>
+    /// <returns>The added component.</returns>
+    public T AddComponent<T>(T component) where T : Component
+    {
+        if (component == null)
+            throw new ArgumentNullException(nameof(component));
+        
+        var type = typeof(T);
+        
+        if (_components.Any(c => c.GetType() == type))
+        {
+            _logger?.LogWarning("Entity {EntityId} already has component {ComponentType}", Id, type.Name);
+            return component;
+        }
+        
+        component.Entity = this;
+        _components.Add(component);
+        
+        component.OnAdded();
+        
+        OnComponentAdded?.Invoke(this, component);
+        World?.NotifyComponentAdded(this, component);
+        
+        _logger?.LogDebug("Added component {ComponentType} to entity {EntityId} (pre-configured instance)", type.Name, Id);
+        
+        return component;
+    }
+
+    /// <summary>
     /// Gets a component of the specified type.
     /// </summary>
     public T? GetComponent<T>() where T : Component
@@ -274,7 +307,6 @@ public class Entity
     /// </summary>
     protected internal virtual void OnDestroy()
     {
-        // 1. Recursively destroy all children FIRST (if has TransformComponent)
         var transform = GetComponent<TransformComponent>();
         if (transform != null)
         {
@@ -288,11 +320,9 @@ public class Entity
             }
         }
         
-        // 2. Fire destroyed event
         OnDestroyed?.Invoke(this);
         World?.NotifyEntityDestroyed(this);
 
-        // 3. Clean up components (this will detach from parent)
         foreach (var component in _components.ToList())
         {
             component.OnRemoved();

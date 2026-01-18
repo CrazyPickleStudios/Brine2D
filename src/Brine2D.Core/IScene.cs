@@ -1,60 +1,60 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace Brine2D.Core
+namespace Brine2D.Core;
+
+/// <summary>
+/// Interface for game scenes.
+/// </summary>
+public interface IScene
 {
     /// <summary>
-    /// Represents a game scene (like a page or controller in ASP.NET).
+    /// Gets the name of the scene.
     /// </summary>
-    public interface IScene
-    {
-        /// <summary>
-        /// Gets the name of the scene.
-        /// </summary>
-        string Name { get; }
+    string Name { get; }
 
-        /// <summary>
-        /// Gets a value indicating whether the scene is active.
-        /// </summary>
-        bool IsActive { get; }
-        
-        /// <summary>
-        /// Gets whether lifecycle hooks should execute for this scene.
-        /// Set to false for complete manual control.
-        /// </summary>
-        bool EnableLifecycleHooks { get; }
-        
-        /// <summary>
-        /// Gets whether frame management (Clear/BeginFrame/EndFrame) is automatic.
-        /// Set to false for custom render targets or multi-pass rendering.
-        /// </summary>
-        bool EnableAutomaticFrameManagement { get; }
+    /// <summary>
+    /// Gets whether the scene is currently active.
+    /// </summary>
+    bool IsActive { get; }
 
-        /// <summary>
-        /// Called when the scene is first initialized.
-        /// </summary>
-        void Initialize();
+    /// <summary>
+    /// Gets whether lifecycle hooks should execute automatically.
+    /// Set to false for complete manual control over ECS pipelines and other hooks.
+    /// </summary>
+    bool EnableLifecycleHooks { get; }
 
-        /// <summary>
-        /// Called when the scene is loaded.
-        /// </summary>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        Task LoadAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Gets whether frame management (Clear/BeginFrame/EndFrame) should happen automatically.
+    /// Set to false for manual control over frame rendering (e.g., render targets, post-processing).
+    /// </summary>
+    bool EnableAutomaticFrameManagement { get; }
 
-        /// <summary>
-        /// Called every frame to update game logic.
-        /// </summary>
-        void Update(GameTime gameTime);
+    /// <summary>
+    /// Initializes the scene asynchronously.
+    /// </summary>
+    Task InitializeAsync(CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Called every frame to render.
-        /// </summary>
-        void Render(GameTime gameTime);
+    /// <summary>
+    /// Loads the scene's resources asynchronously.
+    /// </summary>
+    Task LoadAsync(CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Called when the scene is unloaded.
-        /// </summary>
-        Task UnloadAsync(CancellationToken cancellationToken = default);
-    }
+    /// <summary>
+    /// Updates the scene's game logic.
+    /// </summary>
+    void Update(GameTime gameTime);
+
+    /// <summary>
+    /// Renders the scene.
+    /// </summary>
+    void Render(GameTime gameTime);
+
+    /// <summary>
+    /// Unloads the scene's resources asynchronously.
+    /// </summary>
+    Task UnloadAsync(CancellationToken cancellationToken = default);
 }

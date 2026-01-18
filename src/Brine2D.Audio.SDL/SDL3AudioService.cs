@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace Brine2D.Audio.SDL;
 
 /// <summary>
-/// SDL3_mixer implementation of audio service.
+/// SDL3_mixer implementation of audio service with spatial audio support and proper callbacks.
 /// </summary>
 public class SDL3AudioService : IAudioService
 {
@@ -35,6 +35,19 @@ public class SDL3AudioService : IAudioService
     public bool IsMusicPaused { get; private set; }
 
     private nint _currentMusicTrack;
+
+    public event Action<nint>? OnTrackStopped;
+
+    private readonly Dictionary<nint, TrackCallbackData> _trackCallbacks = new();
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void TrackStoppedCallback(nint userdata);
+
+    private struct TrackCallbackData
+    {
+        public TrackStoppedCallback Callback;
+        public nint Track;
+    }
 
     public SDL3AudioService(ILogger<SDL3AudioService> logger, ILoggerFactory loggerFactory)
     {
@@ -114,68 +127,148 @@ public class SDL3AudioService : IAudioService
         return sound;
     }
 
-    public void PlaySound(ISoundEffect sound, float? volume = null, int loops = 0)
+    public void PlaySound(ISoundEffect sound, float? volume = null, int loops = 0, float pan = 0f)
+    {
+        PlaySoundWithTrack(sound, volume, loops, pan);
+    }
+
+    public nint PlaySoundWithTrack(ISoundEffect sound, float? volume = null, int loops = 0, float pan = 0f)
     {
         if (sound is not SDL3SoundEffect sdlSound)
-            throw new ArgumentException("Sound must be an SDL3SoundEffect", nameof(sound));
+            throw new ArgumentException("Sound must be SDL3SoundEffect", nameof(sound));
 
         if (!sdlSound.IsLoaded)
-            throw new InvalidOperationException("Sound is not loaded");
+        {
+            _logger.LogWarning("Attempted to play unloaded sound");
+            return nint.Zero;
+        }
 
+        var finalVolume = (volume ?? 1.0f) * _soundVolume;
+        pan = Math.Clamp(pan, -1.0f, 1.0f);
+
+        // Create a new track for this sound
         var track = SDL3.Mixer.CreateTrack(_mixer);
-        
         if (track == IntPtr.Zero)
         {
-            var error = SDL3.SDL.GetError();
-            _logger.LogWarning("Failed to create track for sound {Name}: {Error}", sound.Name, error);
-            return;
+            _logger.LogWarning("Failed to create track for sound {Name}", sound.Name);
+            return nint.Zero;
         }
 
         _tracks.Add(track);
 
-        var gain = volume ?? SoundVolume;
-        SDL3.Mixer.SetTrackGain(track, gain);
+        // Set track gain (volume)
+        SDL3.Mixer.SetTrackGain(track, finalVolume);
 
+        // Set track audio source
         if (!SDL3.Mixer.SetTrackAudio(track, sdlSound.Handle))
         {
-            var error = SDL3.SDL.GetError();
-            _logger.LogWarning("Failed to set track audio for {Name}: {Error}", sound.Name, error);
+            _logger.LogWarning("Failed to set track audio for sound {Name}", sound.Name);
             SDL3.Mixer.DestroyTrack(track);
             _tracks.Remove(track);
-            return;
+            return nint.Zero;
         }
 
-        uint props = 0;
-        if (loops != 0)
+        // Apply spatial audio (stereo panning) if needed
+        if (Math.Abs(pan) > 0.001f)
         {
-            props = SDL3.SDL.CreateProperties();
-            SDL3.SDL.SetNumberProperty(props, "SDL_mixer.play.loops", loops);
+            float leftGain = (1.0f - Math.Max(0, pan));
+            float rightGain = (1.0f + Math.Min(0, pan));
+
+            var gains = new float[] { leftGain, rightGain };
+            var gainsHandle = GCHandle.Alloc(gains, GCHandleType.Pinned);
+            try
+            {
+                SDL3.Mixer.SetTrackStereo(track, gainsHandle.AddrOfPinnedObject());
+            }
+            finally
+            {
+                gainsHandle.Free();
+            }
         }
+
+        var callback = new TrackStoppedCallback((userdata) => OnTrackStoppedNative(userdata));
+        _trackCallbacks[track] = new TrackCallbackData { Callback = callback, Track = track };
+
+        var props = SDL3.SDL.CreateProperties();
+        SDL3.SDL.SetNumberProperty(props, "SDL_mixer.play.loops", loops);
+        
+        var callbackPtr = Marshal.GetFunctionPointerForDelegate(callback);
+        SDL3.SDL.SetPointerProperty(props, "SDL_mixer.play.stopped_callback", callbackPtr);
+        SDL3.SDL.SetPointerProperty(props, "SDL_mixer.play.stopped_userdata", track);
 
         if (!SDL3.Mixer.PlayTrack(track, props))
         {
-            var error = SDL3.SDL.GetError();
-            _logger.LogWarning("Failed to play sound {Name}: {Error}", sound.Name, error);
+            _logger.LogWarning("Failed to play sound {Name}: {Error}", sound.Name, SDL3.SDL.GetError());
             SDL3.Mixer.DestroyTrack(track);
             _tracks.Remove(track);
-        }
-
-        if (props != 0)
-        {
+            _trackCallbacks.Remove(track);
             SDL3.SDL.DestroyProperties(props);
+            return nint.Zero;
+        }
+        
+        SDL3.SDL.DestroyProperties(props);
+        
+        _logger.LogDebug("Playing sound {Name} on track {Track} with callback", sound.Name, track);
+        return track;
+    }
+
+    private void OnTrackStoppedNative(nint track)
+    {
+        _logger.LogDebug("Track {Track} stopped (audio thread callback)", track);
+        _trackCallbacks.Remove(track);
+        OnTrackStopped?.Invoke(track);
+    }
+
+    public void StopTrack(nint track)
+    {
+        if (_tracks.Contains(track))
+        {
+            SDL3.Mixer.StopTrack(track, 0);
+            SDL3.Mixer.DestroyTrack(track);
+            _tracks.Remove(track);
+            _trackCallbacks.Remove(track);
+           
+            OnTrackStopped?.Invoke(track);
+        }
+    }
+
+    public void UpdateTrackSpatialAudio(nint track, float volume, float pan)
+    {
+        if (!_tracks.Contains(track))
+            return;
+
+        // Update volume
+        SDL3.Mixer.SetTrackGain(track, volume);
+        
+        // Update panning
+        if (Math.Abs(pan) > 0.001f)
+        {
+            float leftGain = (1.0f - Math.Max(0, pan));
+            float rightGain = (1.0f + Math.Min(0, pan));
+
+            var gains = new float[] { leftGain, rightGain };
+            var gainsHandle = GCHandle.Alloc(gains, GCHandleType.Pinned);
+            try
+            {
+                SDL3.Mixer.SetTrackStereo(track, gainsHandle.AddrOfPinnedObject());
+            }
+            finally
+            {
+                gainsHandle.Free();
+            }
         }
     }
 
     public void StopAllSounds()
     {
-        SDL3.Mixer.StopAllTracks(_mixer, 0);
-
         foreach (var track in _tracks.ToList())
         {
             if (track != _currentMusicTrack)
             {
+                SDL3.Mixer.StopTrack(track, 0);
                 SDL3.Mixer.DestroyTrack(track);
                 _tracks.Remove(track);
+                _trackCallbacks.Remove(track);
             }
         }
 
@@ -222,7 +315,7 @@ public class SDL3AudioService : IAudioService
         return musicObj;
     }
 
-    public void PlayMusic(IMusic music, int loops = -1, int fadeInMs = 0)
+    public void PlayMusic(IMusic music, int loops = -1)
     {
         if (music is not SDL3Music sdlMusic)
             throw new ArgumentException("Music must be SDL3Music", nameof(music));
@@ -245,7 +338,6 @@ public class SDL3AudioService : IAudioService
         }
 
         _tracks.Add(_currentMusicTrack);
-
         SDL3.Mixer.SetTrackGain(_currentMusicTrack, MusicVolume);
 
         if (!SDL3.Mixer.SetTrackAudio(_currentMusicTrack, sdlMusic.Handle))
@@ -259,11 +351,6 @@ public class SDL3AudioService : IAudioService
 
         var props = SDL3.SDL.CreateProperties();
         SDL3.SDL.SetNumberProperty(props, "SDL_mixer.play.loops", loops);
-
-        if (fadeInMs > 0)
-        {
-            SDL3.SDL.SetNumberProperty(props, "SDL_mixer.play.fade_ms", fadeInMs);
-        }
 
         if (!SDL3.Mixer.PlayTrack(_currentMusicTrack, props))
         {
@@ -302,11 +389,11 @@ public class SDL3AudioService : IAudioService
         }
     }
 
-    public void StopMusic(int fadeOutMs = 0)
+    public void StopMusic()
     {
         if (_currentMusicTrack != IntPtr.Zero)
         {
-            SDL3.Mixer.StopTrack(_currentMusicTrack, fadeOutMs);
+            SDL3.Mixer.StopTrack(_currentMusicTrack, 0);
             SDL3.Mixer.DestroyTrack(_currentMusicTrack);
             _tracks.Remove(_currentMusicTrack);
             _currentMusicTrack = IntPtr.Zero;
@@ -340,6 +427,7 @@ public class SDL3AudioService : IAudioService
             SDL3.Mixer.DestroyTrack(track);
         }
         _tracks.Clear();
+        _trackCallbacks.Clear();
 
         foreach (var sound in _loadedSounds.ToList())
         {

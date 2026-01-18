@@ -126,7 +126,7 @@ namespace Brine2D.Engine
             if (loadingScreen != null)
             {
                 _activeLoadingScreen = loadingScreen;
-                _activeLoadingScreen.Initialize();
+                await _activeLoadingScreen.InitializeAsync(cancellationToken);
                 await _activeLoadingScreen.LoadAsync(cancellationToken);
                 _logger.LogDebug("Loading screen initialized");
             }
@@ -149,7 +149,7 @@ namespace Brine2D.Engine
             _activeLoadingScreen?.UpdateProgress(0.5f, "Initializing...");
 
             // Initialize
-            scene.Initialize();
+            await scene.InitializeAsync(cancellationToken);
             _logger.LogDebug("Scene initialized");
             
             // Update loading progress

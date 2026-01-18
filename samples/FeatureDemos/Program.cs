@@ -20,9 +20,11 @@ using Brine2D.SDL.Common;
 using Brine2D.UI;
 using FeatureDemos.Scenes;
 using FeatureDemos.Scenes.Advanced;
+using FeatureDemos.Scenes.Audio;
 using FeatureDemos.Scenes.Collision;
 using FeatureDemos.Scenes.ECS;
 using FeatureDemos.Scenes.Performance;
+using FeatureDemos.Scenes.Rendering;
 using FeatureDemos.Scenes.Transitions;
 using FeatureDemos.Scenes.UI;
 using Microsoft.Extensions.Configuration;
@@ -56,11 +58,20 @@ builder.Services.AddSDL3Rendering(options =>
     options.VSync = true;
 });
 
-// ECS services (includes automatic object pooling!)
+// ECS services
 builder.Services.AddObjectECS();
 builder.Services.AddECSRendering(); 
 builder.Services.AddECSInput();
 builder.Services.AddECSAudio();
+
+builder.Services.AddTextureAtlasing(options =>
+{
+    options.MaxAtlasWidth = 2048;
+    options.MaxAtlasHeight = 2048;
+    options.Padding = 2;
+    options.UsePowerOfTwo = true;
+    options.DefaultScaleMode = TextureScaleMode.Nearest;
+});
 
 // Configure System Pipelines
 builder.Services.ConfigureSystemPipelines(pipelines =>
@@ -76,7 +87,7 @@ builder.Services.ConfigureSystemPipelines(pipelines =>
     // Render systems
     pipelines.AddSystem<SpriteRenderingSystem>();
     pipelines.AddSystem<DebugRenderer>();
-    pipelines.AddSystem<ParticleSystem>();  // Automatically uses pooling internally!
+    pipelines.AddSystem<ParticleSystem>();
 });
 
 // Other services
@@ -107,9 +118,11 @@ builder.Services.AddScene<ManualControlScene>();
 
 builder.Services.AddScene<SpriteBenchmarkScene>();
 
-builder.Services.AddScene<MainMenuScene>();
+builder.Services.AddScene<TextureAtlasDemoScene>();
 
-builder.Services.AddScene<RendererTestScene>();
+builder.Services.AddScene<SpatialAudioDemoScene>();
+
+builder.Services.AddScene<MainMenuScene>();
 
 // Add performance monitoring
 builder.Services.AddPerformanceMonitoring(); // Core tracking

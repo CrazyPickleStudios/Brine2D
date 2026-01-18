@@ -22,7 +22,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
     private readonly IRenderer _renderer;
     private readonly ITextureLoader _textureLoader;
     private readonly DebugRenderer? _debugRenderer;
-    private readonly ICamera? _camera; // Add camera for culling
+    private readonly ICamera? _camera;
     private ITexture? _sharedTexture;
     private int _spriteCount = 100;
     private bool _showCullingVisualization = false; // Toggle culling visualization
@@ -36,7 +36,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         IGameContext gameContext,
         PerformanceOverlay? perfOverlay,
         DebugRenderer? debugRenderer,
-        ICamera? camera, // Add camera parameter
+        ICamera? camera,
         ILogger<SpriteBenchmarkScene> logger)
         : base(input, sceneManager, gameContext, logger, renderer, world, perfOverlay)
     {
@@ -45,8 +45,8 @@ public class SpriteBenchmarkScene : DemoSceneBase
         _debugRenderer = debugRenderer;
         _camera = camera;
     }
-    
-    protected override void OnInitialize()
+
+    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Sprite Rendering Benchmark ===");
         Logger.LogInformation("Controls:");
@@ -90,6 +90,8 @@ public class SpriteBenchmarkScene : DemoSceneBase
 
         // Spawn initial sprites across a large area
         SpawnSprites(_spriteCount);
+
+        return Task.CompletedTask;
     }
     
     protected override async Task OnLoadAsync(CancellationToken cancellationToken)

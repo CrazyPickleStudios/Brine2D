@@ -266,7 +266,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, IntPtr.Zero, ref destRect);
     }
 
-    public void DrawTexture(ITexture texture, float x, float y, float width, float height)
+    public void DrawTexture(ITexture texture, float x, float y, float width, float height, 
+        float rotation = 0f, Color? color = null)
     {
         ThrowIfNotInitialized();
 
@@ -287,12 +288,46 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             H = size.Y
         };
 
-        SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, IntPtr.Zero, ref destRect);
+        // Apply color tint if specified
+        if (color.HasValue)
+        {
+            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, color.Value.R, color.Value.G, color.Value.B);
+            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, color.Value.A);
+        }
+
+        // Use SDL's built-in rotation support (much simpler than GPU renderer!)
+        if (rotation != 0f)
+        {
+            // Convert radians to degrees for SDL
+            double angleDegrees = rotation * (180.0 / Math.PI);
+            
+            // Rotate around center
+            var center = new SDL3.SDL.FPoint
+            {
+                X = size.X / 2f,
+                Y = size.Y / 2f
+            };
+
+            SDL3.SDL.RenderTextureRotated(_renderer, sdlTexture.Handle, IntPtr.Zero, ref destRect,
+                angleDegrees, ref center, SDL3.SDL.FlipMode.None);
+        }
+        else
+        {
+            SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, IntPtr.Zero, ref destRect);
+        }
+
+        // Reset color mod if it was changed
+        if (color.HasValue)
+        {
+            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, 255, 255, 255);
+            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, 255);
+        }
     }
 
     public void DrawTexture(ITexture texture,
         float sourceX, float sourceY, float sourceWidth, float sourceHeight,
-        float destX, float destY, float destWidth, float destHeight)
+        float destX, float destY, float destWidth, float destHeight,
+        float rotation = 0f, Color? color = null)
     {
         ThrowIfNotInitialized();
 
@@ -321,7 +356,40 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             H = size.Y
         };
 
-        SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, ref sourceRect, ref destRect);
+        // Apply color tint if specified
+        if (color.HasValue)
+        {
+            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, color.Value.R, color.Value.G, color.Value.B);
+            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, color.Value.A);
+        }
+
+        // Use SDL's built-in rotation support
+        if (rotation != 0f)
+        {
+            // Convert radians to degrees for SDL
+            double angleDegrees = rotation * (180.0 / Math.PI);
+            
+            // Rotate around center
+            var center = new SDL3.SDL.FPoint
+            {
+                X = size.X / 2f,
+                Y = size.Y / 2f
+            };
+
+            SDL3.SDL.RenderTextureRotated(_renderer, sdlTexture.Handle, ref sourceRect, ref destRect,
+                angleDegrees, ref center, SDL3.SDL.FlipMode.None);
+        }
+        else
+        {
+            SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, ref sourceRect, ref destRect);
+        }
+
+        // Reset color mod if it was changed
+        if (color.HasValue)
+        {
+            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, 255, 255, 255);
+            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, 255);
+        }
     }
 
     public void DrawText(string text, float x, float y, Color color)
@@ -542,6 +610,20 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             SDL3.SDL.DestroyTexture(sdlTexture.Handle);
             _logger.LogDebug("Released texture: {Source}", texture.Source);
         }
+    }
+
+    public void SetBlendMode(BlendMode blendMode)
+    {
+        var sdlBlendMode = blendMode switch
+        {
+            BlendMode.Alpha => SDL3.SDL.BlendMode.Blend,
+            BlendMode.Additive => SDL3.SDL.BlendMode.Add,
+            BlendMode.Multiply => SDL3.SDL.BlendMode.Mod,
+            BlendMode.None => SDL3.SDL.BlendMode.None,
+            _ => SDL3.SDL.BlendMode.Blend
+        };
+        
+        SDL3.SDL.SetRenderDrawBlendMode(_renderer, sdlBlendMode);
     }
 
     private Vector2 ApplyCameraTransform(Vector2 position)

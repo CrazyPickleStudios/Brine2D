@@ -39,7 +39,7 @@ public class TransitionDemoScene : DemoSceneBase
         _sceneName = $"Scene {Random.Shared.Next(1, 100)}";
     }
 
-    protected override void OnInitialize()
+    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Transition Demo Scene ===");
         Logger.LogInformation("Controls:");
@@ -50,6 +50,8 @@ public class TransitionDemoScene : DemoSceneBase
         
         // Set clear color
         _renderer.ClearColor = _sceneColor;
+
+        return Task.CompletedTask;
     }
 
     protected override void OnUpdate(GameTime gameTime)

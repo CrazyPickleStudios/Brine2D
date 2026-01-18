@@ -63,7 +63,7 @@ public class QueryDemoScene : DemoSceneBase
         _gameContext = gameContext;
     }
 
-    protected override void OnInitialize()
+    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Query Demo Scene ===");
         Logger.LogInformation("Controls:");
@@ -111,6 +111,8 @@ public class QueryDemoScene : DemoSceneBase
 
         Logger.LogInformation("Created {Count} demo entities", _entities.Count);
         RunCurrentDemo();
+
+        return Task.CompletedTask;
     }
 
     protected override void OnUpdate(GameTime gameTime)

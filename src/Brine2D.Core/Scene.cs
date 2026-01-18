@@ -43,10 +43,10 @@ namespace Brine2D.Core
         }
 
         /// <inheritdoc/>
-        public virtual void Initialize()
+        public virtual async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
             _logger.LogDebug("Initializing scene: {SceneName}", Name);
-            OnInitialize();
+            await OnInitializeAsync(cancellationToken);
             IsActive = true;
         }
 
@@ -81,11 +81,17 @@ namespace Brine2D.Core
 
         /// <summary>
         /// Called during initialization. Override to provide custom initialization logic.
+        /// This is for setup and configuration tasks (NOT asset loading - use OnLoadAsync for that).
         /// </summary>
-        protected virtual void OnInitialize() { }
+        /// <remarks>
+        /// Initialize is for fast setup: configuring state, creating entities (without assets), registering handlers.
+        /// For loading textures, sounds, or other assets, use <see cref="OnLoadAsync"/> instead.
+        /// </remarks>
+        protected virtual Task OnInitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         /// <summary>
         /// Called during loading. Override to load resources asynchronously.
+        /// This is where you load textures, sounds, build atlases, and create GPU resources.
         /// </summary>
         protected virtual Task OnLoadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 

@@ -118,12 +118,9 @@ public class SpriteBatcher
         var destHeight = height * item.Scale.Y;
         
         // Apply origin offset (origin is 0-1 range)
+        // For rotation, we want to position based on the pivot point
         var destX = item.Position.X - (item.Origin.X * destWidth);
         var destY = item.Position.Y - (item.Origin.Y * destHeight);
-        
-        // TODO: Add rotation support when IRenderer supports it
-        // Current IRenderer API doesn't support rotation
-        // Future: Use transform matrix with GPU renderer
         
         if (item.SourceRect.HasValue)
         {
@@ -131,11 +128,17 @@ public class SpriteBatcher
             renderer.DrawTexture(
                 item.Texture,
                 src.X, src.Y, src.Width, src.Height,
-                destX, destY, destWidth, destHeight);
+                destX, destY, destWidth, destHeight,
+                rotation: item.Rotation,  
+                color: item.Tint);         
         }
         else
         {
-            renderer.DrawTexture(item.Texture, destX, destY, destWidth, destHeight);
+            renderer.DrawTexture(
+                item.Texture, 
+                destX, destY, destWidth, destHeight,
+                rotation: item.Rotation, 
+                color: item.Tint);         
         }
     }
 }

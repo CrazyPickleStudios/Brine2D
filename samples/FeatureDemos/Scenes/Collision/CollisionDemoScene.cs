@@ -86,7 +86,7 @@ public class CollisionDemoScene : DemoSceneBase
         };
     }
 
-    protected override void OnInitialize()
+    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Collision Detection Demo ===");
         Logger.LogInformation("Controls:");
@@ -100,6 +100,8 @@ public class CollisionDemoScene : DemoSceneBase
         _renderer.ClearColor = new Color(20, 25, 35);
         
         SetupScene();
+
+        return Task.CompletedTask;
     }
 
     private void SetupScene()
