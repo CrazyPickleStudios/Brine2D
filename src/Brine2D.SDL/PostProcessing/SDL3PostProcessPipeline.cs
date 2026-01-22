@@ -103,7 +103,7 @@ public class SDL3PostProcessPipeline : PostProcessPipeline
             {
                 var effect = factory();
                 AddEffect(effect);
-                _logger?.LogInformation("✓ {EffectName} initialized", effect.Name);
+                _logger?.LogInformation("{EffectName} initialized", effect.Name);
             }
             catch (Exception ex)
             {

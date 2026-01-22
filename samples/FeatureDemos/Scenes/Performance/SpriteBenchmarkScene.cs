@@ -30,7 +30,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
     private ITexture? _sharedTexture;
     private int _spriteCount = 100;
     private bool _showCullingVisualization = false;
-    private bool _enableAnimation = true; // NEW: Toggle sprite animation
+    private bool _enableAnimation = true;
     private System.Diagnostics.Stopwatch _cpuWorkStopwatch = new();
 
     public SpriteBenchmarkScene(
@@ -229,7 +229,6 @@ public class SpriteBenchmarkScene : DemoSceneBase
             Logger.LogInformation("Reset to {Count} sprites", _spriteCount);
         }
         
-        // NEW: Animate sprites using component-based ForEach (automatically parallelized!)
         if (_enableAnimation && World != null)
         {
             AnimateSprites(gameTime);
@@ -246,8 +245,6 @@ public class SpriteBenchmarkScene : DemoSceneBase
         var time = gameTime.TotalTime;
         var deltaTime = (float)gameTime.DeltaTime;
         
-        // NEW: Component-based ForEach - components passed directly, no GetComponent() calls!
-        // Automatically parallelizes with >100 entities across all CPU cores!
         World!.Query()
             .With<TransformComponent>()
             .With<VelocityComponent>()
@@ -409,7 +406,6 @@ public class SpriteBenchmarkScene : DemoSceneBase
                 0.5f + (float)random.NextDouble() * 1.0f, 
                 0.5f + (float)random.NextDouble() * 1.0f);
             
-            // NEW: Add velocity for animation
             var velocity = sprite.AddComponent<VelocityComponent>();
             velocity.Velocity = new Vector2(
                 (float)(random.NextDouble() - 0.5) * 200f,

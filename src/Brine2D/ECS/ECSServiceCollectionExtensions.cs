@@ -232,7 +232,6 @@ public static class SystemPipelineConfigurator
 
     public static void ConfigureRenderPipeline(IServiceProvider serviceProvider)
     {
-        // ✅ Direct type access (no reflection!)
         var pipeline = serviceProvider.GetRequiredService<RenderPipeline>();
         var registrations = serviceProvider.GetServices<IRenderSystemRegistration>();
 

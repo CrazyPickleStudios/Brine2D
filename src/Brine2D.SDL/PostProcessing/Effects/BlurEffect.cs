@@ -137,7 +137,7 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
                 throw new InvalidOperationException("Failed to create blur shaders");
             }
 
-            _logger?.LogInformation("✓ Blur shaders loaded successfully ({VertexSize} + {FragmentSize} bytes)",
+            _logger?.LogInformation("Blur shaders loaded successfully ({VertexSize} + {FragmentSize} bytes)",
                 vertexBytecode.Length, fragmentBytecode.Length);
         }
         catch (Exception ex)

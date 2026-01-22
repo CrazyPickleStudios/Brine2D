@@ -52,7 +52,7 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
         CreatePipeline();
 
         _initialized = true;
-        _logger?.LogInformation("✓ Grayscale effect ready");
+        _logger?.LogInformation("Grayscale effect ready");
     }
 
     private void CreateSampler()
@@ -140,7 +140,7 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
                 throw new InvalidOperationException("Failed to create grayscale shaders from bytecode");
             }
 
-            _logger?.LogInformation("✓ Grayscale shaders loaded successfully ({VertexSize} + {FragmentSize} bytes)",
+            _logger?.LogInformation("Grayscale shaders loaded successfully ({VertexSize} + {FragmentSize} bytes)",
                 vertexBytecode.Length, fragmentBytecode.Length);
         }
         catch (Exception ex)

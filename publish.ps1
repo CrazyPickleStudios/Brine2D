@@ -7,11 +7,19 @@ param(
 Write-Host "Cleaning..." -ForegroundColor Yellow
 dotnet clean -c Release
 
-Write-Host "Building and packing..." -ForegroundColor Yellow
-dotnet pack -c Release --no-restore
+Write-Host "Restoring..." -ForegroundColor Yellow
+dotnet restore
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Build failed!" -ForegroundColor Red
+    Write-Host "Restore failed!" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Building and packing..." -ForegroundColor Yellow
+dotnet pack -c Release
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Build/Pack failed!" -ForegroundColor Red
     exit 1
 }
 
@@ -29,6 +37,8 @@ $source = "https://api.nuget.org/v3/index.json"
 foreach ($package in $packages) {
     $path = "src\$package\bin\Release\$package.0.9.0-beta.nupkg"
     
+    Write-Host "Checking: $path" -ForegroundColor Yellow
+    
     if (Test-Path $path) {
         Write-Host "  Publishing $package..." -ForegroundColor Green
         dotnet nuget push $path --api-key $ApiKey --source $source --skip-duplicate
@@ -39,7 +49,9 @@ foreach ($package in $packages) {
             Write-Host "    $package failed or already exists" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "    Package not found: $path" -ForegroundColor Red
+        Write-Host "    Package NOT FOUND: $path" -ForegroundColor Red
+        Write-Host "    Available files:" -ForegroundColor Yellow
+        Get-ChildItem "src\$package\bin\Release\" | ForEach-Object { Write-Host "      $_" }
     }
 }
 
