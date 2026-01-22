@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -21,22 +22,22 @@ public class UITabContainer : IUIComponent
     /// <summary>
     /// Background color for tabs.
     /// </summary>
-    public Color TabBackgroundColor { get; set; } = new Color(60, 60, 60);
+    public Color TabBackgroundColor { get; set; } = Color.FromArgb(60, 60, 60);
 
     /// <summary>
     /// Active tab color.
     /// </summary>
-    public Color ActiveTabColor { get; set; } = new Color(80, 80, 80);
+    public Color ActiveTabColor { get; set; } = Color.FromArgb(80, 80, 80);
 
     /// <summary>
     /// Hover tab color.
     /// </summary>
-    public Color HoverTabColor { get; set; } = new Color(70, 70, 70);
+    public Color HoverTabColor { get; set; } = Color.FromArgb(70, 70, 70);
 
     /// <summary>
     /// Content area background color.
     /// </summary>
-    public Color ContentBackgroundColor { get; set; } = new Color(50, 50, 50);
+    public Color ContentBackgroundColor { get; set; } = Color.FromArgb(50, 50, 50);
 
     /// <summary>
     /// Text color.
@@ -46,7 +47,7 @@ public class UITabContainer : IUIComponent
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = new Color(100, 100, 100);
+    public Color BorderColor { get; set; } = Color.FromArgb(100, 100, 100);
 
     /// <summary>
     /// Currently selected tab index.

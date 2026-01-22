@@ -1,9 +1,8 @@
+using System.Drawing;
 using Brine2D.Core;
-using Brine2D.Engine;
 using Brine2D.Engine.Transitions;
 using Brine2D.Input;
 using Brine2D.Rendering;
-using Brine2D.Rendering.ECS;
 using Microsoft.Extensions.Logging;
 using FeatureDemos.Scenes.ECS;
 using FeatureDemos.Scenes.Transitions;
@@ -13,6 +12,8 @@ using FeatureDemos.Scenes.Collision;
 using FeatureDemos.Scenes.UI;
 using FeatureDemos.Scenes.Performance;
 using FeatureDemos.Scenes.Rendering;
+using Brine2D.Systems.Rendering;
+using Brine2D.Engine;
 
 namespace FeatureDemos.Scenes;
 
@@ -87,7 +88,7 @@ public class MainMenuScene : Scene
 
     protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
-        _renderer.ClearColor = new Color(15, 20, 35);
+        _renderer.ClearColor = Color.FromArgb(15, 20, 35);
         
         Logger.LogInformation("=== Brine2D Feature Demos ===");
         Logger.LogInformation("Available demos: {Count}", _demos.Count);
@@ -169,14 +170,14 @@ public class MainMenuScene : Scene
     protected override void OnRender(GameTime gameTime)
     {
         // Title
-        DrawCenteredText("BRINE2D FEATURE DEMOS", TitleY, new Color(100, 200, 255), large: true);
-        DrawCenteredText("v0.6.0-beta", TitleY + 30, new Color(150, 150, 150));
+        DrawCenteredText("BRINE2D FEATURE DEMOS", TitleY, Color.FromArgb(100, 200, 255), large: true);
+        DrawCenteredText("v0.6.0-beta", TitleY + 30, Color.FromArgb(150, 150, 150));
         
         DrawCenteredText("↑↓ Navigate  |  ←→ Switch Column  |  ENTER Select  |  1-9 Quick  |  ESC Exit", 
-            TitleY + 65, new Color(120, 120, 120));
+            TitleY + 65, Color.FromArgb(120, 120, 120));
         
         // Draw separator line
-        _renderer.DrawRectangleFilled(50, TitleY + 95, 1180, 2, new Color(50, 70, 100));
+        _renderer.DrawRectangleFilled(50, TitleY + 95, 1180, 2, Color.FromArgb(50, 70, 100));
         
         // Determine column split (distribute demos evenly)
         var itemsPerColumn = GetItemsPerColumn();
@@ -189,12 +190,12 @@ public class MainMenuScene : Scene
         
         // Draw column separator
         var separatorX = LeftColumnX + ColumnWidth + (ColumnSpacing / 2);
-        _renderer.DrawRectangleFilled(separatorX, ColumnStartY - 10, 2, 450, new Color(50, 70, 100));
+        _renderer.DrawRectangleFilled(separatorX, ColumnStartY - 10, 2, 450, Color.FromArgb(50, 70, 100));
         
         // Footer info
         var footerY = 660f;
         DrawCenteredText($"Total Demos: {_demos.Count}  |  Batched Rendering + Frustum Culling + Object Pooling", 
-            footerY, new Color(100, 100, 100));
+            footerY, Color.FromArgb(100, 100, 100));
     }
 
     private void DrawColumn(List<DemoEntry> demos, float columnX, float startY, int indexOffset)
@@ -218,8 +219,8 @@ public class MainMenuScene : Scene
                 _renderer.DrawText(
                     $"--- {demo.Category} ---", 
                     columnX + 20, 
-                    currentY, 
-                    new Color(80, 150, 200)
+                    currentY,
+                    Color.FromArgb(80, 150, 200)
                 );
                 currentY += LineHeight - 10;
                 lastCategory = demo.Category;
@@ -230,22 +231,22 @@ public class MainMenuScene : Scene
             // Selection background
             if (isSelected)
             {
-                _renderer.DrawRectangleFilled(columnX, currentY - 5, ColumnWidth, 48, new Color(40, 80, 120, 150));
-                _renderer.DrawRectangleOutline(columnX, currentY - 5, ColumnWidth, 48, new Color(100, 180, 255), 2f);
+                _renderer.DrawRectangleFilled(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(150, 40, 80, 120));
+                _renderer.DrawRectangleOutline(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(100, 180, 255), 2f);
             }
             
             // Selection arrow
             if (isSelected)
             {
-                _renderer.DrawText(">", columnX - 20, currentY, new Color(100, 200, 255));
+                _renderer.DrawText(">", columnX - 20, currentY, Color.FromArgb(100, 200, 255));
             }
             
             // Demo number and name
-            var nameColor = isSelected ? new Color(255, 255, 255) : new Color(200, 200, 200);
+            var nameColor = isSelected ? Color.FromArgb(255, 255, 255) : Color.FromArgb(200, 200, 200);
             _renderer.DrawText($"{globalIndex + 1}. {demo.DisplayName}", columnX + 20, currentY, nameColor);
             
             // Description (smaller text)
-            _renderer.DrawText(demo.Description, columnX + 40, currentY + 22, new Color(140, 140, 140));
+            _renderer.DrawText(demo.Description, columnX + 40, currentY + 22, Color.FromArgb(140, 140, 140));
             
             currentY += LineHeight;
         }

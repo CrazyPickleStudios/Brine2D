@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS;
@@ -5,7 +6,6 @@ using Brine2D.ECS.Systems;
 using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
-using Brine2D.Rendering.ECS;
 using Microsoft.Extensions.Logging;
 
 namespace FeatureDemos.Scenes.Advanced;
@@ -52,7 +52,7 @@ public class ManualControlScene : DemoSceneBase
         Logger.LogInformation("Lifecycle hooks: DISABLED (manual control)");
         Logger.LogInformation("Frame management: DISABLED (manual control)");
         
-        _renderer.ClearColor = new Color(20, 20, 40);
+        _renderer.ClearColor = Color.FromArgb(20, 20, 40);
 
         return Task.CompletedTask;
     }

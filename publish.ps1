@@ -18,28 +18,16 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Publishing to NuGet.org..." -ForegroundColor Cyan
 
 $packages = @(
-    "Brine2D.Core",
-    "Brine2D.Rendering",
-    "Brine2D.Input",
-    "Brine2D.Audio",
-    "Brine2D.Engine",
-    "Brine2D.Hosting",
-    "Brine2D.SDL.Common",
-    "Brine2D.Rendering.SDL",
-    "Brine2D.Input.SDL",
-    "Brine2D.Audio.SDL",
-    "Brine2D.UI",
-    "Brine2D.ECS",              
-    "Brine2D.Audio.ECS",        
-    "Brine2D.Input.ECS",        
-    "Brine2D.Rendering.ECS",    
-    "Brine2D.Desktop"
+    "Brine2D",
+    "Brine2D.SDL",
+    "Brine2D.Tilemap",
+    "Brine2D.UI"
 )
 
 $source = "https://api.nuget.org/v3/index.json"
 
 foreach ($package in $packages) {
-    $path = "src\$package\bin\Release\$package.0.7.0-beta.nupkg"
+    $path = "src\$package\bin\Release\$package.0.9.0-beta.nupkg"
     
     if (Test-Path $path) {
         Write-Host "  Publishing $package..." -ForegroundColor Green

@@ -1,17 +1,18 @@
 ﻿using Brine2D.Core;
-using Brine2D.Core.Animation;
+using Brine2D.Animation;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Query;
-using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
-using Brine2D.Rendering.Performance;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Numerics;
 using System.Text;
+using Brine2D.Engine;
+using Brine2D.Performance;
 
 namespace FeatureDemos.Scenes.ECS;
 
@@ -74,7 +75,7 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("");
         Logger.LogInformation("Current Demo: {Demo}", _currentDemo);
 
-        _renderer.ClearColor = new Color(20, 20, 30);
+        _renderer.ClearColor = Color.FromArgb(20, 20, 30);
 
         // Create player
         _player = _world.CreateEntity("Player");
@@ -172,8 +173,8 @@ public class QueryDemoScene : DemoSceneBase
                 _renderer.DrawCircleFilled(
                     transform.Position.X, 
                     transform.Position.Y, 
-                    8, 
-                    new Color(100, 100, 100));
+                    8,
+                    Color.FromArgb(100, 100, 100));
             }
         }
 

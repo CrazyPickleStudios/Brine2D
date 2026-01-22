@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -52,17 +53,17 @@ public class UIDropdown : IUIComponent
     /// <summary>
     /// Background color.
     /// </summary>
-    public Color BackgroundColor { get; set; } = new Color(60, 60, 60);
+    public Color BackgroundColor { get; set; } = Color.FromArgb(60, 60, 60);
 
     /// <summary>
     /// Hover color for items.
     /// </summary>
-    public Color HoverColor { get; set; } = new Color(80, 80, 80);
+    public Color HoverColor { get; set; } = Color.FromArgb(80, 80, 80);
 
     /// <summary>
     /// Selected item color.
     /// </summary>
-    public Color SelectedColor { get; set; } = new Color(100, 150, 255);
+    public Color SelectedColor { get; set; } = Color.FromArgb(100, 150, 255);
 
     /// <summary>
     /// Text color.
@@ -72,7 +73,7 @@ public class UIDropdown : IUIComponent
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = new Color(150, 150, 150);
+    public Color BorderColor { get; set; } = Color.FromArgb(150, 150, 150);
 
     /// <summary>
     /// Event fired when selection changes.
@@ -115,7 +116,7 @@ public class UIDropdown : IUIComponent
         var displayText = SelectedText ?? "(Select)";
         var textX = Position.X + 10;
         var textY = Position.Y + (Size.Y / 2) - 8;
-        renderer.DrawText(displayText, textX, textY, Enabled ? TextColor : new Color(100, 100, 100));
+        renderer.DrawText(displayText, textX, textY, Enabled ? TextColor : Color.FromArgb(100, 100, 100));
 
         // Draw dropdown arrow
         var arrowX = Position.X + Size.X - 20;

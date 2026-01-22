@@ -1,6 +1,6 @@
 # Brine2D
 
-**The ASP.NET of game engines** - A modern .NET 10 game engine built on SDL3 for creating 2D games with C#.
+**Modern 2D game development with .NET elegance** - A modern .NET 10 game engine built on SDL3 for creating 2D games with C#.
 
 Brine2D brings the familiar patterns and developer experience of ASP.NET to game development. If you've built web apps with ASP.NET, you'll feel right at home building games with Brine2D.
 
@@ -9,19 +9,20 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 - **Entity Component System (ECS)** - ASP.NET-style system pipelines with automatic ordering
 - **Scene Management** - Async loading, transitions, loading screens, and lifecycle hooks
 - **Advanced Queries** - Fluent API with spatial queries, filtering, sorting, and caching
-- **Performance Monitoring** - Built-in FPS counter, frame time graphs, and rendering statistics
+- **Performance Monitoring** - Built-in FPS counter, frame time graphs, system profiling, and rendering statistics
 - **Object Pooling** - Zero-allocation systems using `ArrayPool<T>` and custom object pools
 - **Sprite Batching** - Automatic batching with layer sorting and frustum culling
 - **Texture Atlasing** - Runtime sprite packing with intelligent bin packing
 - **Event System** - Type-safe EventBus for decoupled component communication
 - **Input System** - Keyboard, mouse, gamepad with polling and events
 - **Sprite Rendering** - Hardware-accelerated with sprite sheets and animations
-- **Animation System** - Frame-based with multiple clips and events
+- **Animation System** - Frame-based with multiple clips and tween components
 - **Audio System** - Sound effects, music, and 2D spatial audio with distance attenuation
 - **Tilemap Support** - Tiled (.tmj) integration with auto-collision
 - **Collision Detection** - AABB and circle colliders with spatial partitioning
 - **Camera System** - 2D camera with follow, zoom, rotation, and bounds
 - **Particle System** - Pooled particles with textures, rotation, trails, and blend modes
+- **Post-Processing Effects** - Bloom, blur, grayscale, and custom shader effects pipeline
 - **UI Framework** - Complete component library with tooltips, tabs, dialogs, and more
 - **Configuration** - JSON-based settings with hot reload support
 - **Dependency Injection** - ASP.NET Core-style DI container
@@ -96,34 +97,25 @@ Create a new .NET 10 console project and add Brine2D:
 ~~~sh
 dotnet new console -n MyGame
 cd MyGame
-dotnet add package Brine2D.Desktop
+dotnet add package Brine2D
+dotnet add package Brine2D.SDL
 ~~~
 
-That's it! `Brine2D.Desktop` includes everything you need to start building games.
+That's it! You're ready to build games.
 
 ### Package Options
 
-For most users, install the meta-package:
+**For most users:**
 ~~~sh
-dotnet add package Brine2D.Desktop
-~~~
+# Core engine (ECS-first, batteries included)
+dotnet add package Brine2D
 
-**Advanced:** Install only what you need:
-~~~sh
-# Core abstractions
-dotnet add package Brine2D.Core
-dotnet add package Brine2D.Engine
-dotnet add package Brine2D.ECS
+# Platform implementation
+dotnet add package Brine2D.SDL
 
-# Choose your implementations
-dotnet add package Brine2D.Rendering.SDL
-dotnet add package Brine2D.Input.SDL
-dotnet add package Brine2D.Audio.SDL
-
-# ECS bridges (optional)
-dotnet add package Brine2D.Rendering.ECS
-dotnet add package Brine2D.Input.ECS
-dotnet add package Brine2D.Audio.ECS
+# Optional features
+dotnet add package Brine2D.Tilemap
+dotnet add package Brine2D.UI
 ~~~
 
 ---
@@ -134,11 +126,11 @@ Create `Program.cs`:
 
 ~~~csharp
 using Brine2D.Core;
+using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Input;
-using Brine2D.Input.SDL;
 using Brine2D.Rendering;
-using Brine2D.Rendering.SDL;
+using Brine2D.SDL;
 using Microsoft.Extensions.Logging;
 
 // Create the game application builder
@@ -183,13 +175,11 @@ public class GameScene : Scene
 
     protected override void OnRender(GameTime gameTime)
     {
-        // Systems and rendering happen automatically!
         _renderer.DrawText("Hello, Brine2D!", 100, 100, Color.White);
     }
 
     protected override void OnUpdate(GameTime gameTime)
     {
-        // Systems run automatically via lifecycle hooks!
         if (_input.IsKeyPressed(Keys.Escape))
         {
             _gameContext.RequestExit();
@@ -207,14 +197,16 @@ dotnet run
 
 ### Beta Release Notice
 
-**⚠️ This is a beta release (0.8.0-beta)**
+**⚠️ This is a beta release (0.9.0-beta)**
 
 What works:
-- ✅ **Entity Component System (ECS)**
+- ✅ **ECS-first architecture** - Systems integrated into core package
+- ✅ **Entity Component System (ECS)** - Fully featured with advanced queries
 - ✅ **System pipelines with automatic ordering**
-- ✅ **Advanced query system with fluent API**
-- ✅ **Performance monitoring and profiling**
-- ✅ **Object pooling (ArrayPool, custom pools)**
+- ✅ **Multi-threaded ECS systems** - Parallel system execution with job scheduling
+- ✅ **Advanced query system** - Spatial queries, filtering, sorting, caching
+- ✅ **Performance monitoring and profiling** - Frame time graphs, system profiling
+- ✅ **Object pooling** - ArrayPool integration, custom pools
 - ✅ **Sprite batching with frustum culling**
 - ✅ **Texture atlasing with runtime packing**
 - ✅ **Scene transitions and loading screens**
@@ -222,22 +214,28 @@ What works:
 - ✅ **EventBus for component communication**
 - ✅ **Prefabs and serialization**
 - ✅ **Transform hierarchy (parent/child)**
-- ✅ **Utility components (Timer, Lifetime, Tween)**
+- ✅ **Built-in components** - Timer, Lifetime, Tween, Velocity, Transform
+- ✅ **Built-in systems** - Physics, AI, Audio, Input, Rendering
 - ✅ **GPU rendering** (SDL3 GPU API with Vulkan/D3D12/Metal)
 - ✅ **Legacy rendering** (SDL_Renderer API for compatibility)
+- ✅ **Post-processing effects pipeline** - Bloom, blur, grayscale, custom shaders
 - ✅ Sprites, primitives, text, lines
-- ✅ Input system (keyboard, mouse, gamepad)
+- ✅ Input system (keyboard, mouse, gamepad with layers)
 - ✅ **Spatial audio system** (2D distance attenuation + stereo panning)
-- ✅ Animation system
+- ✅ Animation system with frame-based clips
 - ✅ Collision detection with physics response
-- ✅ Tilemap support
-- ✅ UI framework (complete component library)
+- ✅ Tilemap support (Tiled .tmj format)
+- ✅ **UI framework** (complete component library with tooltips, tabs, dialogs)
 - ✅ Camera system with follow behavior
 - ✅ **Advanced particle system** (textures, rotation, trails, blend modes, 7 emitter shapes)
+- ✅ **System.Drawing.Primitives integration** - Rectangle, Color (cross-platform, no GDI+)
 
-What's coming next:
-- 🔄 Post-processing effects
-- 🔄 Multi-threaded ECS systems
+What's coming in 1.0.0:
+- 🔄 Stable, production-ready API
+- 🔄 Complete documentation and tutorials
+- 🔄 Full platform testing (Windows, Linux, macOS)
+- 🔄 Comprehensive sample games
+- 🔄 Migration guides from beta
 
 **Expect breaking changes before 1.0!**
 
@@ -275,8 +273,8 @@ dotnet run
 
 **Performance hotkeys (in any demo scene):**
 - `F3` - Toggle performance overlay
-- `F4` - Toggle frame time graph  
-- `F5` - Toggle memory statistics
+- `F4` - Toggle system profiling
+- `F5` - Toggle frame time graph
 
 ---
 
@@ -284,32 +282,48 @@ dotnet run
 
 Brine2D follows a modular architecture with clear separation of concerns:
 
-### Core Packages
-- **Brine2D.Core** - Core abstractions, animation, collision, tilemap, pooling
-- **Brine2D.Engine** - Game loop, scene management, transitions
-- **Brine2D.Hosting** - ASP.NET-style application hosting
-- **Brine2D.ECS** - Entity Component System
+### Core Package (ECS-First)
+- **Brine2D** - Complete game engine (batteries included)
+  - Core abstractions (GameTime, extensions)
+  - ECS framework (Entity, Component, systems)
+  - Engine (Scene, GameLoop, transitions)
+  - Hosting (GameApplication, lifecycle)
+  - Events (EventBus)
+  - Input abstractions (IInputService)
+  - Rendering abstractions (IRenderer, ITexture, ICamera)
+  - Audio abstractions (IAudioService)
+  - Built-in systems (Physics, AI, Audio, Input, Rendering)
+  - Built-in components (Transform, Velocity, Timer, Lifetime, Tween)
+  - Animation (SpriteAnimator, AnimationClip)
+  - Collision (BoxCollider, CircleCollider, CollisionSystem)
+  - Performance (PerformanceMonitor, ScopedProfiler, PerformanceOverlay)
+  - Pooling (ArrayPool integration)
 
-### Abstraction Layers
-- **Brine2D.Rendering** - Rendering abstractions (IRenderer, ITexture, ICamera)
-- **Brine2D.Input** - Input abstractions (IInputService, keyboard, mouse, gamepad)
-- **Brine2D.Audio** - Audio abstractions (IAudioService, music, sound effects)
+### Platform Implementation
+- **Brine2D.SDL** - SDL3 platform layer
+  - SDL3 GPU renderer (Vulkan/D3D12/Metal)
+  - SDL3 Legacy renderer (SDL_Renderer compatibility)
+  - SDL3 input implementation
+  - SDL3_mixer audio implementation
+  - Texture atlas builder
+  - Post-processing effects (blur, bloom, grayscale)
 
-### SDL3 Implementations
-- **Brine2D.Rendering.SDL** - SDL3 GPU + Legacy renderer implementation
-- **Brine2D.Input.SDL** - SDL3 input implementation
-- **Brine2D.Audio.SDL** - SDL3_mixer audio implementation
-
-### ECS Bridges
-- **Brine2D.Rendering.ECS** - Sprite rendering, particles, camera systems
-- **Brine2D.Input.ECS** - Player controller system
-- **Brine2D.Audio.ECS** - Audio playback system
-
-### Extensions
+### Optional Features
+- **Brine2D.Tilemap** - Tiled (.tmj) tilemap support
 - **Brine2D.UI** - UI framework (buttons, inputs, dialogs, tabs, scroll views)
 
-### Meta-Package
-- **Brine2D.Desktop** - All-in-one package (recommended for most users)
+### Package Count: 4 Core Packages
+
+| Package | Purpose | Required? |
+|---------|---------|-----------|
+| `Brine2D` | Complete game engine | ✅ Yes |
+| `Brine2D.SDL` | Platform implementation | ✅ Yes |
+| `Brine2D.Tilemap` | Tilemap support | Optional |
+| `Brine2D.UI` | UI framework | Optional |
+
+**Down from 12+ packages in previous versions!**
+
+---
 
 ## Requirements
 
@@ -339,23 +353,24 @@ SDL3 provides cross-platform support, but we've only tested on Windows so far. C
 
 ### Roadmap
 
-**0.8.0-beta** (Current Release)
-- ✅ Texture atlasing with runtime packing
-- ✅ 2D spatial audio system
-- ✅ Advanced particle system (textures, rotation, trails, blend modes)
-- ✅ SDL3 GPU and Legacy renderers stable
+**0.9.0-beta** (Current Release)
+- ✅ **ECS-first architecture** - Systems integrated into core package
+- ✅ **Package consolidation** - 4 core packages (down from 12+)
+- ✅ **Namespace reorganization** - Clean architecture with proper separation
+- ✅ **Multi-threaded ECS systems** - Parallel execution with job scheduling
+- ✅ **Post-processing effects** - Blur, bloom, grayscale, custom shaders
+- ✅ **System.Drawing.Primitives integration** - Cross-platform Rectangle, Color
+- ✅ **Performance improvements** - Better batching, profiling, pooling
+- ✅ **Advanced query system** - Spatial queries, caching
+- ✅ **System profiling** - Per-system timing and performance metrics
 
-**0.9.0-beta** (Next Release)
-- Post-processing effects (bloom, blur, etc.)
-- Multi-threaded ECS systems
-- Performance optimizations
-
-**1.0.0** (Stable Release)
+**1.0.0** (Next Major Release)
 - Stable, production-ready API
 - Complete documentation and tutorials
 - Full platform testing (Windows, Linux, macOS)
 - Comprehensive sample games
 - Migration guides from beta
+- Performance optimizations and polish
 
 See the full [roadmap](https://github.com/CrazyPickleStudios/Brine2D/milestones).
 

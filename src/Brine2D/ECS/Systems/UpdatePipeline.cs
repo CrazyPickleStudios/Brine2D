@@ -1,0 +1,108 @@
+using Brine2D.Core;
+using Brine2D.Performance;
+using Microsoft.Extensions.Logging;
+using System.Reflection;
+
+namespace Brine2D.ECS.Systems;
+
+/// <summary>
+/// Manages and executes update systems in order.
+/// Pure ECS - no rendering dependencies.
+/// </summary>
+public class UpdatePipeline
+{
+    private readonly List<IUpdateSystem> _systems = new();
+    private readonly ILogger<UpdatePipeline>? _logger;
+    private readonly ScopedProfiler? _profiler;
+    private readonly ECSOptions _options;
+    private bool _isSorted;
+    private readonly HashSet<string> _disabledSystems = new();
+
+    public IReadOnlyList<IUpdateSystem> Systems => _systems.AsReadOnly();
+
+    public UpdatePipeline(ILogger<UpdatePipeline>? logger = null, ScopedProfiler? profiler = null, ECSOptions? options = null)
+    {
+        _logger = logger;
+        _profiler = profiler;
+        _options = options ?? new ECSOptions();
+    }
+
+    public UpdatePipeline AddSystem(IUpdateSystem system)
+    {
+        _systems.Add(system);
+        _isSorted = false;
+        
+        // Log if system is marked sequential
+        var isSequential = system.GetType().GetCustomAttribute<SequentialAttribute>() != null;
+        _logger?.LogDebug("Added update system: {SystemName} (order: {Order}, parallel: {Parallel})", 
+            system.Name, system.UpdateOrder, !isSequential && _options.EnableParallelExecution);
+        
+        return this;
+    }
+
+    public bool RemoveSystem(IUpdateSystem system) => _systems.Remove(system);
+
+    public void Clear()
+    {
+        _systems.Clear();
+        _isSorted = false;
+    }
+
+    /// <summary>
+    /// Disables systems by name for this pipeline.
+    /// Disabled systems are skipped during Execute().
+    /// </summary>
+    public void DisableSystems(IEnumerable<string> systemNames)
+    {
+        foreach (var name in systemNames)
+        {
+            _disabledSystems.Add(name);
+        }
+    }
+
+    /// <summary>
+    /// Re-enables all systems.
+    /// </summary>
+    public void EnableAllSystems()
+    {
+        _disabledSystems.Clear();
+    }
+
+    public void Execute(GameTime gameTime)
+    {
+        if (!_isSorted)
+        {
+            _systems.Sort((a, b) => a.UpdateOrder.CompareTo(b.UpdateOrder));
+            _isSorted = true;
+        }
+
+        foreach (var system in _systems)
+        {
+            // Skip disabled systems
+            if (_disabledSystems.Contains(system.Name))
+            {
+                continue;
+            }
+            
+            try
+            {
+                // Profile system execution
+                if (_profiler != null)
+                {
+                    using (_profiler.BeginScope($"Update/{system.Name}"))
+                    {
+                        system.Update(gameTime);
+                    }
+                }
+                else
+                {
+                    system.Update(gameTime);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error executing update system: {SystemName}", system.Name);
+            }
+        }
+    }
+}

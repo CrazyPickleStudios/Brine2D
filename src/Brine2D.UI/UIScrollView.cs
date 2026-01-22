@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -61,22 +62,22 @@ public class UIScrollView : IUIComponent
     /// <summary>
     /// Background color.
     /// </summary>
-    public Color BackgroundColor { get; set; } = new Color(40, 40, 40);
+    public Color BackgroundColor { get; set; } = Color.FromArgb(40, 40, 40);
 
     /// <summary>
     /// Scrollbar color.
     /// </summary>
-    public Color ScrollbarColor { get; set; } = new Color(100, 100, 100);
+    public Color ScrollbarColor { get; set; } = Color.FromArgb(100, 100, 100);
 
     /// <summary>
     /// Scrollbar hover color.
     /// </summary>
-    public Color ScrollbarHoverColor { get; set; } = new Color(120, 120, 120);
+    public Color ScrollbarHoverColor { get; set; } = Color.FromArgb(120, 120, 120);
 
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = new Color(80, 80, 80);
+    public Color BorderColor { get; set; } = Color.FromArgb(80, 80, 80);
 
     private Vector2 _scrollOffset;
     private readonly List<IUIComponent> _children = new();

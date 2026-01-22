@@ -1,19 +1,23 @@
+using System.Drawing;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
-using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
-using Brine2D.Rendering.ECS;
-using Brine2D.Rendering.Performance;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
+using Brine2D.ECS.Systems;
+using Brine2D.Systems.Rendering;
+using Brine2D.Engine;
+using Brine2D.Engine.Systems;
+using Brine2D.Performance;
+using Brine2D.Systems.Physics;
 
 namespace FeatureDemos.Scenes.Performance;
 
 /// <summary>
 /// Benchmark scene for testing sprite rendering performance.
-/// Spawns increasing numbers of sprites to measure batching and culling efficiency.
+/// Spawns increasing numbers of sprites to measure batching, culling, and multi-threaded query performance.
 /// Use UP/DOWN to add/remove sprites and observe FPS impact.
 /// Use WASD to move camera and see culling in action!
 /// </summary>
@@ -25,8 +29,10 @@ public class SpriteBenchmarkScene : DemoSceneBase
     private readonly ICamera? _camera;
     private ITexture? _sharedTexture;
     private int _spriteCount = 100;
-    private bool _showCullingVisualization = false; // Toggle culling visualization
-    
+    private bool _showCullingVisualization = false;
+    private bool _enableAnimation = true; // NEW: Toggle sprite animation
+    private System.Diagnostics.Stopwatch _cpuWorkStopwatch = new();
+
     public SpriteBenchmarkScene(
         IEntityWorld world,
         IRenderer renderer,
@@ -55,19 +61,21 @@ public class SpriteBenchmarkScene : DemoSceneBase
         Logger.LogInformation("  WASD - Move camera (see culling in action!)");
         Logger.LogInformation("  Q/E - Zoom camera");
         Logger.LogInformation("  C - Toggle culling visualization");
+        Logger.LogInformation("  SPACE - Toggle sprite animation (tests multi-threading!)");
         Logger.LogInformation("  R - Reset to 100 sprites");
         Logger.LogInformation("  F3 - Toggle detailed stats");
+        Logger.LogInformation("  F4 - Toggle system profiling");
         Logger.LogInformation("  F1 - Toggle overlay");
         Logger.LogInformation("  ESC - Return to menu");
         
-        _renderer.ClearColor = new Color(20, 20, 30);
+        _renderer.ClearColor = Color.FromArgb(20, 20, 30);
         
         // Setup camera for culling
         if (_camera != null)
         {
             _camera.Position = new Vector2(640, 360); // Center of 1280x720
             _camera.Zoom = 1.0f;
-            _renderer.Camera = _camera; // Assign to renderer
+            _renderer.Camera = _camera;
             Logger.LogInformation("Camera initialized for frustum culling");
         }
         
@@ -88,7 +96,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
             Logger.LogInformation("Debug rendering disabled for benchmark");
         }
 
-        // Spawn initial sprites across a large area
+        // Spawn initial sprites
         SpawnSprites(_spriteCount);
 
         return Task.CompletedTask;
@@ -96,7 +104,6 @@ public class SpriteBenchmarkScene : DemoSceneBase
     
     protected override async Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        // Load the shared texture once
         try
         {
             Logger.LogInformation("Loading shared sprite texture...");
@@ -108,7 +115,6 @@ public class SpriteBenchmarkScene : DemoSceneBase
             Logger.LogInformation("Texture loaded: {Width}x{Height}", 
                 _sharedTexture.Width, _sharedTexture.Height);
             
-            // Apply to all existing sprites
             ApplyTextureToAllSprites();
         }
         catch (Exception ex)
@@ -117,9 +123,6 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
     }
     
-    /// <summary>
-    /// Applies the shared texture to all sprites in the world.
-    /// </summary>
     private void ApplyTextureToAllSprites()
     {
         if (World == null || _sharedTexture == null) return;
@@ -177,6 +180,14 @@ public class SpriteBenchmarkScene : DemoSceneBase
                 _showCullingVisualization ? "ON" : "OFF");
         }
         
+        // Toggle animation (tests multi-threaded performance)
+        if (Input.IsKeyPressed(Keys.Space))
+        {
+            _enableAnimation = !_enableAnimation;
+            Logger.LogInformation("Animation: {State} (Press F4 to see system timings!)", 
+                _enableAnimation ? "ON" : "OFF");
+        }
+        
         // Add 100 sprites
         if (Input.IsKeyPressed(Keys.Up))
         {
@@ -217,11 +228,100 @@ public class SpriteBenchmarkScene : DemoSceneBase
             _spriteCount = 100;
             Logger.LogInformation("Reset to {Count} sprites", _spriteCount);
         }
+        
+        // NEW: Animate sprites using component-based ForEach (automatically parallelized!)
+        if (_enableAnimation && World != null)
+        {
+            AnimateSprites(gameTime);
+        }
     }
     
+    /// <summary>
+    /// Animates sprites using the new component-based ForEach.
+    /// This automatically parallelizes when entity count > 100!
+    /// Press F4 to see system timings.
+    /// </summary>
+    private void AnimateSprites(GameTime gameTime)
+    {
+        var time = gameTime.TotalTime;
+        var deltaTime = (float)gameTime.DeltaTime;
+        
+        // NEW: Component-based ForEach - components passed directly, no GetComponent() calls!
+        // Automatically parallelizes with >100 entities across all CPU cores!
+        World!.Query()
+            .With<TransformComponent>()
+            .With<VelocityComponent>()
+            .ForEach((Entity entity, TransformComponent transform, VelocityComponent velocity) =>
+            {
+                // Update position (bounces off boundaries)
+                transform.Position += velocity.Velocity * deltaTime;
+                
+                // Bounce off edges
+                if (transform.Position.X < -2000 || transform.Position.X > 3280)
+                    velocity.Velocity = new Vector2(-velocity.Velocity.X, velocity.Velocity.Y);
+                
+                if (transform.Position.Y < -2000 || transform.Position.Y > 2720)
+                    velocity.Velocity = new Vector2(velocity.Velocity.X, -velocity.Velocity.Y);
+                
+                // Subtle rotation based on velocity
+                transform.Rotation += velocity.Velocity.Length() * deltaTime * 0.01f;
+            });
+        
+        // Also animate sprite colors (demonstrates 3-component ForEach)
+        World!.Query()
+            .With<SpriteComponent>()
+            .With<TransformComponent>()
+            .With<VelocityComponent>()
+            .ForEach((Entity entity, SpriteComponent sprite, TransformComponent transform, VelocityComponent velocity) =>
+            {
+                // Pulse color based on speed
+                var speed = velocity.Velocity.Length();
+                var intensity = (byte)(100 + (speed / 10f) * 155);
+                
+                sprite.Tint = Color.FromArgb(
+                    intensity,
+                    (byte)(255 - intensity / 2),
+                    (byte)(200 - intensity / 3));
+            });
+    }
+
+    /// <summary>
+    /// Heavy CPU workload to test multi-threading (add this method).
+    /// Simulates expensive per-entity logic (e.g., pathfinding, complex AI).
+    /// </summary>
+    private void HeavyCPUWorkload(GameTime gameTime)
+    {
+        _cpuWorkStopwatch.Restart();
+        
+        var deltaTime = (float)gameTime.DeltaTime;
+        
+        World!.Query()
+            .With<TransformComponent>()
+            .With<VelocityComponent>()
+            .ForEach((Entity entity, TransformComponent transform, VelocityComponent velocity) =>
+            {
+                // Heavy workload
+                var result = 0.0;
+                for (int i = 0; i < 1000; i++)
+                {
+                    result += Math.Sin(transform.Position.X + i) * Math.Cos(transform.Position.Y + i);
+                }
+                
+                transform.Position += velocity.Velocity * deltaTime * (float)result * 0.0001f;
+                
+                if (transform.Position.X < -2000 || transform.Position.X > 3280)
+                    velocity.Velocity = new Vector2(-velocity.Velocity.X, velocity.Velocity.Y);
+                
+                if (transform.Position.Y < -2000 || transform.Position.Y > 2720)
+                    velocity.Velocity = new Vector2(velocity.Velocity.X, -velocity.Velocity.Y);
+            });
+        
+        _cpuWorkStopwatch.Stop();
+        Logger.LogInformation("CPU Work Time: {Time:F2}ms", _cpuWorkStopwatch.Elapsed.TotalMilliseconds);
+    }
+
     protected override void OnRender(GameTime gameTime)
     {
-        // Draw culling visualization if enabled
         if (_showCullingVisualization && _camera != null)
         {
             DrawCullingVisualization();
@@ -229,7 +329,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         
         RenderPerformanceOverlay();
         
-        // Draw instructions (positioned to not overlap with performance overlay)
+        // Draw instructions
         var instructionY = 300;
         _renderer.DrawText($"Sprites: {_spriteCount}", 10, instructionY, Color.White);
         instructionY += 25;
@@ -237,11 +337,16 @@ public class SpriteBenchmarkScene : DemoSceneBase
         if (_camera != null)
         {
             _renderer.DrawText($"Camera: ({_camera.Position.X:F0}, {_camera.Position.Y:F0}) Zoom: {_camera.Zoom:F2}x", 
-                10, instructionY, new Color(100, 200, 255));
+                10, instructionY, Color.FromArgb(100, 200, 255));
             instructionY += 25;
         }
         
-        _renderer.DrawText("Controls:", 10, instructionY, new Color(255, 255, 100));
+        // Show animation status
+        _renderer.DrawText($"Animation: {(_enableAnimation ? "ON" : "OFF")} (SPACE)", 
+            10, instructionY, _enableAnimation ? Color.FromArgb(0, 255, 100) : Color.Gray);
+        instructionY += 25;
+        
+        _renderer.DrawText("Controls:", 10, instructionY, Color.FromArgb(255, 255, 100));
         instructionY += 20;
         
         _renderer.DrawText("UP/DOWN: +/- 100 sprites", 10, instructionY, Color.Gray);
@@ -257,17 +362,19 @@ public class SpriteBenchmarkScene : DemoSceneBase
             10, instructionY, Color.Gray);
         instructionY += 20;
         
+        _renderer.DrawText("SPACE: Toggle Animation", 10, instructionY, Color.Gray);
+        instructionY += 20;
+        
+        _renderer.DrawText("F4: System Profiling", 10, instructionY, Color.FromArgb(255, 200, 0));
+        instructionY += 20;
+        
         _renderer.DrawText("R: Reset", 10, instructionY, Color.Gray);
     }
     
-    /// <summary>
-    /// Draws a visualization of the camera frustum (what's being rendered).
-    /// </summary>
     private void DrawCullingVisualization()
     {
         if (_camera == null) return;
         
-        // Calculate camera frustum bounds in world space
         var halfWidth = _camera.ViewportWidth / 2f / _camera.Zoom;
         var halfHeight = _camera.ViewportHeight / 2f / _camera.Zoom;
         
@@ -276,13 +383,11 @@ public class SpriteBenchmarkScene : DemoSceneBase
         var width = halfWidth * 2;
         var height = halfHeight * 2;
         
-        // Draw frustum boundary (green outline)
-        _renderer.DrawRectangleOutline(left, top, width, height, 
-            new Color(0, 255, 0, 150), 4f);
+        _renderer.DrawRectangleOutline(left, top, width, height,
+            Color.FromArgb(150, 0, 255, 0), 4f);
         
-        // Draw label
         _renderer.DrawText("Frustum (everything inside is rendered)", 
-            left + 10, top + 10, new Color(0, 255, 0));
+            left + 10, top + 10, Color.FromArgb(0, 255, 0));
     }
     
     private void SpawnSprites(int count)
@@ -295,24 +400,29 @@ public class SpriteBenchmarkScene : DemoSceneBase
         {
             var sprite = World.CreateEntity($"BenchSprite_{_spriteCount + i}");
             
-            // Add transform - spawn in a MUCH larger area to see culling
+            // Add transform - spawn in large area
             var transform = sprite.AddComponent<TransformComponent>();
             transform.Position = new Vector2(
-                random.Next(-2000, 3280), // Much larger area (5280 wide)
-                random.Next(-2000, 2720)); // Much larger area (4720 tall)
+                random.Next(-2000, 3280),
+                random.Next(-2000, 2720));
             transform.Scale = new Vector2(
                 0.5f + (float)random.NextDouble() * 1.0f, 
                 0.5f + (float)random.NextDouble() * 1.0f);
             
+            // NEW: Add velocity for animation
+            var velocity = sprite.AddComponent<VelocityComponent>();
+            velocity.Velocity = new Vector2(
+                (float)(random.NextDouble() - 0.5) * 200f,
+                (float)(random.NextDouble() - 0.5) * 200f);
+            
             // Add sprite component with random color tint
             var spriteComp = sprite.AddComponent<SpriteComponent>();
-            spriteComp.Tint = new Color(
+            spriteComp.Tint = Color.FromArgb(
                 (byte)random.Next(100, 255),
                 (byte)random.Next(100, 255),
                 (byte)random.Next(100, 255));
             spriteComp.Layer = random.Next(0, 3);
             
-            // Assign shared texture immediately if already loaded
             if (_sharedTexture != null)
             {
                 spriteComp.Texture = _sharedTexture;
@@ -346,5 +456,14 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         _spriteCount = 0;
+    }
+
+    protected override void ConfigureSystems(ISystemConfigurator systems)
+    {
+        // Add benchmark system ONLY for this scene
+        systems.AddUpdateSystem<BenchmarkSystem>();
+        
+        // Optional: Disable VelocitySystem since BenchmarkSystem replaces it
+        // systems.DisableSystem<VelocitySystem>();
     }
 }

@@ -1,10 +1,10 @@
-using Brine2D.Core;
+using System.Drawing;
 using Brine2D.ECS;
 using Brine2D.Engine;
 using Brine2D.Engine.Transitions;
 using Brine2D.Input;
+using Brine2D.Performance;
 using Brine2D.Rendering;
-using Brine2D.Rendering.Performance;
 using Microsoft.Extensions.Logging;
 
 namespace FeatureDemos.Scenes;
@@ -69,7 +69,7 @@ public abstract class DemoSceneBase : Scene
     /// <summary>
     /// Handles performance overlay hotkeys.
     /// Call this in your OnUpdate() if you want performance monitoring.
-    /// F3 toggles detailed stats, F1 toggles visibility.
+    /// F3 toggles detailed stats, F1 toggles visibility, F4 toggles system profiling.
     /// </summary>
     protected void HandlePerformanceHotkeys()
     {
@@ -90,6 +90,14 @@ public abstract class DemoSceneBase : Scene
             Logger.LogDebug("Performance overlay: {State}", 
                 PerfOverlay.IsVisible ? "Visible" : "Hidden");
         }
+        
+        // F4: Toggle system profiling
+        if (Input.IsKeyPressed(Keys.F4))
+        {
+            PerfOverlay.ShowSystemProfiling = !PerfOverlay.ShowSystemProfiling;
+            Logger.LogDebug("System profiling: {State}", 
+                PerfOverlay.ShowSystemProfiling ? "Visible" : "Hidden");
+        }
     }
     
     /// <summary>
@@ -100,7 +108,9 @@ public abstract class DemoSceneBase : Scene
     {
         if (PerfOverlay == null || !PerfOverlay.IsVisible) return;
         
+        // No need to pass dimensions - renderer provides them automatically!
         PerfOverlay.Render(Renderer);
+        PerfOverlay.RenderSystemProfiling(Renderer);
         
         // Only render graph if detailed stats are shown
         if (PerfOverlay.ShowDetailedStats)

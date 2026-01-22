@@ -1,3 +1,4 @@
+using System.Drawing;
 using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Input;
@@ -53,7 +54,7 @@ public class UIDemoScene : DemoSceneBase
         Logger.LogInformation("  TAB - Navigate between inputs");
         Logger.LogInformation("  ESC - Return to menu");
         
-        _renderer.ClearColor = new Color(30, 30, 45);
+        _renderer.ClearColor = Color.FromArgb(30, 30, 45);
         
         BuildUI();
         
@@ -77,8 +78,8 @@ public class UIDemoScene : DemoSceneBase
         // Panel for basic components
         var basicPanel = new UIPanel(new Vector2(20, 60), new Vector2(280, 540)) // ← Shortened height
         {
-            BackgroundColor = new Color(40, 40, 60, 200),
-            BorderColor = new Color(100, 100, 150)
+            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
+            BorderColor = Color.FromArgb(100, 100, 150)
         };
         _uiCanvas.Add(basicPanel);
         
@@ -177,7 +178,7 @@ public class UIDemoScene : DemoSceneBase
         _healthBar = new UIProgressBar(new Vector2(30, buttonY + 25), new Vector2(220, 25))
         {
             Label = "HP",
-            FillColor = new Color(0, 200, 0),
+            FillColor = Color.FromArgb(0, 200, 0),
             Value = 0.65f,
             Tooltip = new UITooltip("Player health: 65%")
         };
@@ -226,8 +227,8 @@ public class UIDemoScene : DemoSceneBase
         
         var radioPanel = new UIPanel(new Vector2(20, 610), new Vector2(280, 100))
         {
-            BackgroundColor = new Color(40, 40, 60, 200),
-            BorderColor = new Color(100, 100, 150)
+            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
+            BorderColor = Color.FromArgb(100, 100, 150)
         };
         _uiCanvas.Add(radioPanel);
         
@@ -372,8 +373,8 @@ public class UIDemoScene : DemoSceneBase
         
         var dialogPanel = new UIPanel(new Vector2(320, 480), new Vector2(380, 110))
         {
-            BackgroundColor = new Color(40, 40, 60, 200),
-            BorderColor = new Color(100, 100, 150)
+            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
+            BorderColor = Color.FromArgb(100, 100, 150)
         };
         _uiCanvas.Add(dialogPanel);
         
@@ -392,8 +393,8 @@ public class UIDemoScene : DemoSceneBase
         
         var controlPanel = new UIPanel(new Vector2(320, 610), new Vector2(380, 100))
         {
-            BackgroundColor = new Color(40, 40, 60, 200),
-            BorderColor = new Color(100, 100, 150)
+            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
+            BorderColor = Color.FromArgb(100, 100, 150)
         };
         _uiCanvas.Add(controlPanel);
         
@@ -434,8 +435,8 @@ public class UIDemoScene : DemoSceneBase
         
         var statusPanel = new UIPanel(new Vector2(720, 610), new Vector2(540, 100))
         {
-            BackgroundColor = new Color(40, 40, 60, 200),
-            BorderColor = new Color(100, 100, 150)
+            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
+            BorderColor = Color.FromArgb(100, 100, 150)
         };
         _uiCanvas.Add(statusPanel);
         

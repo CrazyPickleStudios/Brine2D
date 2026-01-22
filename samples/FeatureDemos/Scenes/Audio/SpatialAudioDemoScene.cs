@@ -1,14 +1,16 @@
+using System.Drawing;
 using Brine2D.Audio;
-using Brine2D.Audio.ECS;
+using Brine2D.Audio;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
-using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
-using Brine2D.Rendering.Performance;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
+using Brine2D.Systems.Audio;
+using Brine2D.Engine;
+using Brine2D.Performance;
 
 namespace FeatureDemos.Scenes.Audio;
 
@@ -60,7 +62,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         Logger.LogInformation("  ESC - Return to menu");
         Logger.LogInformation("");
 
-        _renderer.ClearColor = new Color(20, 20, 30);
+        _renderer.ClearColor = Color.FromArgb(20, 20, 30);
 
         // Try to load sounds
         await LoadSoundsAsync(cancellationToken);
@@ -319,11 +321,11 @@ public class SpatialAudioDemoScene : DemoSceneBase
         var isActive = audio.IsEnabled;
 
         // Draw min/max distance circles
-        _renderer.DrawCircleOutline(pos.X, pos.Y, audio.MinDistance, new Color(color.R, color.G, color.B, 50), 1);
-        _renderer.DrawCircleOutline(pos.X, pos.Y, audio.MaxDistance, new Color(color.R, color.G, color.B, 30), 1);
+        _renderer.DrawCircleOutline(pos.X, pos.Y, audio.MinDistance, Color.FromArgb(50, color.R, color.G, color.B), 1);
+        _renderer.DrawCircleOutline(pos.X, pos.Y, audio.MaxDistance, Color.FromArgb(30, color.R, color.G, color.B), 1);
 
         // Draw source
-        var sourceColor = isActive ? color : new Color((byte)(color.R / 2), (byte)(color.G / 2), (byte)(color.B / 2));
+        var sourceColor = isActive ? color : Color.FromArgb((byte)(color.R / 2), (byte)(color.G / 2), (byte)(color.B / 2));
         _renderer.DrawCircleFilled(pos.X, pos.Y, 10, sourceColor);
         
         // Label
@@ -357,7 +359,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         
         if (transform == null || audio == null || !audio.IsEnabled) return;
 
-        var lineColor = new Color(color.R, color.G, color.B, 100);
+        var lineColor = Color.FromArgb(100, color.R, color.G, color.B);
         _renderer.DrawLine(playerPos.X, playerPos.Y, transform.Position.X, transform.Position.Y, lineColor, 1);
     }
 }

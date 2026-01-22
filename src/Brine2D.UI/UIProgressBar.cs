@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -25,19 +26,19 @@ public class UIProgressBar : IUIComponent
     /// <summary>
     /// Background color (empty portion).
     /// </summary>
-    public Color BackgroundColor { get; set; } = new Color(40, 40, 40);
+    public Color BackgroundColor { get; set; } = Color.FromArgb(40, 40, 40);
 
     public UITooltip? Tooltip { get; set; }
 
     /// <summary>
     /// Fill color (filled portion).
     /// </summary>
-    public Color FillColor { get; set; } = new Color(0, 200, 0);
+    public Color FillColor { get; set; } = Color.FromArgb(0, 200, 0);
 
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = new Color(100, 100, 100);
+    public Color BorderColor { get; set; } = Color.FromArgb(100, 100, 100);
 
     /// <summary>
     /// Whether to show percentage text.

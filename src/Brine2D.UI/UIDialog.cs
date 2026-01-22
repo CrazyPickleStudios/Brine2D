@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -42,17 +43,17 @@ public class UIDialog : IUIComponent
     /// <summary>
     /// Background color.
     /// </summary>
-    public Color BackgroundColor { get; set; } = new Color(50, 50, 50);
+    public Color BackgroundColor { get; set; } = Color.FromArgb(50, 50, 50);
 
     /// <summary>
     /// Title bar color.
     /// </summary>
-    public Color TitleBarColor { get; set; } = new Color(70, 70, 70);
+    public Color TitleBarColor { get; set; } = Color.FromArgb(70, 70, 70);
 
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = new Color(100, 100, 100);
+    public Color BorderColor { get; set; } = Color.FromArgb(100, 100, 100);
 
     /// <summary>
     /// Text color.
@@ -62,7 +63,7 @@ public class UIDialog : IUIComponent
     /// <summary>
     /// Overlay color (darkens background behind dialog).
     /// </summary>
-    public Color OverlayColor { get; set; } = new Color(0, 0, 0, 180);
+    public Color OverlayColor { get; set; } = Color.FromArgb(180, 0, 0, 0);
 
     /// <summary>
     /// Whether to show overlay behind dialog.

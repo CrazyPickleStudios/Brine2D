@@ -1,22 +1,17 @@
-﻿using Brine2D.Audio.ECS;
-using Brine2D.Audio.SDL;
-using Brine2D.Core;
-using Brine2D.Core.Collision;
-using Brine2D.Core.Performance;
-using Brine2D.Core.Tilemap;
+﻿using Brine2D.Core;
+using Brine2D.Collision;
+using Brine2D.Performance;
+using Brine2D.Tilemap;
 using Brine2D.ECS;
-using Brine2D.ECS.Systems;
 using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Input;
-using Brine2D.Input.ECS;
-using Brine2D.Input.SDL;
 using Brine2D.Rendering;
-using Brine2D.Rendering.ECS;
-using Brine2D.Rendering.ECS.Performance;
-using Brine2D.Rendering.Performance;
 using Brine2D.Rendering.SDL;
+using Brine2D.Rendering.SDL.PostProcessing;
+using Brine2D.Rendering.SDL.PostProcessing.Effects;
 using Brine2D.SDL.Common;
+using Brine2D.Systems.Performance;
 using Brine2D.UI;
 using FeatureDemos.Scenes;
 using FeatureDemos.Scenes.Advanced;
@@ -29,6 +24,14 @@ using FeatureDemos.Scenes.Transitions;
 using FeatureDemos.Scenes.UI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Brine2D.Systems.Audio;
+using Brine2D.Systems.Rendering;
+using Brine2D.SDL.Audio;
+using Brine2D.SDL.Input;
+using Brine2D.Systems.Input;
+using Brine2D.Systems.AI;
+using Brine2D.Systems.Physics;
 
 // Create the game application builder
 var builder = GameApplication.CreateBuilder(args);
@@ -58,8 +61,20 @@ builder.Services.AddSDL3Rendering(options =>
     options.VSync = true;
 });
 
+builder.Services.AddPostProcessing(options =>
+{
+    options.Enabled = true; // Toggle on/off
+    // options.RenderTargetFormat can be customized if needed
+});
+
 // ECS services
-builder.Services.AddObjectECS();
+// ECS should have parallelization enabled (default):
+builder.Services.AddObjectECS(options =>
+{
+    options.EnableParallelExecution = false; // Default
+    options.ParallelEntityThreshold = 100;  // Default
+    options.MaxDegreeOfParallelism = -1;    // Use all cores
+});
 builder.Services.AddECSRendering(); 
 builder.Services.AddECSInput();
 builder.Services.AddECSAudio();
@@ -76,15 +91,13 @@ builder.Services.AddTextureAtlasing(options =>
 // Configure System Pipelines
 builder.Services.ConfigureSystemPipelines(pipelines =>
 {
-    // Update systems
+    // ONLY global systems
     pipelines.AddSystem<PlayerControllerSystem>();
     pipelines.AddSystem<AISystem>();
     pipelines.AddSystem<VelocitySystem>();
     pipelines.AddSystem<PhysicsSystem>();
     pipelines.AddSystem<AudioSystem>();
     pipelines.AddSystem<CameraSystem>();
-
-    // Render systems
     pipelines.AddSystem<SpriteRenderingSystem>();
     pipelines.AddSystem<DebugRenderer>();
     pipelines.AddSystem<ParticleSystem>();
@@ -133,8 +146,38 @@ builder.Services.AddPerformanceOverlay(); // Rendering overlay
 // If using ECS rendering, add stats collector
 builder.Services.AddSingleton<ISceneLifecycleHook, RenderingStatsCollector>();
 
+// Replace grayscale with blur, or chain both:
+builder.Services.AddGrayscaleEffect(1280, 720, intensity: 1.0f);
+builder.Services.AddBlurEffect(1280, 720, blurRadius: 3.0f); // Strong blur
+
 // Build and run
 var game = builder.Build();
+
+// Register post-processing effect factories (created lazily after GPU init)
+//var pipeline = game.Services.GetService<SDL3PostProcessPipeline>();
+//var loggerFactory = game.Services.GetRequiredService<ILoggerFactory>();
+
+//if (pipeline != null)
+//{
+//    // Blur effect factory
+//    pipeline.AddEffectFactory(() =>
+//    {
+//        var renderer = game.Services.GetRequiredService<IRenderer>();
+//        if (renderer is SDL3GPURenderer gpuRenderer)
+//        {
+//            return new BlurEffect(
+//                gpuRenderer.Device,
+//                1280,
+//                720,
+//                loggerFactory,
+//                loggerFactory.CreateLogger<BlurEffect>())
+//            {
+//                BlurRadius = 1.0f // Adjust strength here
+//            };
+//        }
+//        throw new InvalidOperationException("Blur effect requires SDL3GPURenderer");
+//    });
+//}
 
 // Start with main menu!
 await game.RunAsync<MainMenuScene>();

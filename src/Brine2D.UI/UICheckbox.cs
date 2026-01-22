@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -43,17 +44,17 @@ public class UICheckbox : IUIComponent
     /// <summary>
     /// Unchecked box color.
     /// </summary>
-    public Color UncheckedColor { get; set; } = new Color(60, 60, 60);
+    public Color UncheckedColor { get; set; } = Color.FromArgb(60, 60, 60);
 
     /// <summary>
     /// Checked box color.
     /// </summary>
-    public Color CheckedColor { get; set; } = new Color(100, 150, 255);
+    public Color CheckedColor { get; set; } = Color.FromArgb(100, 150, 255);
 
     /// <summary>
     /// Hover box color.
     /// </summary>
-    public Color HoverColor { get; set; } = new Color(80, 80, 80);
+    public Color HoverColor { get; set; } = Color.FromArgb(80, 80, 80);
 
     /// <summary>
     /// Checkmark color.
@@ -63,7 +64,7 @@ public class UICheckbox : IUIComponent
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = new Color(150, 150, 150);
+    public Color BorderColor { get; set; } = Color.FromArgb(150, 150, 150);
 
     /// <summary>
     /// Label text color.
@@ -108,7 +109,7 @@ public class UICheckbox : IUIComponent
         renderer.DrawRectangleFilled(Position.X, Position.Y, BoxSize, BoxSize, boxColor);
 
         // Draw border
-        var borderColor = Enabled ? BorderColor : new Color(100, 100, 100);
+        var borderColor = Enabled ? BorderColor : Color.FromArgb(100, 100, 100);
         float borderThickness = 2f;
         renderer.DrawRectangleFilled(Position.X, Position.Y, BoxSize, borderThickness, borderColor); // Top
         renderer.DrawRectangleFilled(Position.X, Position.Y + BoxSize - borderThickness, BoxSize, borderThickness, borderColor); // Bottom
@@ -135,7 +136,7 @@ public class UICheckbox : IUIComponent
         {
             var labelX = Position.X + BoxSize + LabelSpacing;
             var labelY = Position.Y + (BoxSize / 2) - 8;
-            var labelColor = Enabled ? LabelColor : new Color(100, 100, 100);
+            var labelColor = Enabled ? LabelColor : Color.FromArgb(100, 100, 100);
             renderer.DrawText(Label, labelX, labelY, labelColor);
         }
     }

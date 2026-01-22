@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -17,7 +18,7 @@ public class UIPanel : IUIComponent
     /// <summary>
     /// Background color.
     /// </summary>
-    public Color BackgroundColor { get; set; } = new Color(50, 50, 50, 200);
+    public Color BackgroundColor { get; set; } = Color.FromArgb(200, 50, 50, 50);
 
     /// <summary>
     /// Border color (optional).

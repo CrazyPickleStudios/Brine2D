@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -21,12 +22,12 @@ public class UITooltip
     /// <summary>
     /// Background color.
     /// </summary>
-    public Color BackgroundColor { get; set; } = new Color(40, 40, 40, 230);
+    public Color BackgroundColor { get; set; } = Color.FromArgb(230, 40, 40, 40);
 
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = new Color(200, 200, 200, 255);
+    public Color BorderColor { get; set; } = Color.FromArgb(255, 200, 200, 200);
 
     /// <summary>
     /// Text color.
