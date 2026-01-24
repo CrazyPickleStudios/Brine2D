@@ -52,7 +52,7 @@
 	<!-- ============================================ -->
 	<!-- Shader Compilation Target                    -->
 	<!-- ============================================ -->
-	<Target Name="CompileShaders" BeforeTargets="BeforeCompile">
+	<Target Name="CompileShaders" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT'">
 		<PropertyGroup>
 			<DxcExePath>$(NuGetPackageRoot)microsoft.direct3d.dxc\1.8.2505.32\build\native\bin\x64\dxc.exe</DxcExePath>
 			<ShaderSourceDir>$(ProjectDir)Shaders</ShaderSourceDir>
