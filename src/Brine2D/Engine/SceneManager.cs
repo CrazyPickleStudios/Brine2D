@@ -117,7 +117,7 @@ namespace Brine2D.Engine
                 _logger.LogDebug("Loading screen initialized");
             }
 
-            // Unload current scene (FIXED: add cleanup)
+            // Unload current scene
             if (CurrentScene != null)
             {
                 _logger.LogDebug("Unloading current scene: {SceneName}", CurrentScene.Name);
@@ -138,7 +138,7 @@ namespace Brine2D.Engine
             var scene = (IScene)_serviceProvider.GetRequiredService(sceneType);
             _logger.LogDebug("Scene instance created from DI");
 
-            // Initialize scene-specific systems (FIXED: only if Scene type)
+            // Initialize scene-specific systems
             if (scene is Scene concreteScene)
             {
                 concreteScene.InitializeSystems(_serviceProvider, _logger);

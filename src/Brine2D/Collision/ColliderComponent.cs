@@ -54,9 +54,7 @@ public class ColliderComponent : Component
     /// Currently colliding entities.
     /// </summary>
     public HashSet<Entity> CollidingEntities { get; } = new();
-
-    // ✅ NEW: Fluent API Methods
-
+    
     /// <summary>
     /// Sets a box collider shape (fluent API).
     /// </summary>
@@ -101,9 +99,7 @@ public class ColliderComponent : Component
         CollisionMask = mask;
         return this;
     }
-
-    // ✅ NEW: ASP.NET-Style Helpers
-
+    
     /// <summary>
     /// Gets the collision shape, throwing if not set (ASP.NET GetRequiredService pattern).
     /// </summary>
@@ -125,9 +121,7 @@ public class ColliderComponent : Component
         entity = CollidingEntities.FirstOrDefault(e => e.HasTag(tag));
         return entity != null;
     }
-
-    // ✅ NEW: Auto-sync position with Transform
-
+    
     protected internal override void OnUpdate(GameTime gameTime)
     {
         // Auto-sync shape position with entity transform

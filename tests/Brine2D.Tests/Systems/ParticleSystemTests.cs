@@ -167,9 +167,9 @@ public class ParticleSystemTests
 
         // Act - Emit particles
         _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
-        emitter.IsEmitting = false; // ✅ Now stop emitting after first batch
+        emitter.IsEmitting = false; // Now stop emitting after first batch
         var initialCount = emitter.ParticleCount;
-        initialCount.Should().BeGreaterThan(0); // ✅ Should pass now
+        initialCount.Should().BeGreaterThan(0);
 
         // Wait for particles to expire
         _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(1.0)));
@@ -197,14 +197,14 @@ public class ParticleSystemTests
         _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
         var firstBatchCount = emitter.ParticleCount;
         
-        // ✅ Stop emitting so no new particles are created
+        // Stop emitting so no new particles are created
         emitter.IsEmitting = false;
 
         // Wait for particles to expire (they get returned to pool)
         _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(0.5)));
         emitter.ParticleCount.Should().Be(0);
         
-        // ✅ Re-enable emission
+        // Re-enable emission
         emitter.IsEmitting = true;
 
         // Emit again (should reuse pooled particles)
@@ -229,7 +229,7 @@ public class ParticleSystemTests
         emitter.ParticleLifetime = 0.1f;
         emitter.InitialVelocity = new Vector2(100, 100);
 
-        // Act - ✅ Update for 0.15 seconds to emit at least 1 particle (10 * 0.15 = 1.5 particles)
+        // Act - Update for 0.15 seconds to emit at least 1 particle (10 * 0.15 = 1.5 particles)
         _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.15)));
         
         var particle = emitter.ActiveParticles.FirstOrDefault();
