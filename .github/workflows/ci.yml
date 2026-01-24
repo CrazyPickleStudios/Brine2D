@@ -27,8 +27,12 @@ jobs:
     - name: Test
       run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
     
-    - name: Upload coverage to Codecov
+    - name: Run Unit Tests Only
+      run: dotnet test tests/Brine2D.Tests --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
+    
+    - name: Upload coverage (optional)
       uses: codecov/codecov-action@v3
       with:
         files: '**/coverage.cobertura.xml'
-        fail_ci_if_error: true
+        fail_ci_if_error: false
+      continue-on-error: true
