@@ -1,5 +1,10 @@
 # Brine2D
 
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
+[![Build Status](https://github.com/CrazyPickleStudios/Brine2D/workflows/CI/badge.svg)](https://github.com/CrazyPickleStudios/Brine2D/actions)
+[![Test Coverage](https://img.shields.io/badge/coverage-40%25-brightgreen)](https://github.com/CrazyPickleStudios/Brine2D)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **Modern 2D game development with .NET elegance** - A modern .NET 10 game engine built on SDL3 for creating 2D games with C#.
 
 Brine2D brings the familiar patterns and developer experience of ASP.NET to game development. If you've built web apps with ASP.NET, you'll feel right at home building games with Brine2D.
@@ -33,7 +38,7 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 
 ### ASP.NET Developers Will Feel at Home
 
-~~~csharp
+```csharp
 // Looks familiar? That's the point!
 var builder = GameApplication.CreateBuilder(args);
 
@@ -70,7 +75,7 @@ builder.Services.AddScene<GameScene>();
 
 var game = builder.Build();
 await game.RunAsync<GameScene>();
-~~~
+```
 
 ### Key Similarities to ASP.NET
 
@@ -94,19 +99,19 @@ await game.RunAsync<GameScene>();
 
 Create a new .NET 10 console project and add Brine2D:
 
-~~~sh
+```sh
 dotnet new console -n MyGame
 cd MyGame
 dotnet add package Brine2D
 dotnet add package Brine2D.SDL
-~~~
+```
 
 That's it! You're ready to build games.
 
 ### Package Options
 
 **For most users:**
-~~~sh
+```sh
 # Core engine (ECS-first, batteries included)
 dotnet add package Brine2D
 
@@ -116,7 +121,7 @@ dotnet add package Brine2D.SDL
 # Optional features
 dotnet add package Brine2D.Tilemap
 dotnet add package Brine2D.UI
-~~~
+```
 
 ---
 
@@ -124,7 +129,7 @@ dotnet add package Brine2D.UI
 
 Create `Program.cs`:
 
-~~~csharp
+```csharp
 using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Hosting;
@@ -186,12 +191,12 @@ public class GameScene : Scene
         }
     }
 }
-~~~
+```
 
 Run your game:
-~~~sh
+```sh
 dotnet run
-~~~
+```
 
 ---
 
@@ -266,10 +271,10 @@ Interactive demo menu showcasing all major features:
 - **Performance Benchmark** - Sprite batching stress test with 10,000+ sprites
 
 Run the demos:
-~~~sh
+```sh
 cd samples/FeatureDemos
 dotnet run
-~~~
+```
 
 **Performance hotkeys (in any demo scene):**
 - `F3` - Toggle performance overlay
@@ -377,6 +382,100 @@ See the full [roadmap](https://github.com/CrazyPickleStudios/Brine2D/milestones)
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## 🧪 Testing
+
+Brine2D follows ASP.NET testing best practices with comprehensive unit and integration tests.
+
+### Quick Start
+
+```sh
+# Run all unit tests
+dotnet test tests/Brine2D.Tests
+
+# Run with coverage
+dotnet test tests/Brine2D.Tests --collect:"XPlat Code Coverage"
+
+# Run integration tests (requires graphics context)
+dotnet test tests/Brine2D.Integration.Tests
+```
+
+**Note:** Integration tests require a graphics context and are currently skipped in CI. They work fine locally on Windows with SDL3.
+
+### Test Organization
+
+```
+tests/
+├── Brine2D.Tests/              # Unit tests
+│   ├── ECS/                    # Entity-Component-System tests
+│   ├── Engine/                 # Scene management tests
+│   ├── Systems/                # Collision, particles tests
+│   ├── Animation/              # Tween system tests
+│   └── Rendering/              # Camera, rendering tests
+└── Brine2D.Integration.Tests/  # Integration tests
+    └── Rendering/              # Full rendering pipeline tests
+```
+
+### Coverage Goals
+
+We're actively building test coverage for core systems:
+
+| System | Coverage | Status | Priority |
+|--------|----------|--------|----------|
+| **ECS Core** | 90% | ✅ | Core |
+| **Collision** | 90% | ✅ | Core |
+| **Scene Management** | 85% | ✅ | Core |
+| **Particle System** | 85% | ✅ | Core |
+| **Tween Animation** | 85% | ✅ | Core |
+| **Camera** | 90% | ✅ | Core |
+| **Entity World/Queries** | 80% | ✅ | Core |
+| **Math Helpers** | 60% | 🟡 | Core |
+| **Transform Hierarchy** | 30% | 🟡 | Important |
+| **Rendering** | 20% | ❌ | Important |
+| **Object Pooling** | 50% | 🟡 | Performance |
+| **Input System** | 0% | ❌ | Next |
+| **Audio System** | 0% | ❌ | Next |
+| **UI Framework** | 0% | ❌ | Next |
+| **Tilemap** | 0% | ❌ | Optional |
+
+**Current overall coverage: ~40%**
+
+**Target for 1.0.0: >80% for all core systems**
+
+### Testing Philosophy
+
+1. **Test behavior, not implementation** - Tests verify public APIs
+2. **ASP.NET patterns** - Use `GetRequired*`, `Try*`, fluent APIs
+3. **Edge cases matter** - Zero values, null checks, boundary conditions
+4. **Integration tests** - Verify full system interactions
+
+### Contributing Tests
+
+When adding features:
+1. Write tests first (TDD encouraged)
+2. Follow existing test patterns (see `EntityTests.cs`)
+3. Use FluentAssertions for readable assertions
+4. Add edge case tests
+
+Example test:
+```csharp
+[Fact]
+public void ShouldAddComponentWhenEntityIsValid()
+{
+    // Arrange
+    var world = new EntityWorld();
+    var entity = world.CreateEntity();
+
+    // Act
+    var component = entity.AddComponent<TransformComponent>();
+
+    // Assert
+    component.Should().NotBeNull();
+    entity.HasComponent<TransformComponent>().Should().BeTrue();
+}
+```
 
 ## License
 

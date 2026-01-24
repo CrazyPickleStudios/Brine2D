@@ -168,6 +168,12 @@ public class ParticleEmitterComponent : Component
     internal List<Particle> Particles { get; } = new();
 
     /// <summary>
+    /// Gets a read-only view of the active particles.
+    /// Use this to query particle state for gameplay logic.
+    /// </summary>
+    public IReadOnlyList<Particle> ActiveParticles => Particles;
+
+    /// <summary>
     /// Gets the current number of active particles.
     /// </summary>
     public int ParticleCount => Particles.Count;
@@ -247,73 +253,4 @@ public class ParticleEmitterComponent : Component
         ShapeSize = DefaultState.ShapeSize;
         ConeAngle = DefaultState.ConeAngle;
     }
-}
-
-/// <summary>
-/// Individual particle data (managed by ParticleSystem).
-/// </summary>
-internal class Particle : IPoolable
-{
-    public Vector2 Position;
-    public Vector2 Velocity;
-    public float Life;
-    public float MaxLife;
-    public float Size;
-    
-    public float Rotation;
-    public float RotationSpeed;
-    
-    public Vector2[]? TrailPositions;
-    public int TrailIndex;
-
-    public void Reset()
-    {
-        Position = Vector2.Zero;
-        Velocity = Vector2.Zero;
-        Life = 0;
-        MaxLife = 0;
-        Size = 0;
-        Rotation = 0;
-        RotationSpeed = 0;
-        TrailIndex = 0;
-        
-        // Don't null out TrailPositions - reuse the array for pooling efficiency
-        if (TrailPositions != null)
-        {
-            Array.Clear(TrailPositions, 0, TrailPositions.Length);
-        }
-    }
-}
-
-internal class ParticleEmitterState
-{
-    public bool IsEmitting;
-    public float EmissionRate;
-    public int MaxParticles;
-    public float ParticleLifetime;
-    public float LifetimeVariation;
-    public Color StartColor;
-    public Color EndColor;
-    public float StartSize;
-    public float EndSize;
-    public Vector2 InitialVelocity;
-    public float VelocitySpread;
-    public float SpeedVariation;
-    public Vector2 Gravity;
-    public Vector2 SpawnOffset;
-    public float SpawnRadius;
-    public ITexture? ParticleTexture;
-    public AtlasRegion? ParticleAtlasRegion;
-    public float InitialRotation;
-    public float InitialRotationVariation;
-    public float RotationSpeed;
-    public float RotationSpeedVariation;
-    public bool EnableTrails;
-    public int TrailLength;
-    public float TrailStartAlpha;
-    public float TrailEndAlpha;
-    public BlendMode BlendMode;
-    public EmitterShape Shape;
-    public Vector2 ShapeSize;
-    public float ConeAngle;
 }

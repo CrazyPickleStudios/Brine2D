@@ -75,8 +75,10 @@ public class TweenComponent : Component
             return;
 
         ElapsedTime += (float)gameTime.DeltaTime;
+        
+        bool completed = ElapsedTime >= Duration;
 
-        if (ElapsedTime >= Duration)
+        if (completed)
         {
             // Tween completed
             if (PingPong)
@@ -90,9 +92,7 @@ public class TweenComponent : Component
             }
             else
             {
-                IsPlaying = false;
-                OnComplete?.Invoke();
-                return;
+                ElapsedTime = Duration; // Clamp to duration
             }
         }
 
@@ -118,8 +118,14 @@ public class TweenComponent : Component
                 break;
 
             case TweenType.Rotation:
-                transform.Rotation = Lerp(StartRotation, EndRotation, easedT);
+                transform.Rotation = MathHelper.Lerp(StartRotation, EndRotation, easedT);
                 break;
+        }
+
+        if (completed && !Loop && !PingPong)
+        {
+            IsPlaying = false;
+            OnComplete?.Invoke();
         }
     }
 
@@ -176,11 +182,6 @@ public class TweenComponent : Component
         if (t < 2.5f / 2.75f)
             return 7.5625f * (t -= 2.25f / 2.75f) * t + 0.9375f;
         return 7.5625f * (t -= 2.625f / 2.75f) * t + 0.984375f;
-    }
-
-    private static float Lerp(float a, float b, float t)
-    {
-        return a + (b - a) * t;
     }
 }
 

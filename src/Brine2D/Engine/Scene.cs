@@ -28,14 +28,14 @@ namespace Brine2D.Engine
         /// Use this when you want complete manual control over system execution.
         /// Default: true (hooks execute automatically - recommended for most users).
         /// </summary>
-        public virtual bool EnableLifecycleHooks => true;
+        public virtual bool EnableLifecycleHooks { get; set; } = true;
         
         /// <summary>
         /// Set to false to handle frame management manually (Clear/BeginFrame/EndFrame).
         /// Use this when you need custom render targets, multi-pass rendering, or post-processing.
         /// Default: true (automatic frame management - recommended for most users).
         /// </summary>
-        public virtual bool EnableAutomaticFrameManagement => true;
+        public virtual bool EnableAutomaticFrameManagement { get; set; } = true;
         
         protected Scene(ILogger logger)
         {

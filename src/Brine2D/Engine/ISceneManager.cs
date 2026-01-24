@@ -1,7 +1,7 @@
 ﻿using Brine2D.Core;
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Brine2D.Engine
 {
@@ -21,38 +21,30 @@ namespace Brine2D.Engine
         void RegisterScene<TScene>() where TScene : IScene;
 
         /// <summary>
-        /// Loads and activates a scene.
+        /// Loads and activates a scene with optional transition and loading screen.
         /// </summary>
-        Task LoadSceneAsync<TScene>(CancellationToken cancellationToken = default) where TScene : IScene;
-        
-        /// <summary>
-        /// Loads and activates a scene with a transition effect.
-        /// </summary>
-        Task LoadSceneAsync<TScene>(ISceneTransition transition, CancellationToken cancellationToken = default) 
-            where TScene : IScene;
-        
-        /// <summary>
-        /// Loads and activates a scene with a loading screen and optional transition.
-        /// </summary>
-        Task LoadSceneAsync<TScene>(LoadingScene? loadingScreen = null, ISceneTransition? transition = null, 
-                                   CancellationToken cancellationToken = default) 
+        /// <typeparam name="TScene">The scene type to load.</typeparam>
+        /// <param name="transition">Optional transition effect to play during scene change.</param>
+        /// <param name="loadingScreen">Optional loading screen to display while loading.</param>
+        /// <param name="cancellationToken">Optional cancellation token.</param>
+        Task LoadSceneAsync<TScene>(
+            ISceneTransition? transition = null,
+            LoadingScene? loadingScreen = null,
+            CancellationToken cancellationToken = default) 
             where TScene : IScene;
 
         /// <summary>
-        /// Loads and activates a scene by type.
+        /// Loads and activates a scene by type with optional transition and loading screen.
         /// </summary>
-        Task LoadSceneAsync(Type sceneType, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// Loads and activates a scene by type with a transition effect.
-        /// </summary>
-        Task LoadSceneAsync(Type sceneType, ISceneTransition transition, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// Loads and activates a scene by type with a loading screen and optional transition.
-        /// </summary>
-        Task LoadSceneAsync(Type sceneType, LoadingScene? loadingScreen = null, ISceneTransition? transition = null, 
-                           CancellationToken cancellationToken = default);
+        /// <param name="sceneType">The scene type to load.</param>
+        /// <param name="transition">Optional transition effect to play during scene change.</param>
+        /// <param name="loadingScreen">Optional loading screen to display while loading.</param>
+        /// <param name="cancellationToken">Optional cancellation token.</param>
+        Task LoadSceneAsync(
+            Type sceneType,
+            ISceneTransition? transition = null,
+            LoadingScene? loadingScreen = null,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Updates the current scene.

@@ -155,4 +155,23 @@ public class CollisionSystem
 
         return results;
     }
+
+    /// <summary>
+    /// Tries to get the first collision with the given shape.
+    /// </summary>
+    public bool TryGetFirstCollision(CollisionShape shape, out CollisionShape? collision)
+    {
+        collision = GetCollisions(shape).FirstOrDefault();
+        return collision != null;
+    }
+
+    /// <summary>
+    /// Gets all collisions with a specific tag (requires ColliderComponent integration).
+    /// </summary>
+    public List<CollisionShape> GetCollisionsByTag(CollisionShape shape, string tag)
+    {
+        // This would require tracking shape->entity mapping
+        // Consider adding a Dictionary<CollisionShape, Entity> lookup
+        return new List<CollisionShape>();
+    }
 }

@@ -1,4 +1,6 @@
 ﻿using Brine2D.ECS;
+using System.Numerics;
+using Brine2D.Core;
 
 namespace Brine2D.Collision;
 
@@ -53,9 +55,91 @@ public class ColliderComponent : Component
     /// </summary>
     public HashSet<Entity> CollidingEntities { get; } = new();
 
+    // ✅ NEW: Fluent API Methods
+
+    /// <summary>
+    /// Sets a box collider shape (fluent API).
+    /// </summary>
+    public ColliderComponent WithBoxCollider(float width, float height, Vector2? offset = null)
+    {
+        Shape = new BoxCollider(width, height, offset);
+        return this;
+    }
+
+    /// <summary>
+    /// Sets a circle collider shape (fluent API).
+    /// </summary>
+    public ColliderComponent WithCircleCollider(float radius, Vector2? offset = null)
+    {
+        Shape = new CircleCollider(radius, offset);
+        return this;
+    }
+
+    /// <summary>
+    /// Sets this collider as a trigger (fluent API).
+    /// </summary>
+    public ColliderComponent AsTrigger()
+    {
+        IsTrigger = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the collision layer (fluent API).
+    /// </summary>
+    public ColliderComponent OnLayer(int layer)
+    {
+        Layer = layer;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the collision mask (fluent API).
+    /// </summary>
+    public ColliderComponent WithMask(int mask)
+    {
+        CollisionMask = mask;
+        return this;
+    }
+
+    // ✅ NEW: ASP.NET-Style Helpers
+
+    /// <summary>
+    /// Gets the collision shape, throwing if not set (ASP.NET GetRequiredService pattern).
+    /// </summary>
+    public CollisionShape GetRequiredShape()
+    {
+        if (Shape == null)
+        {
+            throw new InvalidOperationException(
+                $"ColliderComponent on entity '{EntityName}' does not have a shape assigned.");
+        }
+        return Shape;
+    }
+
+    /// <summary>
+    /// Tries to get a collision with a specific tag.
+    /// </summary>
+    public bool TryGetCollisionWithTag(string tag, out Entity? entity)
+    {
+        entity = CollidingEntities.FirstOrDefault(e => e.HasTag(tag));
+        return entity != null;
+    }
+
+    // ✅ NEW: Auto-sync position with Transform
+
+    protected internal override void OnUpdate(GameTime gameTime)
+    {
+        // Auto-sync shape position with entity transform
+        if (Shape != null && Transform != null)
+        {
+            Shape.Position = Transform.Position;
+        }
+    }
+
     protected internal override void OnAdded()
     {
-        // Shape will be synced with transform by PhysicsSystem
+        // Shape will be synced with transform by OnUpdate
     }
 
     protected internal override void OnRemoved()

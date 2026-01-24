@@ -64,37 +64,22 @@ namespace Brine2D.Engine
             _logger.LogDebug("Registered scene: {SceneType}", sceneType.Name);
         }
 
-        public Task LoadSceneAsync<TScene>(CancellationToken cancellationToken = default) where TScene : IScene
-        {
-            return LoadSceneAsync(typeof(TScene), null, null, cancellationToken);
-        }
-        
-        public Task LoadSceneAsync<TScene>(ISceneTransition transition, CancellationToken cancellationToken = default) 
+        // Generic method (most common use case)
+        public Task LoadSceneAsync<TScene>(
+            ISceneTransition? transition = null,
+            LoadingScene? loadingScreen = null,
+            CancellationToken cancellationToken = default) 
             where TScene : IScene
         {
-            return LoadSceneAsync(typeof(TScene), null, transition, cancellationToken);
-        }
-        
-        public Task LoadSceneAsync<TScene>(LoadingScene? loadingScreen = null, ISceneTransition? transition = null, 
-                                          CancellationToken cancellationToken = default) 
-            where TScene : IScene
-        {
-            return LoadSceneAsync(typeof(TScene), loadingScreen, transition, cancellationToken);
+            return LoadSceneAsync(typeof(TScene), transition, loadingScreen, cancellationToken);
         }
 
-        public Task LoadSceneAsync(Type sceneType, CancellationToken cancellationToken = default)
-        {
-            return LoadSceneAsync(sceneType, null, null, cancellationToken);
-        }
-        
-        public Task LoadSceneAsync(Type sceneType, ISceneTransition transition, CancellationToken cancellationToken = default)
-        {
-            return LoadSceneAsync(sceneType, null, transition, cancellationToken);
-        }
-
-        public async Task LoadSceneAsync(Type sceneType, LoadingScene? loadingScreen = null, 
-                                        ISceneTransition? transition = null, 
-                                        CancellationToken cancellationToken = default)
+        // Type-based method (implementation)
+        public async Task LoadSceneAsync(
+            Type sceneType,
+            ISceneTransition? transition = null,
+            LoadingScene? loadingScreen = null,
+            CancellationToken cancellationToken = default)
         {
             if (!typeof(IScene).IsAssignableFrom(sceneType))
             {

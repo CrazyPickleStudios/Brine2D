@@ -16,6 +16,7 @@ namespace Brine2D.Systems.Rendering;
 /// Lives in Brine2D.Rendering.ECS because it's the bridge between ECS and Rendering.
 /// Now supports textures, rotation, and trails!
 /// </summary>
+/// </summary>
 public class ParticleSystem : IUpdateSystem, IRenderSystem
 {
     public int UpdateOrder => 250; 
@@ -368,16 +369,5 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
             (byte)MathHelper.Lerp(start.R, end.R, t),
             (byte)MathHelper.Lerp(start.G, end.G, t),
             (byte)MathHelper.Lerp(start.B, end.B, t));
-    }
-}
-
-/// <summary>
-/// Math helper for lerping.
-/// </summary>
-internal static class MathHelper
-{
-    public static float Lerp(float a, float b, float t)
-    {
-        return a + (b - a) * Math.Clamp(t, 0f, 1f);
     }
 }

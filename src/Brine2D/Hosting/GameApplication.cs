@@ -52,7 +52,7 @@ public class GameApplication : IAsyncDisposable
 
             // Load initial scene
             var sceneManager = Services.GetRequiredService<ISceneManager>();
-            sceneManager.LoadSceneAsync<TScene>(cancellationToken).GetAwaiter().GetResult();
+            sceneManager.LoadSceneAsync<TScene>(cancellationToken: cancellationToken).GetAwaiter().GetResult();
 
             _logger.LogInformation("Game initialized on thread {ThreadId}, starting loop...", Environment.CurrentManagedThreadId);
 

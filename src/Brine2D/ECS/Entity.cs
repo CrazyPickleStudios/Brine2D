@@ -29,15 +29,15 @@ public class Entity
     /// <summary>
     /// Whether this entity is active and should be updated.
     /// </summary>
-    public bool IsActive 
-    { 
+    public bool IsActive
+    {
         get => _isActive;
         set
         {
             if (_isActive != value)
             {
                 _isActive = value;
-                
+
                 // Fire lifecycle events on components
                 if (_isActive && !_wasActive)
                 {
@@ -47,7 +47,7 @@ public class Entity
                 {
                     OnDeactivated();
                 }
-                
+
                 _wasActive = _isActive;
             }
         }
@@ -58,6 +58,11 @@ public class Entity
     /// The world this entity belongs to.
     /// </summary>
     public IEntityWorld? World { get; internal set; }
+
+    /// <summary>
+    /// Gets whether this entity is still valid (not destroyed).
+    /// </summary>
+    public bool IsValid => World != null;
 
     /// <summary>
     /// Tags for grouping/querying entities.
@@ -86,10 +91,24 @@ public class Entity
     }
 
     /// <summary>
+    /// Throws if this entity has been destroyed.
+    /// </summary>
+    private void ThrowIfDestroyed()
+    {
+        if (!IsValid)
+        {
+            throw new InvalidOperationException(
+                $"Entity '{Name}' ({Id}) has been destroyed and cannot be used.");
+        }
+    }
+
+    /// <summary>
     /// Adds a component to this entity.
     /// </summary>
     public T AddComponent<T>() where T : Component, new()
     {
+        ThrowIfDestroyed();
+
         var existing = GetComponent<T>();
         if (existing != null)
         {
@@ -117,31 +136,51 @@ public class Entity
     /// </summary>
     /// <param name="component">The component instance to add.</param>
     /// <typeparam name="T">The component type.</typeparam>
-    /// <returns>The added component.</returns>
+    /// <returns>The added component (or existing if already present).</returns>
     public T AddComponent<T>(T component) where T : Component
     {
         if (component == null)
             throw new ArgumentNullException(nameof(component));
-        
+
+        ThrowIfDestroyed();
+
         var type = typeof(T);
-        
-        if (_components.Any(c => c.GetType() == type))
+
+        var existing = _components.FirstOrDefault(c => c.GetType() == type) as T;
+
+        if (existing != null)
         {
-            _logger?.LogWarning("Entity {EntityId} already has component {ComponentType}", Id, type.Name);
-            return component;
+            _logger?.LogWarning("Entity {EntityId} already has component {ComponentType}. Returning existing component.", Id, type.Name);
+            return existing;
         }
-        
+
+        // Add the new component
         component.Entity = this;
         _components.Add(component);
-        
         component.OnAdded();
-        
         OnComponentAdded?.Invoke(this, component);
         World?.NotifyComponentAdded(this, component);
-        
         _logger?.LogDebug("Added component {ComponentType} to entity {EntityId} (pre-configured instance)", type.Name, Id);
-        
+
         return component;
+    }
+
+    /// <summary>
+    /// Adds a component and returns the entity for method chaining (fluent API).
+    /// </summary>
+    public Entity WithComponent<T>() where T : Component, new()
+    {
+        AddComponent<T>();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a pre-configured component and returns the entity for method chaining (fluent API).
+    /// </summary>
+    public Entity WithComponent<T>(T component) where T : Component
+    {
+        AddComponent(component);
+        return this;
     }
 
     /// <summary>
@@ -150,6 +189,61 @@ public class Entity
     public T? GetComponent<T>() where T : Component
     {
         return _components.OfType<T>().FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Gets a required component, throwing if it doesn't exist (ASP.NET GetRequiredService pattern).
+    /// </summary>
+    public T GetRequiredComponent<T>() where T : Component
+    {
+        var component = GetComponent<T>();
+        if (component == null)
+        {
+            throw new InvalidOperationException(
+                $"Entity '{Name}' ({Id}) does not have required component {typeof(T).Name}");
+        }
+        return component;
+    }
+
+    /// <summary>
+    /// Tries to get a component (safe retrieval pattern).
+    /// </summary>
+    public bool TryGetComponent<T>(out T? component) where T : Component
+    {
+        component = GetComponent<T>();
+        return component != null;
+    }
+
+    /// <summary>
+    /// Gets a component in this entity or its children (Unity pattern).
+    /// </summary>
+    public T? GetComponentInChildren<T>() where T : Component
+    {
+        var component = GetComponent<T>();
+        if (component != null) return component;
+
+        var transform = GetComponent<TransformComponent>();
+        if (transform == null) return null;
+
+        foreach (var child in transform.Children)
+        {
+            var childComponent = child.Entity?.GetComponentInChildren<T>();
+            if (childComponent != null) return childComponent;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets a component in this entity or its parent (Unity pattern).
+    /// </summary>
+    public T? GetComponentInParent<T>() where T : Component
+    {
+        var component = GetComponent<T>();
+        if (component != null) return component;
+
+        var transform = GetComponent<TransformComponent>();
+        return transform?.Parent?.Entity?.GetComponentInParent<T>();
     }
 
     /// <summary>
@@ -177,10 +271,35 @@ public class Entity
     }
 
     /// <summary>
+    /// Checks if this entity has the specified tag.
+    /// </summary>
+    public bool HasTag(string tag) => Tags.Contains(tag);
+
+    /// <summary>
+    /// Adds a tag to this entity (fluent).
+    /// </summary>
+    public Entity AddTag(string tag)
+    {
+        Tags.Add(tag);
+        return this;
+    }
+
+    /// <summary>
+    /// Removes a tag from this entity (fluent).
+    /// </summary>
+    public Entity RemoveTag(string tag)
+    {
+        Tags.Remove(tag);
+        return this;
+    }
+
+    /// <summary>
     /// Removes a component from this entity.
     /// </summary>
     public bool RemoveComponent<T>() where T : Component
     {
+        ThrowIfDestroyed();
+
         var component = GetComponent<T>();
         if (component == null)
             return false;
@@ -195,6 +314,35 @@ public class Entity
 
         _logger?.LogDebug("Removed component {Type} from entity {Name}", typeof(T).Name, Name);
         return true;
+    }
+
+    /// <summary>
+    /// Removes a component by type.
+    /// </summary>
+    public bool RemoveComponent(Type componentType)
+    {
+        var component = _components.FirstOrDefault(c => c.GetType() == componentType);
+        if (component == null) return false;
+
+        component.OnRemoved();
+        component.Entity = null;
+        _components.Remove(component);
+        OnComponentRemoved?.Invoke(this, component);
+        World?.NotifyComponentRemoved(this, component);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes all components from this entity.
+    /// </summary>
+    public void RemoveAllComponents()
+    {
+        ThrowIfDestroyed();
+
+        foreach (var component in _components.ToList())
+        {
+            RemoveComponent(component.GetType());
+        }
     }
 
     /// <summary>
@@ -220,7 +368,7 @@ public class Entity
 
         // Rent array from pool (reuses existing arrays, minimal allocation)
         var componentsArray = ArrayPool<Component>.Shared.Rent(count);
-        
+
         try
         {
             // Create snapshot of components
@@ -252,7 +400,7 @@ public class Entity
         if (count == 0) return;
 
         var componentsArray = ArrayPool<Component>.Shared.Rent(count);
-        
+
         try
         {
             _components.CopyTo(componentsArray, 0);
@@ -281,7 +429,7 @@ public class Entity
         if (count == 0) return;
 
         var componentsArray = ArrayPool<Component>.Shared.Rent(count);
-        
+
         try
         {
             _components.CopyTo(componentsArray, 0);
@@ -319,7 +467,7 @@ public class Entity
                 }
             }
         }
-        
+
         OnDestroyed?.Invoke(this);
         World?.NotifyEntityDestroyed(this);
 

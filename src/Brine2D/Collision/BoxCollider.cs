@@ -38,18 +38,37 @@ public class BoxCollider : CollisionShape
         if (!IsEnabled || !other.IsEnabled)
             return false;
 
+        // Zero-size colliders don't collide
+        if (Width <= 0 || Height <= 0)
+            return false;
+
         return other switch
         {
-            BoxCollider box => GetBounds().IntersectsWith(box.GetBounds()),
+            BoxCollider box => box.Width <= 0 || box.Height <= 0 ? false : IntersectsBox(box),
             CircleCollider circle => IntersectsCircle(circle),
             _ => false
         };
     }
 
+    private bool IntersectsBox(BoxCollider other)
+    {
+        var b1 = GetBounds();
+        var b2 = other.GetBounds();
+        
+        // Use <= instead of < to include touching edges
+        return b1.Left <= b2.Right &&
+               b1.Right >= b2.Left &&
+               b1.Top <= b2.Bottom &&
+               b1.Bottom >= b2.Top;
+    }
+
     private bool IntersectsCircle(CircleCollider circle)
     {
+        if (circle.Radius <= 0)
+            return false;
+        
         var rect = GetBounds();
-        var circlePos = circle.Position;
+        var circlePos = circle.Position + circle.Offset;
 
         var closestX = Math.Clamp(circlePos.X, rect.Left, rect.Right);
         var closestY = Math.Clamp(circlePos.Y, rect.Top, rect.Bottom);
@@ -58,6 +77,6 @@ public class BoxCollider : CollisionShape
         var distanceY = circlePos.Y - closestY;
 
         var distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
-        return distanceSquared < (circle.Radius * circle.Radius);
+        return distanceSquared <= (circle.Radius * circle.Radius);
     }
 }

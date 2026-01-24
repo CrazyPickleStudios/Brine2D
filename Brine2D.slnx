@@ -10,5 +10,8 @@
     <Project Path="src/Brine2D.UI/Brine2D.UI.csproj" Id="ad1578b4-b139-4fda-9517-b75e135bb3ca" />
     <Project Path="src/Brine2D/Brine2D.csproj" Id="8a64aaee-6811-482a-959a-6631e33cf011" />
   </Folder>
-  <Folder Name="/tests/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/Brine2D.Integration.Tests/Brine2D.Integration.Tests.csproj" Id="b90ee451-9ae2-455b-8cbf-828bf0870cb0" />
+    <Project Path="tests/Brine2D.Tests/Brine2D.Tests.csproj" Id="590ae3f2-5aa5-4512-b366-fadf7b43f813" />
+  </Folder>
 </Solution>
