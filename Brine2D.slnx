@@ -1,8 +1,12 @@
 <Solution>
   <Folder Name="/samples/">
-    <Project Path="samples/AdvancedGame/AdvancedGame.csproj" />
     <Project Path="samples/FeatureDemos/FeatureDemos.csproj" Id="1b7cd93f-9929-45b5-ae7a-527111c99e68" />
-    <Project Path="samples/PlatformerGame/PlatformerGame.csproj" />
+  </Folder>
+  <Folder Name="/samples/GettingStarted/">
+    <Project Path="samples/GettingStarted/01-HelloBrine/01-HelloBrine.csproj" Id="484e31e4-180f-46f6-9a63-c9076a141f06" />
+    <Project Path="samples/GettingStarted/02-SceneBasics/02-SceneBasics.csproj" Id="1e1ff149-1e69-4b45-bd2e-3207d5dde82c" />
+    <Project Path="samples/GettingStarted/03-DependencyInjection/03-DependencyInjection.csproj" Id="f856980f-5102-4130-89e3-3184d9b1bb60" />
+    <Project Path="samples/GettingStarted/04-InputAndText/04-InputAndText.csproj" Id="34b92816-8a0c-4309-8b8c-6ee492e5958a" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Brine2D.SDL/Brine2D.SDL.csproj" Id="d52a9e89-fc0d-4760-bd78-7cd5e7d2d69d" />

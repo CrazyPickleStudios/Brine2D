@@ -27,7 +27,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private nint _window;
     private nint _renderer;
     private ICamera? _camera;
-    private Color _clearColor = Color.CornflowerBlue;
+    private Color _clearColor = Color.FromArgb(255, 52, 78, 65);
 
     private IFont? _defaultFont;
     private FontAtlas? _defaultFontAtlas;
@@ -628,6 +628,38 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         };
         
         SDL3.SDL.SetRenderDrawBlendMode(_renderer, sdlBlendMode);
+    }
+
+    // ============================================================
+    // VECTOR2 OVERLOADS (delegate to float overloads)
+    // ============================================================
+
+    // Rectangles
+    public void DrawRectangleFilled(Rectangle rect, Color color)
+    {
+        DrawRectangleFilled(rect.X, rect.Y, rect.Width, rect.Height, color);
+    }
+
+    public void DrawRectangleOutline(Rectangle rect, Color color, float thickness = 1f)
+    {
+        DrawRectangleOutline(rect.X, rect.Y, rect.Width, rect.Height, color, thickness);
+    }
+
+    // Circles
+    public void DrawCircleFilled(Vector2 center, float radius, Color color)
+    {
+        DrawCircleFilled(center.X, center.Y, radius, color);
+    }
+
+    public void DrawCircleOutline(Vector2 center, float radius, Color color, float thickness = 1f)
+    {
+        DrawCircleOutline(center.X, center.Y, radius, color, thickness);
+    }
+
+    // Lines
+    public void DrawLine(Vector2 start, Vector2 end, Color color, float thickness = 1f)
+    {
+        DrawLine(start.X, start.Y, end.X, end.Y, color, thickness);
     }
 
     private Vector2 ApplyCameraTransform(Vector2 position)

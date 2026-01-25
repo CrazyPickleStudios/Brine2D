@@ -38,26 +38,17 @@ Brine2D brings the familiar patterns and developer experience of ASP.NET to game
 
 ### ASP.NET Developers Will Feel at Home
 
-```csharp
+~~~csharp
 // Looks familiar? That's the point!
 var builder = GameApplication.CreateBuilder(args);
 
-// Configure services just like ASP.NET
-builder.Services.AddSDL3Input();
-builder.Services.AddSDL3Audio();
-
-builder.Services.AddSDL3Rendering(options =>
+// Add Brine2D with sensible defaults - just like ASP.NET!
+builder.Services.AddBrine2D(options =>
 {
     options.WindowTitle = "My Game";
     options.WindowWidth = 1280;
     options.WindowHeight = 720;
-    
-    // Choose your backend
-    options.Backend = GraphicsBackend.GPU;              // Modern SDL3 GPU API (recommended)
-    // options.Backend = GraphicsBackend.LegacyRenderer; // SDL_Renderer API (fallback)
-    
-    options.PreferredGPUDriver = "vulkan"; // or "d3d12", "metal"
-    options.VSync = true;
+    // Defaults: GPU backend, VSync on, audio included
 });
 
 // Configure ECS systems like middleware
@@ -75,7 +66,7 @@ builder.Services.AddScene<GameScene>();
 
 var game = builder.Build();
 await game.RunAsync<GameScene>();
-```
+~~~
 
 ### Key Similarities to ASP.NET
 
@@ -99,19 +90,19 @@ await game.RunAsync<GameScene>();
 
 Create a new .NET 10 console project and add Brine2D:
 
-```sh
+~~~sh
 dotnet new console -n MyGame
 cd MyGame
 dotnet add package Brine2D
 dotnet add package Brine2D.SDL
-```
+~~~
 
 That's it! You're ready to build games.
 
 ### Package Options
 
 **For most users:**
-```sh
+~~~sh
 # Core engine (ECS-first, batteries included)
 dotnet add package Brine2D
 
@@ -121,7 +112,7 @@ dotnet add package Brine2D.SDL
 # Optional features
 dotnet add package Brine2D.Tilemap
 dotnet add package Brine2D.UI
-```
+~~~
 
 ---
 
@@ -129,11 +120,8 @@ dotnet add package Brine2D.UI
 
 Create `Program.cs`:
 
-```csharp
-using Brine2D.Core;
-using Brine2D.Engine;
+~~~csharp
 using Brine2D.Hosting;
-using Brine2D.Input;
 using Brine2D.Rendering;
 using Brine2D.SDL;
 using Microsoft.Extensions.Logging;
@@ -141,17 +129,14 @@ using Microsoft.Extensions.Logging;
 // Create the game application builder
 var builder = GameApplication.CreateBuilder(args);
 
-// Configure SDL3 rendering
-builder.Services.AddSDL3Rendering(options =>
+// Add Brine2D with sensible defaults
+// Includes: rendering, input, audio, and core services
+builder.Services.AddBrine2D(options =>
 {
     options.WindowTitle = "My First Brine2D Game";
     options.WindowWidth = 1280;
     options.WindowHeight = 720;
-    options.VSync = true;
 });
-
-// Add SDL3 input
-builder.Services.AddSDL3Input();
 
 // Register your scene
 builder.Services.AddScene<GameScene>();
@@ -191,12 +176,55 @@ public class GameScene : Scene
         }
     }
 }
-```
+~~~
 
 Run your game:
-```sh
+~~~sh
 dotnet run
-```
+~~~
+
+<details>
+<summary><b>Advanced: Explicit Service Registration</b></summary>
+
+For power users who need custom backends or explicit control over service registration:
+
+~~~csharp
+using Brine2D.Core;
+using Brine2D.Engine;
+using Brine2D.Hosting;
+using Brine2D.Input;
+using Brine2D.Rendering;
+using Brine2D.SDL;
+using Brine2D.SDL.Common;
+using Brine2D.SDL.Input;
+using Brine2D.SDL.Audio;
+
+var builder = GameApplication.CreateBuilder(args);
+
+// Explicit service registration for advanced scenarios
+builder.Services.AddBrineCore();                      // Core services (EventBus, GameTime)
+builder.Services.AddBrineEngine();                    // Scene management, GameLoop
+builder.Services.AddSDL3ApplicationLifetime();        // SDL3 window lifecycle
+builder.Services.AddSDL3Input();                      // Input system
+builder.Services.AddSDL3Audio();                      // Audio system (optional)
+
+// Custom rendering configuration
+builder.Services.AddSDL3Rendering(options =>
+{
+    options.WindowTitle = "My Game";
+    options.WindowWidth = 1920;
+    options.WindowHeight = 1080;
+    options.Backend = GraphicsBackend.GPU;            // or LegacyRenderer
+    options.PreferredGPUDriver = "vulkan";            // or "d3d12", "metal"
+    options.VSync = true;
+});
+
+builder.Services.AddScene<GameScene>();
+var game = builder.Build();
+await game.RunAsync<GameScene>();
+~~~
+
+</details>
 
 ---
 
@@ -254,9 +282,23 @@ Full guides and API reference available at [brine2d.com](https://www.brine2d.com
 
 ## Samples
 
-Check out the `samples/` directory for complete working examples:
+Brine2D includes comprehensive samples organized by learning path:
 
-### FeatureDemos
+### Getting Started (Tutorials)
+
+Step-by-step tutorials for ASP.NET developers learning Brine2D:
+
+**📁 samples/GettingStarted/**
+- **[01-HelloBrine](samples/GettingStarted/01-HelloBrine)** - Minimal setup and first window
+- **[02-SceneBasics](samples/GettingStarted/02-SceneBasics)** - Scene lifecycle and transitions
+- **[03-DependencyInjection](samples/GettingStarted/03-DependencyInjection)** - Custom services, ILogger<T>, IOptions<T>
+- **[04-InputAndText](samples/GettingStarted/04-InputAndText)** - Keyboard, mouse, and text rendering
+
+Each tutorial builds on the previous one and includes a detailed README.
+
+### Feature Showcase
+
+**📁 samples/FeatureDemos/**
 
 Interactive demo menu showcasing all major features:
 
@@ -271,15 +313,29 @@ Interactive demo menu showcasing all major features:
 - **Performance Benchmark** - Sprite batching stress test with 10,000+ sprites
 
 Run the demos:
-```sh
+~~~sh
 cd samples/FeatureDemos
 dotnet run
-```
+~~~
 
 **Performance hotkeys (in any demo scene):**
 - `F3` - Toggle performance overlay
 - `F4` - Toggle system profiling
 - `F5` - Toggle frame time graph
+
+### Quick Start
+
+**For ASP.NET developers (recommended):**
+~~~sh
+cd samples/GettingStarted/01-HelloBrine
+dotnet run
+~~~
+
+**For experienced game developers:**
+~~~sh
+cd samples/FeatureDemos
+dotnet run
+~~~
 
 ---
 
@@ -368,6 +424,7 @@ SDL3 provides cross-platform support, but we've only tested on Windows so far. C
 - ✅ **Performance improvements** - Better batching, profiling, pooling
 - ✅ **Advanced query system** - Spatial queries, caching
 - ✅ **System profiling** - Per-system timing and performance metrics
+- ✅ **Simplified setup API** - Convention over configuration like ASP.NET
 
 **1.0.0** (Next Major Release)
 - Stable, production-ready API
@@ -391,7 +448,7 @@ Brine2D follows ASP.NET testing best practices with comprehensive unit and integ
 
 ### Quick Start
 
-```sh
+~~~sh
 # Run all unit tests
 dotnet test tests/Brine2D.Tests
 
@@ -400,13 +457,13 @@ dotnet test tests/Brine2D.Tests --collect:"XPlat Code Coverage"
 
 # Run integration tests (requires graphics context)
 dotnet test tests/Brine2D.Integration.Tests
-```
+~~~
 
 **Note:** Integration tests require a graphics context and are currently skipped in CI. They work fine locally on Windows with SDL3.
 
 ### Test Organization
 
-```
+~~~
 tests/
 ├── Brine2D.Tests/              # Unit tests
 │   ├── ECS/                    # Entity-Component-System tests
@@ -416,7 +473,7 @@ tests/
 │   └── Rendering/              # Camera, rendering tests
 └── Brine2D.Integration.Tests/  # Integration tests
     └── Rendering/              # Full rendering pipeline tests
-```
+~~~
 
 ### Coverage Goals
 
@@ -460,7 +517,7 @@ When adding features:
 4. Add edge case tests
 
 Example test:
-```csharp
+~~~csharp
 [Fact]
 public void ShouldAddComponentWhenEntityIsValid()
 {
@@ -475,7 +532,7 @@ public void ShouldAddComponentWhenEntityIsValid()
     component.Should().NotBeNull();
     entity.HasComponent<TransformComponent>().Should().BeTrue();
 }
-```
+~~~
 
 ## License
 

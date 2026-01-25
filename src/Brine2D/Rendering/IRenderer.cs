@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Text;
+using System.Numerics;
 
 namespace Brine2D.Rendering;
 
@@ -52,6 +53,15 @@ public interface IRenderer : IDisposable
     /// </summary>
     void EndFrame();
 
+    // ============================================================
+    // RECTANGLES
+    // ============================================================
+    
+    /// <summary>
+    /// Draws a filled rectangle.
+    /// </summary>
+    void DrawRectangleFilled(Rectangle rect, Color color);
+
     /// <summary>
     /// Draws a filled rectangle.
     /// </summary>
@@ -60,12 +70,31 @@ public interface IRenderer : IDisposable
     /// <summary>
     /// Draws a rectangle outline (no fill).
     /// </summary>
+    void DrawRectangleOutline(Rectangle rect, Color color, float thickness = 1f);
+
+    /// <summary>
+    /// Draws a rectangle outline (no fill).
+    /// </summary>
     void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f);
+
+    // ============================================================
+    // CIRCLES
+    // ============================================================
+    
+    /// <summary>
+    /// Draws a filled circle.
+    /// </summary>
+    void DrawCircleFilled(Vector2 center, float radius, Color color);
 
     /// <summary>
     /// Draws a filled circle.
     /// </summary>
     void DrawCircleFilled(float centerX, float centerY, float radius, Color color);
+
+    /// <summary>
+    /// Draws a circle outline (no fill).
+    /// </summary>
+    void DrawCircleOutline(Vector2 center, float radius, Color color, float thickness = 1f);
 
     /// <summary>
     /// Draws a circle outline (no fill).
@@ -76,6 +105,15 @@ public interface IRenderer : IDisposable
     /// <param name="color">Outline color.</param>
     /// <param name="thickness">Line thickness (default: 1.0f).</param>
     void DrawCircleOutline(float centerX, float centerY, float radius, Color color, float thickness = 1f);
+
+    // ============================================================
+    // LINES
+    // ============================================================
+    
+    /// <summary>
+    /// Draws a line between two points.
+    /// </summary>
+    void DrawLine(Vector2 start, Vector2 end, Color color, float thickness = 1f);
 
     /// <summary>
     /// Draws a line between two points.
@@ -88,6 +126,10 @@ public interface IRenderer : IDisposable
     /// <param name="thickness">Line thickness (default: 1.0f).</param>
     void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1f);
 
+    // ============================================================
+    // TEXTURES
+    // ============================================================
+    
     /// <summary>
     /// Draws a texture at the specified position.
     /// </summary>
@@ -128,6 +170,10 @@ public interface IRenderer : IDisposable
         float destX, float destY, float destWidth, float destHeight,
         float rotation = 0f, Color? color = null);
 
+    // ============================================================
+    // TEXT
+    // ============================================================
+    
     /// <summary>
     /// Draws text at the specified position.
     /// </summary>

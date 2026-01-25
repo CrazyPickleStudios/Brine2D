@@ -42,12 +42,13 @@ namespace Brine2D.Engine
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
+        #region Resource Lifecycle (called once per scene lifetime)
+
         /// <inheritdoc/>
         public virtual async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
             _logger.LogDebug("Initializing scene: {SceneName}", Name);
             await OnInitializeAsync(cancellationToken);
-            IsActive = true;
         }
 
         /// <inheritdoc/>
@@ -55,20 +56,6 @@ namespace Brine2D.Engine
         {
             _logger.LogInformation("Loading scene: {SceneName}", Name);
             await OnLoadAsync(cancellationToken);
-        }
-
-        /// <inheritdoc/>
-        public void Update(GameTime gameTime)
-        {
-            if (!IsActive) return;
-            OnUpdate(gameTime);
-        }
-
-        /// <inheritdoc/>
-        public void Render(GameTime gameTime)
-        {
-            if (!IsActive) return;
-            OnRender(gameTime);
         }
 
         /// <inheritdoc/>
@@ -96,6 +83,69 @@ namespace Brine2D.Engine
         protected virtual Task OnLoadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         /// <summary>
+        /// Called during unloading. Override to clean up resources.
+        /// </summary>
+        protected virtual Task OnUnloadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        #endregion
+
+        #region State Lifecycle (can be called multiple times)
+
+        /// <inheritdoc/>
+        public void Enter()
+        {
+            _logger.LogDebug("Scene entering: {SceneName}", Name);
+            IsActive = true;
+            OnEnter();
+        }
+
+        /// <inheritdoc/>
+        public void Exit()
+        {
+            _logger.LogDebug("Scene exiting: {SceneName}", Name);
+            OnExit();
+            IsActive = false;
+        }
+        
+        /// <summary>
+        /// Called when this scene becomes active (can be called multiple times).
+        /// Use for starting music, resetting timers, enabling input, etc.
+        /// </summary>
+        /// <remarks>
+        /// This is called AFTER InitializeAsync and LoadAsync have completed.
+        /// Unlike initialization, Enter can be called multiple times (e.g., returning from pause menu).
+        /// </remarks>
+        protected virtual void OnEnter() { }
+
+        /// <summary>
+        /// Called when this scene becomes inactive (can be called multiple times).
+        /// Use for stopping music, saving state, disabling input, etc.
+        /// </summary>
+        /// <remarks>
+        /// This is called BEFORE UnloadAsync.
+        /// Unlike unload, Exit can be called multiple times (e.g., transitioning to pause menu).
+        /// </remarks>
+        protected virtual void OnExit() { }
+        
+        #endregion
+
+        #region Frame Lifecycle (called every frame)
+
+        /// <inheritdoc/>
+        public void Update(GameTime gameTime)
+        {
+            if (!IsActive) return;
+            OnUpdate(gameTime);
+        }
+
+        /// <inheritdoc/>
+        public void Render(GameTime gameTime)
+        {
+            if (!IsActive) return;
+            OnRender(gameTime);
+        }
+
+        /// <summary>
         /// Called every frame to update game logic. Override to provide custom update logic.
         /// </summary>
         protected virtual void OnUpdate(GameTime gameTime) { }
@@ -105,10 +155,9 @@ namespace Brine2D.Engine
         /// </summary>
         protected virtual void OnRender(GameTime gameTime) { }
 
-        /// <summary>
-        /// Called during unloading. Override to clean up resources.
-        /// </summary>
-        protected virtual Task OnUnloadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        #endregion
+
+        #region Scene-Specific Systems
 
         private SceneSystemConfigurator? _systemConfigurator;
 
@@ -170,5 +219,7 @@ namespace Brine2D.Engine
                 throw;
             }
         }
+
+        #endregion
     }
 }

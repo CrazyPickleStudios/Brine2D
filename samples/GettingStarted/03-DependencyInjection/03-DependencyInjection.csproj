@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>DependencyInjection</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Brine2D.SDL\Brine2D.SDL.csproj" />
+    <ProjectReference Include="..\..\..\src\Brine2D\Brine2D.csproj" />
+  </ItemGroup>
+
+	<!-- Copy gamesettings.json to output directory -->
+	<ItemGroup>
+		<None Update="gamesettings.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+</Project>

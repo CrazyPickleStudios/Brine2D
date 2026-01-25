@@ -50,7 +50,7 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private FontAtlas? _defaultFontAtlas;
 
     private Matrix4x4 _projectionMatrix;
-    private Color _clearColor = Color.CornflowerBlue;
+    private Color _clearColor = Color.FromArgb(255, 52, 78, 65);
 
     private readonly Dictionary<BlendMode, nint> _graphicsPipelines = new();
     private BlendMode _currentBlendMode = BlendMode.Alpha;
@@ -1533,5 +1533,37 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
             Width = width;
             Height = height;
         }
+    }
+
+    // ============================================================
+    // VECTOR2 OVERLOADS (delegate to float overloads)
+    // ============================================================
+
+    // Rectangles
+    public void DrawRectangleFilled(Rectangle rect, Color color)
+    {
+        DrawRectangleFilled(rect.X, rect.Y, rect.Width, rect.Height, color);
+    }
+
+    public void DrawRectangleOutline(Rectangle rect, Color color, float thickness = 1f)
+    {
+        DrawRectangleOutline(rect.X, rect.Y, rect.Width, rect.Height, color, thickness);
+    }
+
+    // Circles
+    public void DrawCircleFilled(Vector2 center, float radius, Color color)
+    {
+        DrawCircleFilled(center.X, center.Y, radius, color);
+    }
+
+    public void DrawCircleOutline(Vector2 center, float radius, Color color, float thickness = 1f)
+    {
+        DrawCircleOutline(center.X, center.Y, radius, color, thickness);
+    }
+
+    // Lines
+    public void DrawLine(Vector2 start, Vector2 end, Color color, float thickness = 1f)
+    {
+        DrawLine(start.X, start.Y, end.X, end.Y, color, thickness);
     }
 }

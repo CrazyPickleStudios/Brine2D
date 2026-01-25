@@ -2,7 +2,7 @@
 using Brine2D.Hosting;
 using Brine2D.Rendering;
 using Brine2D.SDL;
-using SceneBasics;
+using HelloBrine;
 
 // Create the game application builder
 // Similar to WebApplicationBuilder in ASP.NET Core

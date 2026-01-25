@@ -1,0 +1,12 @@
+{
+  "Game": {
+    "PointsPerSecond": 50,
+    "PlayerName": "Game Dev"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "DependencyInjection.Services": "Debug"
+    }
+  }
+}
