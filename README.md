@@ -385,7 +385,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Brine2D follows ASP.NET testing best practices with comprehensive unit and integration tests.
 
@@ -440,7 +440,7 @@ We're actively building test coverage for core systems:
 | **UI Framework** | 0% | ❌ | Next |
 | **Tilemap** | 0% | ❌ | Optional |
 
-**Current overall coverage: ~40%**
+**Current overall coverage: ~20%**
 
 **Target for 1.0.0: >80% for all core systems**
 
