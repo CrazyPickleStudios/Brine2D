@@ -9,7 +9,7 @@ namespace SceneBasics;
 
 /// <summary>
 /// Game scene demonstrating scene lifecycle and transitions.
-/// Press ESC to return to menu (demonstrates OnExit → OnEnter cycle).
+/// Press ESC to return to menu (demonstrates scene transitions).
 /// </summary>
 public class GameScene : Scene
 {
@@ -33,15 +33,18 @@ public class GameScene : Scene
         _gameContext = gameContext;
     }
 
-    // OnEnter: Called when scene becomes active
-    // This is where you reset state, start music, etc.
-    protected override void OnEnter()
+    // OnLoad: Called when scene loads - initialize state
+    // Each time you transition to GameScene, a NEW instance is created
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        Logger.LogInformation("GameScene: OnEnter - Game starting");
+        Logger.LogInformation("GameScene: OnLoad - Game starting");
+        _renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
         
-        // Reset state every time we enter
+        // Initialize state (fresh scene every time)
         _score = 0;
         _elapsedTime = 0f;
+        
+        return Task.CompletedTask;
     }
 
     protected override void OnUpdate(GameTime gameTime)
@@ -74,11 +77,11 @@ public class GameScene : Scene
         _renderer.DrawText("Press Q to quit", 100, 260, Color.Gray);
     }
 
-    // OnExit: Called when leaving this scene
-    // This is where you stop music, save state, etc.
-    protected override void OnExit()
+    // OnUnload: Called when scene unloads - cleanup resources
+    protected override Task OnUnloadAsync(CancellationToken cancellationToken)
     {
-        Logger.LogInformation($"GameScene: OnExit - Final score was {_score}");
-        // Resources stay loaded, but scene is no longer active
+        Logger.LogInformation("GameScene: OnUnload - Final score was {Score}", _score);
+        // Cleanup resources here (if needed)
+        return Task.CompletedTask;
     }
 }

@@ -8,8 +8,8 @@ using System.Drawing;
 namespace SceneBasics
 {
     /// <summary>
-    /// Menu scene demonstrating scene lifecycle hooks.
-    /// Lifecycle order: Constructor → OnEnter → OnUpdate/OnRender loop → OnExit
+    /// Menu scene demonstrating scene lifecycle.
+    /// Lifecycle order: Constructor → OnInitialize → OnLoad → OnUpdate/OnRender loop → OnUnload
     /// </summary>
     public class MenuScene : Scene
     {
@@ -33,11 +33,12 @@ namespace SceneBasics
             Logger.LogInformation("MenuScene: Constructor called");
         }
 
-        // OnEnter: Called when scene becomes active
-        protected override void OnEnter()
+        // OnLoad: Called when scene loads - initialize state and load resources
+        protected override Task OnLoadAsync(CancellationToken cancellationToken)
         {
-            Logger.LogInformation("MenuScene: OnEnter - Scene is now active");
+            Logger.LogInformation("MenuScene: OnLoad - Scene is loading");
             _renderer.ClearColor = Color.DarkSlateBlue;
+            return Task.CompletedTask;
         }
 
         protected override void OnUpdate(GameTime gameTime)
@@ -64,11 +65,12 @@ namespace SceneBasics
             _renderer.DrawText("Press ESC to exit", 100, 180, Color.LightGray);
         }
 
-        // OnExit: Called when leaving this scene
-        protected override void OnExit()
+        // OnUnload: Called when scene unloads - cleanup resources
+        protected override Task OnUnloadAsync(CancellationToken cancellationToken)
         {
-            Logger.LogInformation("MenuScene: OnExit - Scene is being unloaded");
+            Logger.LogInformation("MenuScene: OnUnload - Scene is being unloaded");
             // Cleanup resources here (if needed)
+            return Task.CompletedTask;
         }
     }
 }

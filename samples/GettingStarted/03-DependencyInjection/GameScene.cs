@@ -54,18 +54,24 @@ public class GameScene : Scene
             _gameOptions.PlayerName);
     }
 
-    protected override void OnEnter()
+    // OnLoad: Called when scene loads - initialize state
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("GameScene: OnEnter");
+        _logger.LogInformation("GameScene: OnLoad");
+        _renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
 
         // Reset score using our custom service
         _scoreService.ResetScore();
+
+        return Task.CompletedTask;
     }
 
-    protected override void OnExit()
+    // OnUnload: Called when scene unloads - cleanup
+    protected override Task OnUnloadAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("GameScene: OnExit - Final score: {Score}",
+        _logger.LogInformation("GameScene: OnUnload - Final score: {Score}",
             _scoreService.GetScore());
+        return Task.CompletedTask;
     }
 
     protected override void OnRender(GameTime gameTime)
