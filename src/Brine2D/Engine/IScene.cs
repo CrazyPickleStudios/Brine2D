@@ -18,11 +18,6 @@ public interface IScene
     string Name { get; }
 
     /// <summary>
-    /// Gets whether the scene is currently active.
-    /// </summary>
-    bool IsActive { get; }
-
-    /// <summary>
     /// Gets whether lifecycle hooks should execute automatically.
     /// Set to false for complete manual control over ECS pipelines and other hooks.
     /// </summary>
@@ -44,18 +39,6 @@ public interface IScene
     /// </summary>
     Task LoadAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Called when the scene becomes active (can be called multiple times).
-    /// Use this to reset state, start music, resume timers, etc.
-    /// </summary>
-    void Enter();
-
-    /// <summary>
-    /// Called when the scene becomes inactive (can be called multiple times).
-    /// Use this to stop music, save state, pause timers, etc.
-    /// </summary>
-    void Exit();
-    
     /// <summary>
     /// Updates the scene's game logic.
     /// </summary>

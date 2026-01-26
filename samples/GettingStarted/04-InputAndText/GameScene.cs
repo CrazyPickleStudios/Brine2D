@@ -45,15 +45,17 @@ public class GameScene : Scene
         _gameContext = gameContext;
     }
 
-    protected override void OnEnter()
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        Logger.LogInformation("GameScene: OnEnter");
+        Logger.LogInformation("GameScene: OnLoad");
         _renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
 
         // Reset state
         _playerPosition = new Vector2(400, 300);
         _textInput.Clear();
         _textInput.Append("Type here!");
+        
+        return Task.CompletedTask;
     }
 
     protected override void OnUpdate(GameTime gameTime)

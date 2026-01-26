@@ -122,9 +122,6 @@ namespace Brine2D.Engine
             {
                 _logger.LogDebug("Unloading current scene: {SceneName}", CurrentScene.Name);
                 
-                // Call Exit() before unloading
-                CurrentScene.Exit();
-                
                 // Remove scene-specific systems
                 if (CurrentScene is Scene oldScene)
                 {
@@ -171,14 +168,12 @@ namespace Brine2D.Engine
                 await Task.Delay(200, cancellationToken);
             }
 
+            // Set as current scene (scene is now active)
             CurrentScene = scene;
 
-// Call Enter() to activate the scene
-scene.Enter();
-
-// Log scene configuration
-if (!scene.EnableLifecycleHooks)
-{
+            // Log scene configuration
+            if (!scene.EnableLifecycleHooks)
+            {
                 _logger.LogInformation("Scene {SceneName} has lifecycle hooks DISABLED (manual control)", scene.Name);
             }
             if (!scene.EnableAutomaticFrameManagement)
@@ -290,7 +285,7 @@ if (!scene.EnableLifecycleHooks)
                 }
             }
             
-            // Scene update (always runs)
+            // Scene update
             CurrentScene?.Update(gameTime);
             
             // Only execute hooks if scene allows it

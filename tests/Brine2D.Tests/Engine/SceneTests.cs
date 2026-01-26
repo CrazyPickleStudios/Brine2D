@@ -27,6 +27,7 @@ public class SceneTests
 
         // Assert
         sceneManager.CurrentScene.Should().BeOfType<TestScene>();
+        sceneManager.CurrentScene.Should().NotBeNull();
     }
 
     [Fact]
@@ -36,11 +37,13 @@ public class SceneTests
         var logger = NullLogger<LifecycleTestScene>.Instance;
         var scene = new LifecycleTestScene(logger);
 
-        // Act
+        // Act - Follow correct lifecycle order
         await scene.InitializeAsync();
         await scene.LoadAsync();
+        
         scene.Update(new GameTime());
         scene.Render(new GameTime());
+
         await scene.UnloadAsync();
 
         // Assert

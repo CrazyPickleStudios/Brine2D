@@ -19,9 +19,6 @@ namespace Brine2D.Engine
 
         /// <inheritdoc/>
         public virtual string Name => GetType().Name;
-
-        /// <inheritdoc/>
-        public bool IsActive { get; private set; }
         
         /// <summary>
         /// Set to false to disable automatic lifecycle hook execution (ECS pipelines, etc.).
@@ -63,7 +60,6 @@ namespace Brine2D.Engine
         {
             _logger.LogInformation("Unloading scene: {SceneName}", Name);
             await OnUnloadAsync(cancellationToken);
-            IsActive = false;
         }
 
         /// <summary>
@@ -78,7 +74,7 @@ namespace Brine2D.Engine
 
         /// <summary>
         /// Called during loading. Override to load resources asynchronously.
-        /// This is where you load textures, sounds, build atlases, and create GPU resources.
+        /// This is where you load textures, sounds, build atlases, create GPU resources, and initialize scene state.
         /// </summary>
         protected virtual Task OnLoadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -89,59 +85,17 @@ namespace Brine2D.Engine
 
         #endregion
 
-        #region State Lifecycle (can be called multiple times)
-
-        /// <inheritdoc/>
-        public void Enter()
-        {
-            _logger.LogDebug("Scene entering: {SceneName}", Name);
-            IsActive = true;
-            OnEnter();
-        }
-
-        /// <inheritdoc/>
-        public void Exit()
-        {
-            _logger.LogDebug("Scene exiting: {SceneName}", Name);
-            OnExit();
-            IsActive = false;
-        }
-        
-        /// <summary>
-        /// Called when this scene becomes active (can be called multiple times).
-        /// Use for starting music, resetting timers, enabling input, etc.
-        /// </summary>
-        /// <remarks>
-        /// This is called AFTER InitializeAsync and LoadAsync have completed.
-        /// Unlike initialization, Enter can be called multiple times (e.g., returning from pause menu).
-        /// </remarks>
-        protected virtual void OnEnter() { }
-
-        /// <summary>
-        /// Called when this scene becomes inactive (can be called multiple times).
-        /// Use for stopping music, saving state, disabling input, etc.
-        /// </summary>
-        /// <remarks>
-        /// This is called BEFORE UnloadAsync.
-        /// Unlike unload, Exit can be called multiple times (e.g., transitioning to pause menu).
-        /// </remarks>
-        protected virtual void OnExit() { }
-        
-        #endregion
-
         #region Frame Lifecycle (called every frame)
 
         /// <inheritdoc/>
         public void Update(GameTime gameTime)
         {
-            if (!IsActive) return;
             OnUpdate(gameTime);
         }
 
         /// <inheritdoc/>
         public void Render(GameTime gameTime)
         {
-            if (!IsActive) return;
             OnRender(gameTime);
         }
 
