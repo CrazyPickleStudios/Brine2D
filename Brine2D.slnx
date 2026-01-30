@@ -2,6 +2,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/FeatureDemos/FeatureDemos.csproj" Id="1b7cd93f-9929-45b5-ae7a-527111c99e68" />
   </Folder>
+  <Folder Name="/samples/CoreConcepts/" />
   <Folder Name="/samples/GettingStarted/">
     <Project Path="samples/GettingStarted/01-HelloBrine/01-HelloBrine.csproj" Id="484e31e4-180f-46f6-9a63-c9076a141f06" />
     <Project Path="samples/GettingStarted/02-SceneBasics/02-SceneBasics.csproj" Id="1e1ff149-1e69-4b45-bd2e-3207d5dde82c" />

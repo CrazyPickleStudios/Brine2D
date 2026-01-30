@@ -1,14 +1,13 @@
 using System.Numerics;
 using Brine2D.Animation;
 using Brine2D.Core;
-using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using FluentAssertions;
 using Xunit;
 
 namespace Brine2D.Tests.Animation;
 
-public class TweenComponentTests
+public class TweenComponentTests : TestBase
 {
     #region Basic Interpolation Tests
 
@@ -16,7 +15,7 @@ public class TweenComponentTests
     public void ShouldInterpolatePositionOverTime()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -39,7 +38,7 @@ public class TweenComponentTests
     public void ShouldInterpolateScaleOverTime()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Scale = Vector2.One;
@@ -62,7 +61,7 @@ public class TweenComponentTests
     public void ShouldInterpolateRotationOverTime()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Rotation = 0;
@@ -84,7 +83,7 @@ public class TweenComponentTests
     public void ShouldCompleteAtEndOfDuration()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -110,7 +109,7 @@ public class TweenComponentTests
     public void ShouldFireCompletionEvent()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
 
@@ -134,7 +133,7 @@ public class TweenComponentTests
     public void ShouldNotFireCompletionEventWhenPaused()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
 
@@ -159,7 +158,7 @@ public class TweenComponentTests
     public void ShouldNotFireCompletionEventWhenLooping()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
 
@@ -189,7 +188,7 @@ public class TweenComponentTests
     public void ShouldPauseAndResumeTween()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -222,7 +221,7 @@ public class TweenComponentTests
     public void ShouldRestartTweenWithPlay()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -250,7 +249,7 @@ public class TweenComponentTests
     public void ShouldLoopTween()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -276,7 +275,7 @@ public class TweenComponentTests
     public void ShouldPingPongTween()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -306,7 +305,7 @@ public class TweenComponentTests
     public void ShouldApplyLinearEasing()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -329,7 +328,7 @@ public class TweenComponentTests
     public void ShouldApplyEaseInQuadEasing()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -356,7 +355,7 @@ public class TweenComponentTests
     public void ShouldNotUpdateWhenDisabled()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
@@ -379,7 +378,7 @@ public class TweenComponentTests
     public void ShouldHandleMissingTransformComponent()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         // No transform component added
 
@@ -398,7 +397,7 @@ public class TweenComponentTests
     public void ShouldClampElapsedTimeToDuration()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);

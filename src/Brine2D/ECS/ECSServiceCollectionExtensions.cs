@@ -52,27 +52,11 @@ public static class ECSServiceCollectionExtensions
             configure?.Invoke(options);
         });
 
-        services.TryAddSingleton<IEntityWorld, EntityWorld>();
-        services.TryAddSingleton<PrefabLibrary>();
-        services.TryAddSingleton<EntitySerializer>();
-        services.TryAddSingleton<EventBus>();
-        
-        // Add UpdatePipeline with options
-        services.AddSingleton(sp =>
-        {
-            var logger = sp.GetService<ILogger<UpdatePipeline>>();
-            var profiler = sp.GetService<ScopedProfiler>();
-            var options = sp.GetService<IOptions<ECSOptions>>()?.Value ?? new ECSOptions();
-            return new UpdatePipeline(logger, profiler, options);
-        });
-        
-        // Add RenderPipeline
-        services.AddSingleton(sp =>
-        {
-            var logger = sp.GetService<ILogger<RenderPipeline>>();
-            var profiler = sp.GetService<ScopedProfiler>();
-            return new RenderPipeline(logger, profiler);
-        });
+        services.AddScoped<IEntityWorld, EntityWorld>();
+
+        // Pipelines are singletons (shared across all scenes)
+        services.AddSingleton<UpdatePipeline>();
+        services.AddSingleton<RenderPipeline>();
         
         // Register pure ECS systems
         services.TryAddSingleton<VelocitySystem>();

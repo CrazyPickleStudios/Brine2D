@@ -6,12 +6,12 @@ namespace Brine2D.Input;
 /// <summary>
 /// Raised when a key is pressed.
 /// </summary>
-public record KeyPressedEvent(Keys Key, bool IsRepeat = false);
+public record KeyPressedEvent(Key Key, bool IsRepeat = false);
 
 /// <summary>
 /// Raised when a key is released.
 /// </summary>
-public record KeyReleasedEvent(Keys Key);
+public record KeyReleasedEvent(Key Key);
 
 /// <summary>
 /// Raised when a mouse button is pressed.

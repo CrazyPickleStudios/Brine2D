@@ -3,7 +3,7 @@ namespace Brine2D.Input;
 /// <summary>
 /// Keyboard key codes for input handling.
 /// </summary>
-public enum Keys
+public enum Key
 {
     /// <summary>
     /// Unknown or unmapped key.

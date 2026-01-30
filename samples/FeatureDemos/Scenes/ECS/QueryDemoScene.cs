@@ -28,9 +28,7 @@ namespace FeatureDemos.Scenes.ECS;
 /// </summary>
 public class QueryDemoScene : DemoSceneBase
 {
-    private readonly IEntityWorld _world;
-    private readonly IRenderer _renderer;
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
     private readonly IGameContext _gameContext;
 
     private Entity? _player;
@@ -49,17 +47,12 @@ public class QueryDemoScene : DemoSceneBase
     };
 
     public QueryDemoScene(
-        IEntityWorld world,
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        ILogger<QueryDemoScene> logger,
         PerformanceOverlay? perfOverlay = null)
-        : base(input, sceneManager, gameContext, logger, renderer, world, perfOverlay)
+        : base(input, sceneManager, gameContext, perfOverlay)
     {
-        _world = world;
-        _renderer = renderer;
         _input = input;
         _gameContext = gameContext;
     }
@@ -75,10 +68,10 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("");
         Logger.LogInformation("Current Demo: {Demo}", _currentDemo);
 
-        _renderer.ClearColor = Color.FromArgb(20, 20, 30);
+        Renderer.ClearColor = Color.FromArgb(20, 20, 30);
 
         // Create player
-        _player = _world.CreateEntity("Player");
+        _player = World.CreateEntity("Player");
         _player.Tags.Add("Player");
         
         var playerTransform = _player.AddComponent<TransformComponent>();
@@ -90,7 +83,7 @@ public class QueryDemoScene : DemoSceneBase
         // Create 20 entities with random positions and "health"
         for (int i = 0; i < 20; i++)
         {
-            var entity = _world.CreateEntity($"Entity_{i}");
+            var entity = World.CreateEntity($"Entity_{i}");
             
             var transform = entity.AddComponent<TransformComponent>();
             transform.Position = new Vector2(
@@ -124,7 +117,7 @@ public class QueryDemoScene : DemoSceneBase
         if (CheckReturnToMenu()) return;
 
         // Cycle demos
-        if (_input.IsKeyPressed(Keys.Tab))
+        if (_input.IsKeyPressed(Key.Tab))
         {
             _demoIndex = (_demoIndex + 1) % _demos.Length;
             _currentDemo = _demos[_demoIndex];
@@ -133,7 +126,7 @@ public class QueryDemoScene : DemoSceneBase
         }
 
         // Refresh current demo
-        if (_input.IsKeyPressed(Keys.Space))
+        if (_input.IsKeyPressed(Key.Space))
         {
             Logger.LogInformation("\n=== Refreshing Demo: {Demo} ===", _currentDemo);
             RunCurrentDemo();
@@ -148,10 +141,10 @@ public class QueryDemoScene : DemoSceneBase
                 var movement = Vector2.Zero;
                 var speed = 300f;
 
-                if (_input.IsKeyDown(Keys.W)) movement.Y -= 1;
-                if (_input.IsKeyDown(Keys.S)) movement.Y += 1;
-                if (_input.IsKeyDown(Keys.A)) movement.X -= 1;
-                if (_input.IsKeyDown(Keys.D)) movement.X += 1;
+                if (_input.IsKeyDown(Key.W)) movement.Y -= 1;
+                if (_input.IsKeyDown(Key.S)) movement.Y += 1;
+                if (_input.IsKeyDown(Key.A)) movement.X -= 1;
+                if (_input.IsKeyDown(Key.D)) movement.X += 1;
 
                 if (movement != Vector2.Zero)
                 {
@@ -170,7 +163,7 @@ public class QueryDemoScene : DemoSceneBase
             var transform = entity.GetComponent<TransformComponent>();
             if (transform != null)
             {
-                _renderer.DrawCircleFilled(
+                Renderer.DrawCircleFilled(
                     transform.Position.X, 
                     transform.Position.Y, 
                     8,
@@ -185,7 +178,7 @@ public class QueryDemoScene : DemoSceneBase
             var transform = entity.GetComponent<TransformComponent>();
             if (transform != null)
             {
-                _renderer.DrawCircleFilled(
+                Renderer.DrawCircleFilled(
                     transform.Position.X, 
                     transform.Position.Y, 
                     12, 
@@ -199,7 +192,7 @@ public class QueryDemoScene : DemoSceneBase
             var transform = _player.GetComponent<TransformComponent>();
             if (transform != null)
             {
-                _renderer.DrawCircleFilled(
+                Renderer.DrawCircleFilled(
                     transform.Position.X, 
                     transform.Position.Y, 
                     15, 
@@ -208,7 +201,7 @@ public class QueryDemoScene : DemoSceneBase
                 // Draw radius for spatial demo (use outline)
                 if (_currentDemo == "Spatial")
                 {
-                    _renderer.DrawCircleOutline(
+                    Renderer.DrawCircleOutline(
                         transform.Position.X, 
                         transform.Position.Y, 
                         200, 
@@ -218,9 +211,9 @@ public class QueryDemoScene : DemoSceneBase
         }
 
         // Draw UI
-        _renderer.DrawText($"Demo: {_currentDemo} (TAB to cycle)", 10, 10, Color.White);
-        _renderer.DrawText($"Results: {results.Count()} entities", 10, 35, Color.Yellow);
-        _renderer.DrawText("SPACE: Refresh | WASD: Move Player", 10, 60, Color.Gray);
+        Renderer.DrawText($"Demo: {_currentDemo} (TAB to cycle)", 10, 10, Color.White);
+        Renderer.DrawText($"Results: {results.Count()} entities", 10, 35, Color.Yellow);
+        Renderer.DrawText("SPACE: Refresh | WASD: Move Player", 10, 60, Color.Gray);
 
         RenderPerformanceOverlay();
     }
@@ -263,31 +256,31 @@ public class QueryDemoScene : DemoSceneBase
 
         return _currentDemo switch
         {
-            "Spatial" => _world.Query()
+            "Spatial" => World.Query()
                 .WithinRadius(playerPos, 200f)
                 .Execute(),
             
-            "Filtering" => _world.Query()
+            "Filtering" => World.Query()
                 .With<HealthDemoComponent>(h => h.Health < 50)
                 .Execute(),
             
-            "Tags" => _world.Query()
+            "Tags" => World.Query()
                 .WithAllTags("Enemy", "Boss")
                 .Execute(),
             
-            "Sorting" => _world.Query()
+            "Sorting" => World.Query()
                 .With<HealthDemoComponent>()
                 .OrderBy(e => e.GetComponent<HealthDemoComponent>()!.Health)
                 .Take(5)
                 .Execute(),
             
-            "Pagination" => _world.Query()
+            "Pagination" => World.Query()
                 .With<TransformComponent>()
                 .Skip(5)
                 .Take(10)
                 .Execute(),
             
-            "Random" => new[] { _world.Query()
+            "Random" => new[] { World.Query()
                 .With<TransformComponent>()
                 .Random() }
                 .Where(e => e != null)
@@ -306,7 +299,7 @@ public class QueryDemoScene : DemoSceneBase
         var playerPos = _player?.GetComponent<TransformComponent>()?.Position ?? Vector2.Zero;
 
         // WithinRadius
-        var nearbyEntities = _world.Query()
+        var nearbyEntities = World.Query()
             .WithinRadius(playerPos, 200f)
             .Execute();
 
@@ -314,7 +307,7 @@ public class QueryDemoScene : DemoSceneBase
             nearbyEntities.Count());
 
         // WithinBounds
-        var boundsEntities = _world.Query()
+        var boundsEntities = World.Query()
             .WithinBounds(new Rectangle(300, 200, 400, 300))
             .Execute();
 
@@ -322,7 +315,7 @@ public class QueryDemoScene : DemoSceneBase
             boundsEntities.Count());
 
         // Combined
-        var combined = _world.Query()
+        var combined = World.Query()
             .WithinRadius(playerPos, 200f)
             .WithTag("Enemy")
             .Execute();
@@ -336,7 +329,7 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("--- Component Filtering Demo ---");
 
         // Filter by component property
-        var lowHealth = _world.Query()
+        var lowHealth = World.Query()
             .With<HealthDemoComponent>(h => h.Health < 50)
             .Execute();
 
@@ -344,7 +337,7 @@ public class QueryDemoScene : DemoSceneBase
             lowHealth.Count());
 
         // Multiple filters
-        var mediumHealth = _world.Query()
+        var mediumHealth = World.Query()
             .With<HealthDemoComponent>(h => h.Health >= 30 && h.Health <= 70)
             .Execute();
 
@@ -365,7 +358,7 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("--- Tag Queries Demo ---");
 
         // WithAllTags
-        var bosses = _world.Query()
+        var bosses = World.Query()
             .WithAllTags("Enemy", "Boss")
             .Execute();
 
@@ -373,7 +366,7 @@ public class QueryDemoScene : DemoSceneBase
             bosses.Count());
 
         // WithAnyTag
-        var targets = _world.Query()
+        var targets = World.Query()
             .WithAnyTag("Enemy", "Elite")
             .Execute();
 
@@ -381,7 +374,7 @@ public class QueryDemoScene : DemoSceneBase
             targets.Count());
 
         // WithoutTag
-        var nonEnemies = _world.Query()
+        var nonEnemies = World.Query()
             .With<TransformComponent>()
             .WithoutTag("Enemy")
             .WithoutTag("Player")
@@ -398,7 +391,7 @@ public class QueryDemoScene : DemoSceneBase
         var playerPos = _player?.GetComponent<TransformComponent>()?.Position ?? Vector2.Zero;
 
         // OrderBy health
-        var weakest = _world.Query()
+        var weakest = World.Query()
             .With<HealthDemoComponent>()
             .OrderBy(e => e.GetComponent<HealthDemoComponent>()!.Health)
             .Take(5)
@@ -413,7 +406,7 @@ public class QueryDemoScene : DemoSceneBase
         }
 
         // OrderBy with ThenBy
-        var sorted = _world.Query()
+        var sorted = World.Query()
             .WithTag("Enemy")
             .With<HealthDemoComponent>()
             .OrderBy(e => e.GetComponent<HealthDemoComponent>()!.Health)
@@ -439,14 +432,14 @@ public class QueryDemoScene : DemoSceneBase
     {
         Logger.LogInformation("--- Pagination Demo ---");
 
-        var total = _world.Query()
+        var total = World.Query()
             .With<TransformComponent>()
             .Count();
 
         Logger.LogInformation("Total entities: {Count}", total);
 
         // Page 1
-        var page1 = _world.Query()
+        var page1 = World.Query()
             .With<TransformComponent>()
             .Take(5)
             .Execute();
@@ -454,7 +447,7 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("Page 1 (Take 5): {Count} entities", page1.Count());
 
         // Page 2
-        var page2 = _world.Query()
+        var page2 = World.Query()
             .With<TransformComponent>()
             .Skip(5)
             .Take(5)
@@ -463,7 +456,7 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("Page 2 (Skip 5, Take 5): {Count} entities", page2.Count());
 
         // Page 3
-        var page3 = _world.Query()
+        var page3 = World.Query()
             .With<TransformComponent>()
             .Skip(10)
             .Take(5)
@@ -477,7 +470,7 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("--- Random Selection Demo ---");
 
         // Random single
-        var randomEntity = _world.Query()
+        var randomEntity = World.Query()
             .With<TransformComponent>()
             .Random();
 
@@ -487,7 +480,7 @@ public class QueryDemoScene : DemoSceneBase
         }
 
         // Random multiple
-        var random3 = _world.Query()
+        var random3 = World.Query()
             .WithTag("Enemy")
             .Random(3)
             .Execute();
@@ -504,7 +497,7 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("--- Query Cloning Demo ---");
 
         // Base query
-        var baseQuery = _world.Query()
+        var baseQuery = World.Query()
             .With<HealthDemoComponent>()
             .WithTag("Enemy");
 
@@ -534,7 +527,7 @@ public class QueryDemoScene : DemoSceneBase
 
     private IEnumerable<Entity> GetCloningDemoResults()
     {
-        var baseQuery = _world.Query()
+        var baseQuery = World.Query()
             .With<HealthDemoComponent>()
             .WithTag("Enemy");
 

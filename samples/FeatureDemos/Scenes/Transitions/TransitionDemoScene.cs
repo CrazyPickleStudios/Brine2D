@@ -15,21 +15,16 @@ namespace FeatureDemos.Scenes.Transitions;
 /// </summary>
 public class TransitionDemoScene : DemoSceneBase
 {
-    private readonly IRenderer _renderer;
     
     private readonly Color _sceneColor;
     private readonly string _sceneName;
 
     public TransitionDemoScene(
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
-        IGameContext gameContext,
-        ILogger<TransitionDemoScene> logger) 
-        : base(input, sceneManager, gameContext, logger, renderer, world: null)
+        IGameContext gameContext) 
+        : base(input, sceneManager, gameContext)
     {
-        _renderer = renderer;
-        
         // Each instance gets a random color for visual distinction
         _sceneColor = Color.FromArgb(
             (byte)Random.Shared.Next(100, 255),
@@ -50,7 +45,7 @@ public class TransitionDemoScene : DemoSceneBase
         Logger.LogInformation("  ESC - Return to menu");
         
         // Set clear color
-        _renderer.ClearColor = _sceneColor;
+        Renderer.ClearColor = _sceneColor;
 
         return Task.CompletedTask;
     }
@@ -61,7 +56,7 @@ public class TransitionDemoScene : DemoSceneBase
         if (CheckReturnToMenu()) return;
 
         // Fast fade transition
-        if (Input.IsKeyPressed(Keys.D1))
+        if (Input.IsKeyPressed(Key.D1))
         {
             Logger.LogInformation("Loading Scene A with fast fade...");
             _ = SceneManager.LoadSceneAsync<SceneA>(
@@ -70,7 +65,7 @@ public class TransitionDemoScene : DemoSceneBase
         }
 
         // Slow fade transition
-        if (Input.IsKeyPressed(Keys.D2))
+        if (Input.IsKeyPressed(Key.D2))
         {
             Logger.LogInformation("Loading Scene B with slow fade...");
             _ = SceneManager.LoadSceneAsync<SceneB>(
@@ -79,11 +74,10 @@ public class TransitionDemoScene : DemoSceneBase
         }
 
         // With loading screen
-        if (Input.IsKeyPressed(Keys.D3))
+        if (Input.IsKeyPressed(Key.D3))
         {
             Logger.LogInformation("Loading Scene C with loading screen...");
-            _ = SceneManager.LoadSceneAsync<SceneC>(
-                loadingScreen: new CustomLoadingScreen(_renderer, Logger),
+            _ = SceneManager.LoadSceneAsync<SceneC, CustomLoadingScreen>(
                 transition: new FadeTransition(duration: 1f, color: Color.Black)
             );
         }
@@ -92,14 +86,14 @@ public class TransitionDemoScene : DemoSceneBase
     protected override void OnRender(GameTime gameTime)
     {
         // Draw scene info
-        _renderer.DrawText("Scene Transition Demo", 10, 10, Color.White);
-        _renderer.DrawText($"Current: {_sceneName}", 10, 40, Color.White);
-        _renderer.DrawText($"Color: RGB({_sceneColor.R}, {_sceneColor.G}, {_sceneColor.B})", 10, 70, Color.White);
+        Renderer.DrawText("Scene Transition Demo", 10, 10, Color.White);
+        Renderer.DrawText($"Current: {_sceneName}", 10, 40, Color.White);
+        Renderer.DrawText($"Color: RGB({_sceneColor.R}, {_sceneColor.G}, {_sceneColor.B})", 10, 70, Color.White);
         
-        _renderer.DrawText("Press 1 - Fast Fade (0.5s)", 10, 120, Color.Yellow);
-        _renderer.DrawText("Press 2 - Slow Fade (2s)", 10, 150, Color.Yellow);
-        _renderer.DrawText("Press 3 - With Loading Screen", 10, 180, Color.Yellow);
-        _renderer.DrawText("Press ESC - Return to Menu", 10, 210, Color.FromArgb(150, 150, 150));
+        Renderer.DrawText("Press 1 - Fast Fade (0.5s)", 10, 120, Color.Yellow);
+        Renderer.DrawText("Press 2 - Slow Fade (2s)", 10, 150, Color.Yellow);
+        Renderer.DrawText("Press 3 - With Loading Screen", 10, 180, Color.Yellow);
+        Renderer.DrawText("Press ESC - Return to Menu", 10, 210, Color.FromArgb(150, 150, 150));
         
         // Draw visual indicator
         DrawColorBox();
@@ -107,11 +101,11 @@ public class TransitionDemoScene : DemoSceneBase
 
     private void DrawColorBox()
     {
-        var centerX = (_renderer.Camera?.ViewportWidth ?? 1280) / 2f;
-        var centerY = (_renderer.Camera?.ViewportHeight ?? 720) / 2f;
+        var centerX = (Renderer.Camera?.ViewportWidth ?? 1280) / 2f;
+        var centerY = (Renderer.Camera?.ViewportHeight ?? 720) / 2f;
         
         // Draw a large colored box in the center
-        _renderer.DrawRectangleFilled(
+        Renderer.DrawRectangleFilled(
             centerX - 150, 
             centerY - 150, 
             300, 
@@ -120,7 +114,7 @@ public class TransitionDemoScene : DemoSceneBase
         );
         
         // Draw border
-        _renderer.DrawRectangleOutline(
+        Renderer.DrawRectangleOutline(
             centerX - 150, 
             centerY - 150, 
             300, 
@@ -130,6 +124,6 @@ public class TransitionDemoScene : DemoSceneBase
         );
         
         // Draw scene name in center
-        _renderer.DrawText(_sceneName, centerX - 40, centerY - 10, Color.White);
+        Renderer.DrawText(_sceneName, centerX - 40, centerY - 10, Color.White);
     }
 }

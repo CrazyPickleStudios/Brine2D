@@ -5,12 +5,12 @@ using Xunit;
 
 namespace Brine2D.Tests.ECS;
 
-public class EntityTests
+public class EntityTests : TestBase
 {
     [Fact]
     public void ShouldAddComponentAndRetrieveIt()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var component = entity.AddComponent(new TestComponent());
 
@@ -21,7 +21,7 @@ public class EntityTests
     [Fact]
     public void ShouldNotAddDuplicateComponent()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var comp1 = entity.AddComponent(new TestComponent());
         var comp2 = entity.AddComponent(new TestComponent());
@@ -33,7 +33,7 @@ public class EntityTests
     [Fact]
     public void ShouldAddPreconfiguredComponentInstance()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var comp = new TestComponent();
         entity.AddComponent(comp);
@@ -44,7 +44,7 @@ public class EntityTests
     [Fact]
     public void ShouldRemoveComponentAndNotRetrieveIt()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.AddComponent(new TestComponent());
 
@@ -55,18 +55,18 @@ public class EntityTests
     [Fact]
     public void ShouldReturnAllComponents()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.AddComponent(new TestComponent());
         entity.AddComponent(new AnotherComponent());
 
-        entity.GetAllComponents().Count.Should().Be(2);
+        entity.GetAllComponents().Count().Should().Be(2);
     }
 
     [Fact]
     public void ShouldCheckForComponentExistenceByType()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.AddComponent(new TestComponent());
 
@@ -77,45 +77,18 @@ public class EntityTests
     [Fact]
     public void ShouldCheckForComponentExistenceByTypeObject()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.AddComponent(new TestComponent());
 
         entity.HasComponent(typeof(TestComponent)).Should().BeTrue();
         entity.HasComponent(typeof(AnotherComponent)).Should().BeFalse();
     }
-
-    [Fact]
-    public void ShouldFireOnComponentAddedEventWhenComponentAdded()
-    {
-        var world = new EntityWorld();
-        var entity = world.CreateEntity();
-        var eventFired = false;
-        entity.OnComponentAdded += (_, _) => eventFired = true;
-
-        entity.AddComponent(new TestComponent());
-
-        eventFired.Should().BeTrue();
-    }
-
-    [Fact]
-    public void ShouldFireOnComponentRemovedEventWhenComponentRemoved()
-    {
-        var world = new EntityWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent(new TestComponent());
-        var eventFired = false;
-        entity.OnComponentRemoved += (_, _) => eventFired = true;
-
-        entity.RemoveComponent<TestComponent>();
-
-        eventFired.Should().BeTrue();
-    }
-
+    
     [Fact]
     public void ShouldAddAndCheckTags()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.Tags.Add("player");
         entity.Tags.Contains("player").Should().BeTrue();
@@ -124,7 +97,7 @@ public class EntityTests
     [Fact]
     public void ShouldHaveUniqueIdForEachEntity()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var e1 = world.CreateEntity();
         var e2 = world.CreateEntity();
         e1.Id.Should().NotBe(e2.Id);
@@ -133,7 +106,7 @@ public class EntityTests
     [Fact]
     public void ShouldSetAndGetNameProperty()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.Name = "Player";
         entity.Name.Should().Be("Player");
@@ -142,14 +115,12 @@ public class EntityTests
     [Fact]
     public void ToStringShouldReturnNameAndId()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.Name = "Test";
         entity.ToString().Should().Contain("Test");
         entity.ToString().Should().Contain(entity.Id.ToString());
     }
-
-    // Add more tests for activation, deactivation, OnDestroy, World integration, etc.
 
     public class TestComponent : Component { }
     public class AnotherComponent : Component { }

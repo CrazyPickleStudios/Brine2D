@@ -23,7 +23,6 @@ namespace FeatureDemos.Scenes.Performance;
 /// </summary>
 public class SpriteBenchmarkScene : DemoSceneBase
 {
-    private readonly IRenderer _renderer;
     private readonly ITextureLoader _textureLoader;
     private readonly DebugRenderer? _debugRenderer;
     private readonly ICamera? _camera;
@@ -34,19 +33,15 @@ public class SpriteBenchmarkScene : DemoSceneBase
     private System.Diagnostics.Stopwatch _cpuWorkStopwatch = new();
 
     public SpriteBenchmarkScene(
-        IEntityWorld world,
-        IRenderer renderer,
         ITextureLoader textureLoader,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
         PerformanceOverlay? perfOverlay,
         DebugRenderer? debugRenderer,
-        ICamera? camera,
-        ILogger<SpriteBenchmarkScene> logger)
-        : base(input, sceneManager, gameContext, logger, renderer, world, perfOverlay)
+        ICamera? camera)
+        : base(input, sceneManager, gameContext, perfOverlay)
     {
-        _renderer = renderer;
         _textureLoader = textureLoader;
         _debugRenderer = debugRenderer;
         _camera = camera;
@@ -68,14 +63,14 @@ public class SpriteBenchmarkScene : DemoSceneBase
         Logger.LogInformation("  F1 - Toggle overlay");
         Logger.LogInformation("  ESC - Return to menu");
         
-        _renderer.ClearColor = Color.FromArgb(20, 20, 30);
+        Renderer.ClearColor = Color.FromArgb(20, 20, 30);
         
         // Setup camera for culling
         if (_camera != null)
         {
             _camera.Position = new Vector2(640, 360); // Center of 1280x720
             _camera.Zoom = 1.0f;
-            _renderer.Camera = _camera;
+            Renderer.Camera = _camera;
             Logger.LogInformation("Camera initialized for frustum culling");
         }
         
@@ -156,24 +151,24 @@ public class SpriteBenchmarkScene : DemoSceneBase
         {
             const float cameraSpeed = 500f;
             
-            if (Input.IsKeyDown(Keys.W))
+            if (Input.IsKeyDown(Key.W))
                 _camera.Position += new Vector2(0, -cameraSpeed * deltaTime);
-            if (Input.IsKeyDown(Keys.S))
+            if (Input.IsKeyDown(Key.S))
                 _camera.Position += new Vector2(0, cameraSpeed * deltaTime);
-            if (Input.IsKeyDown(Keys.A))
+            if (Input.IsKeyDown(Key.A))
                 _camera.Position += new Vector2(-cameraSpeed * deltaTime, 0);
-            if (Input.IsKeyDown(Keys.D))
+            if (Input.IsKeyDown(Key.D))
                 _camera.Position += new Vector2(cameraSpeed * deltaTime, 0);
             
             // Camera zoom (Q/E)
-            if (Input.IsKeyDown(Keys.Q))
+            if (Input.IsKeyDown(Key.Q))
                 _camera.Zoom = Math.Max(0.1f, _camera.Zoom - deltaTime);
-            if (Input.IsKeyDown(Keys.E))
+            if (Input.IsKeyDown(Key.E))
                 _camera.Zoom = Math.Min(3.0f, _camera.Zoom + deltaTime);
         }
         
         // Toggle culling visualization
-        if (Input.IsKeyPressed(Keys.C))
+        if (Input.IsKeyPressed(Key.C))
         {
             _showCullingVisualization = !_showCullingVisualization;
             Logger.LogInformation("Culling visualization: {State}", 
@@ -181,7 +176,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         // Toggle animation (tests multi-threaded performance)
-        if (Input.IsKeyPressed(Keys.Space))
+        if (Input.IsKeyPressed(Key.Space))
         {
             _enableAnimation = !_enableAnimation;
             Logger.LogInformation("Animation: {State} (Press F4 to see system timings!)", 
@@ -189,7 +184,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         // Add 100 sprites
-        if (Input.IsKeyPressed(Keys.Up))
+        if (Input.IsKeyPressed(Key.Up))
         {
             SpawnSprites(100);
             _spriteCount += 100;
@@ -197,7 +192,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         // Remove 100 sprites
-        if (Input.IsKeyPressed(Keys.Down) && _spriteCount > 100)
+        if (Input.IsKeyPressed(Key.Down) && _spriteCount > 100)
         {
             RemoveSprites(100);
             _spriteCount -= 100;
@@ -205,7 +200,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         // Add 1000 sprites (stress test)
-        if (Input.IsKeyPressed(Keys.Right))
+        if (Input.IsKeyPressed(Key.Right))
         {
             SpawnSprites(1000);
             _spriteCount += 1000;
@@ -213,7 +208,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         // Remove 1000 sprites
-        if (Input.IsKeyPressed(Keys.Left) && _spriteCount > 1000)
+        if (Input.IsKeyPressed(Key.Left) && _spriteCount > 1000)
         {
             RemoveSprites(1000);
             _spriteCount -= 1000;
@@ -221,7 +216,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         // Reset to 100
-        if (Input.IsKeyPressed(Keys.R))
+        if (Input.IsKeyPressed(Key.R))
         {
             RemoveAllSprites();
             SpawnSprites(100);
@@ -283,7 +278,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
     }
 
     /// <summary>
-    /// Heavy CPU workload to test multi-threading (add this method).
+    /// Heavy CPU workload to test multi-threading.
     /// Simulates expensive per-entity logic (e.g., pathfinding, complex AI).
     /// </summary>
     private void HeavyCPUWorkload(GameTime gameTime)
@@ -328,44 +323,44 @@ public class SpriteBenchmarkScene : DemoSceneBase
         
         // Draw instructions
         var instructionY = 300;
-        _renderer.DrawText($"Sprites: {_spriteCount}", 10, instructionY, Color.White);
+        Renderer.DrawText($"Sprites: {_spriteCount}", 10, instructionY, Color.White);
         instructionY += 25;
         
         if (_camera != null)
         {
-            _renderer.DrawText($"Camera: ({_camera.Position.X:F0}, {_camera.Position.Y:F0}) Zoom: {_camera.Zoom:F2}x", 
+            Renderer.DrawText($"Camera: ({_camera.Position.X:F0}, {_camera.Position.Y:F0}) Zoom: {_camera.Zoom:F2}x", 
                 10, instructionY, Color.FromArgb(100, 200, 255));
             instructionY += 25;
         }
         
         // Show animation status
-        _renderer.DrawText($"Animation: {(_enableAnimation ? "ON" : "OFF")} (SPACE)", 
+        Renderer.DrawText($"Animation: {(_enableAnimation ? "ON" : "OFF")} (SPACE)", 
             10, instructionY, _enableAnimation ? Color.FromArgb(0, 255, 100) : Color.Gray);
         instructionY += 25;
         
-        _renderer.DrawText("Controls:", 10, instructionY, Color.FromArgb(255, 255, 100));
+        Renderer.DrawText("Controls:", 10, instructionY, Color.FromArgb(255, 255, 100));
         instructionY += 20;
         
-        _renderer.DrawText("UP/DOWN: +/- 100 sprites", 10, instructionY, Color.Gray);
+        Renderer.DrawText("UP/DOWN: +/- 100 sprites", 10, instructionY, Color.Gray);
         instructionY += 20;
         
-        _renderer.DrawText("LEFT/RIGHT: +/- 1000 sprites", 10, instructionY, Color.Gray);
+        Renderer.DrawText("LEFT/RIGHT: +/- 1000 sprites", 10, instructionY, Color.Gray);
         instructionY += 20;
         
-        _renderer.DrawText("WASD: Move camera | Q/E: Zoom", 10, instructionY, Color.Gray);
+        Renderer.DrawText("WASD: Move camera | Q/E: Zoom", 10, instructionY, Color.Gray);
         instructionY += 20;
         
-        _renderer.DrawText($"C: Culling Viz ({(_showCullingVisualization ? "ON" : "OFF")})", 
+        Renderer.DrawText($"C: Culling Viz ({(_showCullingVisualization ? "ON" : "OFF")})", 
             10, instructionY, Color.Gray);
         instructionY += 20;
         
-        _renderer.DrawText("SPACE: Toggle Animation", 10, instructionY, Color.Gray);
+        Renderer.DrawText("SPACE: Toggle Animation", 10, instructionY, Color.Gray);
         instructionY += 20;
         
-        _renderer.DrawText("F4: System Profiling", 10, instructionY, Color.FromArgb(255, 200, 0));
+        Renderer.DrawText("F4: System Profiling", 10, instructionY, Color.FromArgb(255, 200, 0));
         instructionY += 20;
         
-        _renderer.DrawText("R: Reset", 10, instructionY, Color.Gray);
+        Renderer.DrawText("R: Reset", 10, instructionY, Color.Gray);
     }
     
     private void DrawCullingVisualization()
@@ -380,10 +375,10 @@ public class SpriteBenchmarkScene : DemoSceneBase
         var width = halfWidth * 2;
         var height = halfHeight * 2;
         
-        _renderer.DrawRectangleOutline(left, top, width, height,
+        Renderer.DrawRectangleOutline(left, top, width, height,
             Color.FromArgb(150, 0, 255, 0), 4f);
         
-        _renderer.DrawText("Frustum (everything inside is rendered)", 
+        Renderer.DrawText("Frustum (everything inside is rendered)", 
             left + 10, top + 10, Color.FromArgb(0, 255, 0));
     }
     

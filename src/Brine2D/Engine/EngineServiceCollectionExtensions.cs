@@ -25,7 +25,7 @@ public static class EngineServiceCollectionExtensions
             sp.GetRequiredService<ILogger<GameLoop>>(),
             sp.GetRequiredService<IGameContext>(),
             sp.GetRequiredService<ISceneManager>(),
-            sp.GetRequiredService<IInputService>(),
+            sp.GetRequiredService<IInputContext>(),
             sp.GetRequiredService<IHostApplicationLifetime>(),
             sp.GetService<InputLayerManager>(),
             sp.GetService<IEventPump>()

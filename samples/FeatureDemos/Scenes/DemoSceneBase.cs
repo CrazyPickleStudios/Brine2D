@@ -16,28 +16,21 @@ namespace FeatureDemos.Scenes;
 /// </summary>
 public abstract class DemoSceneBase : Scene
 {
-    protected readonly IInputService Input;
+    protected readonly IInputContext Input;
     protected readonly ISceneManager SceneManager;
     protected readonly IGameContext GameContext;
-    protected readonly IEntityWorld? World;
-    protected readonly IRenderer Renderer;
     protected readonly PerformanceOverlay? PerfOverlay;
     
     protected DemoSceneBase(
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        ILogger logger,
-        IRenderer renderer,
-        IEntityWorld? world = null,
-        PerformanceOverlay? perfOverlay = null) : base(logger)
+        PerformanceOverlay? perfOverlay = null)
     {
         Input = input;
         SceneManager = sceneManager;
         GameContext = gameContext;
-        World = world;
         PerfOverlay = perfOverlay;
-        Renderer = renderer;
     }
     
     /// <summary>
@@ -58,7 +51,7 @@ public abstract class DemoSceneBase : Scene
     /// <returns>True if returning to menu, false otherwise.</returns>
     protected bool CheckReturnToMenu()
     {
-        if (Input.IsKeyPressed(Keys.Escape))
+        if (Input.IsKeyPressed(Key.Escape))
         {
             ReturnToMenu();
             return true;
@@ -76,7 +69,7 @@ public abstract class DemoSceneBase : Scene
         if (PerfOverlay == null) return;
         
         // F3: Toggle detailed stats
-        if (Input.IsKeyPressed(Keys.F3))
+        if (Input.IsKeyPressed(Key.F3))
         {
             PerfOverlay.ShowDetailedStats = !PerfOverlay.ShowDetailedStats;
             Logger.LogDebug("Performance stats: {State}", 
@@ -84,7 +77,7 @@ public abstract class DemoSceneBase : Scene
         }
         
         // F1: Toggle visibility
-        if (Input.IsKeyPressed(Keys.F1))
+        if (Input.IsKeyPressed(Key.F1))
         {
             PerfOverlay.IsVisible = !PerfOverlay.IsVisible;
             Logger.LogDebug("Performance overlay: {State}", 
@@ -92,7 +85,7 @@ public abstract class DemoSceneBase : Scene
         }
         
         // F4: Toggle system profiling
-        if (Input.IsKeyPressed(Keys.F4))
+        if (Input.IsKeyPressed(Key.F4))
         {
             PerfOverlay.ShowSystemProfiling = !PerfOverlay.ShowSystemProfiling;
             Logger.LogDebug("System profiling: {State}", 

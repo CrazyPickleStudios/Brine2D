@@ -20,9 +20,7 @@ namespace FeatureDemos.Scenes.ECS;
 /// </summary>
 public class ParticleDemoScene : DemoSceneBase
 {
-    private readonly IEntityWorld _world;
-    private readonly IRenderer _renderer;
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
     private readonly IGameContext _gameContext;
     private readonly ITextureLoader _textureLoader;
     private readonly ITextureAtlasBuilder? _atlasBuilder;
@@ -46,19 +44,14 @@ public class ParticleDemoScene : DemoSceneBase
     }
 
     public ParticleDemoScene(
-        IEntityWorld world,
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        ILogger<ParticleDemoScene> logger,
         ITextureLoader textureLoader,
         ITextureAtlasBuilder? atlasBuilder = null,
         PerformanceOverlay? perfOverlay = null) 
-        : base(input, sceneManager, gameContext, logger, renderer, world, perfOverlay)
+        : base(input, sceneManager, gameContext, perfOverlay)
     {
-        _world = world;
-        _renderer = renderer;
         _input = input;
         _gameContext = gameContext;
         _textureLoader = textureLoader;
@@ -77,7 +70,7 @@ public class ParticleDemoScene : DemoSceneBase
         Logger.LogInformation("");
 
         // Set clear color for this scene
-        _renderer.ClearColor = Color.FromArgb(15, 15, 25);
+        Renderer.ClearColor = Color.FromArgb(15, 15, 25);
 
         // Try to load particle textures
         await LoadParticleAssetsAsync(cancellationToken);
@@ -124,17 +117,17 @@ public class ParticleDemoScene : DemoSceneBase
         if (CheckReturnToMenu()) return;
 
         // Switch effects (1-8 keys)
-        if (_input.IsKeyPressed(Keys.D1)) SwitchEffect(EffectType.Fire);
-        if (_input.IsKeyPressed(Keys.D2)) SwitchEffect(EffectType.Explosion);
-        if (_input.IsKeyPressed(Keys.D3)) SwitchEffect(EffectType.Smoke);
-        if (_input.IsKeyPressed(Keys.D4)) SwitchEffect(EffectType.Sparkles);
-        if (_input.IsKeyPressed(Keys.D5)) SwitchEffect(EffectType.Trail);
-        if (_input.IsKeyPressed(Keys.D6)) SwitchEffect(EffectType.TexturedFire);
-        if (_input.IsKeyPressed(Keys.D7)) SwitchEffect(EffectType.RotatingSparkles);
-        if (_input.IsKeyPressed(Keys.D8)) SwitchEffect(EffectType.MagicTrail);
+        if (_input.IsKeyPressed(Key.D1)) SwitchEffect(EffectType.Fire);
+        if (_input.IsKeyPressed(Key.D2)) SwitchEffect(EffectType.Explosion);
+        if (_input.IsKeyPressed(Key.D3)) SwitchEffect(EffectType.Smoke);
+        if (_input.IsKeyPressed(Key.D4)) SwitchEffect(EffectType.Sparkles);
+        if (_input.IsKeyPressed(Key.D5)) SwitchEffect(EffectType.Trail);
+        if (_input.IsKeyPressed(Key.D6)) SwitchEffect(EffectType.TexturedFire);
+        if (_input.IsKeyPressed(Key.D7)) SwitchEffect(EffectType.RotatingSparkles);
+        if (_input.IsKeyPressed(Key.D8)) SwitchEffect(EffectType.MagicTrail);
 
         // Toggle continuous emission
-        if (_input.IsKeyPressed(Keys.Space))
+        if (_input.IsKeyPressed(Key.Space))
         {
             // Explosion is burst-only, don't allow continuous emission toggle
             if (_currentEffect == EffectType.Explosion)
@@ -171,13 +164,13 @@ public class ParticleDemoScene : DemoSceneBase
         var lineHeight = 20f;
 
         // Title
-        _renderer.DrawText($"Enhanced Particle System", 10, y, Color.White);
+        Renderer.DrawText($"Enhanced Particle System", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText($"Current Effect: {_currentEffect}", 10, y, Color.Cyan);
+        Renderer.DrawText($"Current Effect: {_currentEffect}", 10, y, Color.Cyan);
         y += lineHeight * 2;
 
         // Effect selection menu
-        _renderer.DrawText("SELECT EFFECT:", 10, y, Color.Yellow);
+        Renderer.DrawText("SELECT EFFECT:", 10, y, Color.Yellow);
         y += lineHeight;
         
         DrawEffectOption(1, "Fire", EffectType.Fire, ref y);
@@ -191,23 +184,23 @@ public class ParticleDemoScene : DemoSceneBase
         
         y += lineHeight;
 
-        _renderer.DrawText("STATUS:", 10, y, Color.Yellow);
+        Renderer.DrawText("STATUS:", 10, y, Color.Yellow);
         y += lineHeight;
         
         var emitter = _currentEmitter?.GetComponent<ParticleEmitterComponent>();
         if (emitter != null)
         {
-            _renderer.DrawText($"  Active Particles: {emitter.ParticleCount} / {emitter.MaxParticles}", 10, y, Color.White);
+            Renderer.DrawText($"  Active Particles: {emitter.ParticleCount} / {emitter.MaxParticles}", 10, y, Color.White);
             y += lineHeight;
             
-            var allEmitters = _world.GetEntitiesWithComponent<ParticleEmitterComponent>();
+            var allEmitters = World.GetEntitiesWithComponent<ParticleEmitterComponent>();
             var totalParticles = allEmitters.Sum(e => e.GetComponent<ParticleEmitterComponent>()?.ParticleCount ?? 0);
-            _renderer.DrawText($"  Total Particles: {totalParticles}", 10, y, Color.White);
+            Renderer.DrawText($"  Total Particles: {totalParticles}", 10, y, Color.White);
             y += lineHeight;
             
             var fps = gameTime.DeltaTime > 0 ? 1.0 / gameTime.DeltaTime : 0;
             var fpsColor = fps >= 60 ? Color.Green : fps >= 30 ? Color.Yellow : Color.Red;
-            _renderer.DrawText($"  FPS: {fps:F1}", 10, y, fpsColor);
+            Renderer.DrawText($"  FPS: {fps:F1}", 10, y, fpsColor);
             y += lineHeight;
             
             var emissionModeText = _currentEffect == EffectType.Explosion 
@@ -216,16 +209,16 @@ public class ParticleDemoScene : DemoSceneBase
             var emissionModeColor = _currentEffect == EffectType.Explosion 
                 ? Color.Orange 
                 : (_continuousEmission ? Color.Green : Color.Gray);
-            _renderer.DrawText($"  Continuous Emission: {emissionModeText}", 10, y, emissionModeColor);
+            Renderer.DrawText($"  Continuous Emission: {emissionModeText}", 10, y, emissionModeColor);
             y += lineHeight;
             
-            _renderer.DrawText($"  Trails: {(emitter.EnableTrails ? "ENABLED" : "DISABLED")}", 10, y, 
+            Renderer.DrawText($"  Trails: {(emitter.EnableTrails ? "ENABLED" : "DISABLED")}", 10, y, 
                 emitter.EnableTrails ? Color.Green : Color.Gray);
             y += lineHeight;
-            _renderer.DrawText($"  Rotation: {(emitter.RotationSpeed != 0 ? "ENABLED" : "DISABLED")}", 10, y, 
+            Renderer.DrawText($"  Rotation: {(emitter.RotationSpeed != 0 ? "ENABLED" : "DISABLED")}", 10, y, 
                 emitter.RotationSpeed != 0 ? Color.Green : Color.Gray);
             y += lineHeight;
-            _renderer.DrawText($"  Textured: {(emitter.ParticleAtlasRegion != null || emitter.ParticleTexture != null ? "YES" : "NO")}", 10, y, 
+            Renderer.DrawText($"  Textured: {(emitter.ParticleAtlasRegion != null || emitter.ParticleTexture != null ? "YES" : "NO")}", 10, y, 
                 (emitter.ParticleAtlasRegion != null || emitter.ParticleTexture != null) ? Color.Green : Color.Gray);
             y += lineHeight;
         }
@@ -233,17 +226,17 @@ public class ParticleDemoScene : DemoSceneBase
         y += lineHeight;
 
         // Controls
-        _renderer.DrawText("CONTROLS:", 10, y, Color.Yellow);
+        Renderer.DrawText("CONTROLS:", 10, y, Color.Yellow);
         y += lineHeight;
-        _renderer.DrawText("  1-8 - Switch effects", 10, y, Color.White);
+        Renderer.DrawText("  1-8 - Switch effects", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  SPACE - Toggle emission", 10, y, Color.White);
+        Renderer.DrawText("  SPACE - Toggle emission", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  Left Click - Spawn burst", 10, y, Color.White);
+        Renderer.DrawText("  Left Click - Spawn burst", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  F1/F3 - Performance overlay", 10, y, Color.White);
+        Renderer.DrawText("  F1/F3 - Performance overlay", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  ESC - Return to menu", 10, y, Color.White);
+        Renderer.DrawText("  ESC - Return to menu", 10, y, Color.White);
         
         y += lineHeight * 2;
 
@@ -251,9 +244,9 @@ public class ParticleDemoScene : DemoSceneBase
         var hasTextures = _particleAtlas != null || _particleTexture != null;
         if (!hasTextures)
         {
-            _renderer.DrawText("TIP: Add PNG files to assets/particles/", 10, y, Color.Yellow);
+            Renderer.DrawText("TIP: Add PNG files to assets/particles/", 10, y, Color.Yellow);
             y += lineHeight;
-            _renderer.DrawText("     to enable textured particles!", 10, y, Color.Yellow);
+            Renderer.DrawText("     to enable textured particles!", 10, y, Color.Yellow);
         }
 
         RenderPerformanceOverlay();
@@ -265,7 +258,7 @@ public class ParticleDemoScene : DemoSceneBase
         var color = isSelected ? Color.Cyan : Color.Gray;
         var prefix = isSelected ? ">" : " ";
         
-        _renderer.DrawText($"{prefix} {number}. {name}", 10, y, color);
+        Renderer.DrawText($"{prefix} {number}. {name}", 10, y, color);
         y += 20f;
     }
 
@@ -277,7 +270,7 @@ public class ParticleDemoScene : DemoSceneBase
         // Clear old emitter
         if (_currentEmitter != null)
         {
-            _world.DestroyEntity(_currentEmitter);
+            World.DestroyEntity(_currentEmitter);
         }
         
         var centerPosition = new Vector2(640, 360);
@@ -295,7 +288,7 @@ public class ParticleDemoScene : DemoSceneBase
 
     private void CreateEffect(EffectType effect, Vector2 position)
     {
-        var entity = _world.CreateEntity($"{effect}Emitter");
+        var entity = World.CreateEntity($"{effect}Emitter");
         
         var transform = entity.AddComponent<TransformComponent>();
         transform.Position = position;
@@ -493,7 +486,7 @@ public class ParticleDemoScene : DemoSceneBase
     {
         Logger.LogInformation("Spawning burst at {X}, {Y}", position.X, position.Y);
         
-        var entity = _world.CreateEntity("Burst");
+        var entity = World.CreateEntity("Burst");
         
         // Add components first, configure after (original pattern)
         var transform = entity.AddComponent<TransformComponent>();

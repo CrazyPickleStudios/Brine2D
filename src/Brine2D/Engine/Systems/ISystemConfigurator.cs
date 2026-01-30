@@ -19,7 +19,7 @@ public interface ISystemConfigurator
     /// Adds a render system to this scene's pipeline.
     /// System is created using dependency injection.
     /// </summary>
-    void AddRenderSystem<T>() where T : class, IRenderSystem; // ← ADD THIS
+    void AddRenderSystem<T>() where T : class, IRenderSystem;
     
     /// <summary>
     /// Disables a global system for this scene only.

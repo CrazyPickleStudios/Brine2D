@@ -17,6 +17,10 @@ public class UpdatePipeline
     private readonly ECSOptions _options;
     private bool _isSorted;
     private readonly HashSet<string> _disabledSystems = new();
+    
+    private readonly List<IUpdateSystem> _systemsToAdd = new();
+    private readonly List<IUpdateSystem> _systemsToRemove = new();
+    private bool _isExecuting = false;
 
     public IReadOnlyList<IUpdateSystem> Systems => _systems.AsReadOnly();
 
@@ -29,18 +33,38 @@ public class UpdatePipeline
 
     public UpdatePipeline AddSystem(IUpdateSystem system)
     {
-        _systems.Add(system);
-        _isSorted = false;
-        
-        // Log if system is marked sequential
-        var isSequential = system.GetType().GetCustomAttribute<SequentialAttribute>() != null;
-        _logger?.LogDebug("Added update system: {SystemName} (order: {Order}, parallel: {Parallel})", 
-            system.Name, system.UpdateOrder, !isSequential && _options.EnableParallelExecution);
+        if (_isExecuting)
+        {
+            _systemsToAdd.Add(system);
+            _logger?.LogDebug("Deferred update system addition: {SystemName}", system.Name);
+        }
+        else
+        {
+            _systems.Add(system);
+            _isSorted = false;
+            
+            // Log if system is marked sequential
+            var isSequential = system.GetType().GetCustomAttribute<SequentialAttribute>() != null;
+            _logger?.LogDebug("Added update system: {SystemName} (order: {Order}, parallel: {Parallel})", 
+                system.Name, system.UpdateOrder, !isSequential && _options.EnableParallelExecution);
+        }
         
         return this;
     }
 
-    public bool RemoveSystem(IUpdateSystem system) => _systems.Remove(system);
+    public bool RemoveSystem(IUpdateSystem system)
+    {
+        if (_isExecuting)
+        {
+            _systemsToRemove.Add(system);
+            _logger?.LogDebug("Deferred update system removal: {SystemName}", system.Name);
+            return true;
+        }
+        else
+        {
+            return _systems.Remove(system);
+        }
+    }
 
     public void Clear()
     {
@@ -76,33 +100,76 @@ public class UpdatePipeline
             _isSorted = true;
         }
 
-        foreach (var system in _systems)
+        _isExecuting = true;
+
+        try
         {
-            // Skip disabled systems
-            if (_disabledSystems.Contains(system.Name))
+            ApplyDeferredModifications();
+
+            foreach (var system in _systems)
             {
-                continue;
-            }
-            
-            try
-            {
-                // Profile system execution
-                if (_profiler != null)
+                // Skip disabled systems
+                if (_disabledSystems.Contains(system.Name))
                 {
-                    using (_profiler.BeginScope($"Update/{system.Name}"))
+                    continue;
+                }
+                
+                try
+                {
+                    // Profile system execution
+                    if (_profiler != null)
+                    {
+                        using (_profiler.BeginScope($"Update/{system.Name}"))
+                        {
+                            system.Update(gameTime);
+                        }
+                    }
+                    else
                     {
                         system.Update(gameTime);
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    system.Update(gameTime);
+                    _logger?.LogError(ex, "Error executing update system: {SystemName}", system.Name);
                 }
             }
-            catch (Exception ex)
+        }
+        finally
+        {
+            _isExecuting = false;
+            
+            ApplyDeferredModifications();
+        }
+    }
+
+    private void ApplyDeferredModifications()
+    {
+        // Process additions
+        if (_systemsToAdd.Count > 0)
+        {
+            foreach (var system in _systemsToAdd)
             {
-                _logger?.LogError(ex, "Error executing update system: {SystemName}", system.Name);
+                _systems.Add(system);
+                _isSorted = false;
+                
+                // Log if system is marked sequential
+                var isSequential = system.GetType().GetCustomAttribute<SequentialAttribute>() != null;
+                _logger?.LogDebug("Applied deferred addition: {SystemName} (order: {Order}, parallel: {Parallel})", 
+                    system.Name, system.UpdateOrder, !isSequential && _options.EnableParallelExecution);
             }
+            _systemsToAdd.Clear();
+        }
+
+        // Process removals
+        if (_systemsToRemove.Count > 0)
+        {
+            foreach (var system in _systemsToRemove)
+            {
+                _systems.Remove(system);
+                _logger?.LogDebug("Applied deferred removal: {SystemName}", system.Name);
+            }
+            _systemsToRemove.Clear();
         }
     }
 }

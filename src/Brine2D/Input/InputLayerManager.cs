@@ -7,13 +7,13 @@
 public class InputLayerManager
 {
     private readonly List<IInputLayer> _layers = new();
-    private readonly IInputService _inputService;
+    private readonly IInputContext _inputService;
 
     // Track what was consumed this frame
     private bool _keyboardConsumedThisFrame;
     private bool _mouseConsumedThisFrame;
 
-    public InputLayerManager(IInputService inputService)
+    public InputLayerManager(IInputContext inputService)
     {
         _inputService = inputService ?? throw new ArgumentNullException(nameof(inputService));
     }

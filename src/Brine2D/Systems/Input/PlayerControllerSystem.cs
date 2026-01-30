@@ -16,9 +16,9 @@ public class PlayerControllerSystem : IUpdateSystem
     public int UpdateOrder => 10; 
 
     private readonly IEntityWorld _world;
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
 
-    public PlayerControllerSystem(IEntityWorld world, IInputService input)
+    public PlayerControllerSystem(IEntityWorld world, IInputContext input)
     {
         _world = world;
         _input = input;
@@ -56,13 +56,13 @@ public class PlayerControllerSystem : IUpdateSystem
         if (controller.InputMode == InputMode.Keyboard || 
             controller.InputMode == InputMode.KeyboardAndGamepad)
         {
-            if (_input.IsKeyDown(Keys.W) || _input.IsKeyDown(Keys.Up))
+            if (_input.IsKeyDown(Key.W) || _input.IsKeyDown(Key.Up))
                 direction.Y -= 1;
-            if (_input.IsKeyDown(Keys.S) || _input.IsKeyDown(Keys.Down))
+            if (_input.IsKeyDown(Key.S) || _input.IsKeyDown(Key.Down))
                 direction.Y += 1;
-            if (_input.IsKeyDown(Keys.A) || _input.IsKeyDown(Keys.Left))
+            if (_input.IsKeyDown(Key.A) || _input.IsKeyDown(Key.Left))
                 direction.X -= 1;
-            if (_input.IsKeyDown(Keys.D) || _input.IsKeyDown(Keys.Right))
+            if (_input.IsKeyDown(Key.D) || _input.IsKeyDown(Key.Right))
                 direction.X += 1;
         }
 

@@ -10,14 +10,14 @@ using Xunit;
 
 namespace Brine2D.Tests.Systems;
 
-public class ParticleSystemTests
+public class ParticleSystemTests : TestBase
 {
     private readonly EntityWorld _world;
     private readonly ParticleSystem _particleSystem;
 
     public ParticleSystemTests()
     {
-        _world = new EntityWorld();
+        _world = CreateTestWorld();
         var poolProvider = new DefaultObjectPoolProvider();
         _particleSystem = new ParticleSystem(_world, poolProvider);
     }

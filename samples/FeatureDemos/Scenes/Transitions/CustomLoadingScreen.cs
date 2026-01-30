@@ -1,5 +1,6 @@
 using System.Drawing;
 using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.Engine;
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
@@ -11,14 +12,7 @@ namespace FeatureDemos.Scenes.Transitions;
 /// </summary>
 public class CustomLoadingScreen : LoadingScene
 {
-    private readonly IRenderer? _renderer;
     private float _spinnerRotation;
-    
-    public CustomLoadingScreen(IRenderer? renderer, ILogger logger) 
-        : base(renderer, logger)
-    {
-        _renderer = renderer;
-    }
     
     protected override void OnUpdate(GameTime gameTime)
     {
@@ -34,16 +28,18 @@ public class CustomLoadingScreen : LoadingScene
     
     protected override void OnRenderLoading(GameTime gameTime)
     {
-        if (_renderer == null) return;
+        // Custom loading screen rendering
+        var centerX = Renderer.Width / 2f;
+        var centerY = Renderer.Height / 2f;
         
-        var centerX = (_renderer.Camera?.ViewportWidth ?? 1280) / 2f;
-        var centerY = (_renderer.Camera?.ViewportHeight ?? 720) / 2f;
+        Renderer.DrawText("Custom Loading...", centerX - 80, centerY - 50, Color.Cyan);
         
-        // Draw background gradient effect (simulated with rectangles)
-        DrawGradientBackground();
+        // Animated dots
+        var dots = new string('.', ((int)(LoadingProgress * 10)) % 4);
+        Renderer.DrawText(dots, centerX + 100, centerY - 50, Color.Cyan);
         
-        // Draw title
-        _renderer.DrawText("LOADING", centerX - 50, centerY - 100, Color.White);
+        // Progress bar (call base implementation)
+        base.OnRenderLoading(gameTime);
         
         // Draw spinning indicator
         DrawSpinner(centerX, centerY - 30, 30f, _spinnerRotation);
@@ -55,10 +51,10 @@ public class CustomLoadingScreen : LoadingScene
         var barY = centerY + 50;
         
         // Background (dark blue)
-        _renderer.DrawRectangleFilled(barX, barY, barWidth, barHeight, Color.FromArgb(20, 30, 60));
+        Renderer.DrawRectangleFilled(barX, barY, barWidth, barHeight, Color.FromArgb(20, 30, 60));
         
         // Filled portion (bright blue)
-        _renderer.DrawRectangleFilled(
+        Renderer.DrawRectangleFilled(
             barX, barY, 
             barWidth * LoadingProgress, 
             barHeight,
@@ -66,35 +62,19 @@ public class CustomLoadingScreen : LoadingScene
         );
         
         // Border (white)
-        _renderer.DrawRectangleOutline(barX, barY, barWidth, barHeight, Color.White, 3f);
+        Renderer.DrawRectangleOutline(barX, barY, barWidth, barHeight, Color.White, 3f);
         
         // Status text
-        _renderer.DrawText(LoadingMessage, centerX - 60, barY + 50, Color.FromArgb(200, 200, 200));
+        Renderer.DrawText(LoadingMessage, centerX - 60, barY + 50, Color.FromArgb(200, 200, 200));
         
         // Percentage
         var percentText = $"{(int)(LoadingProgress * 100)}%";
-        _renderer.DrawText(percentText, centerX - 20, centerY + 10, Color.White);
-    }
-    
-    private void DrawGradientBackground()
-    {
-        if (_renderer == null) return;
-        
-        // Draw a simple gradient effect with rectangles
-        var height = _renderer.Camera?.ViewportHeight ?? 720;
-        var width = _renderer.Camera?.ViewportWidth ?? 1280;
-        
-        for (int i = 0; i < 10; i++)
-        {
-            var alpha = (byte)(50 - i * 5);
-            var color = Color.FromArgb(alpha, 10, 20, 40);
-            _renderer.DrawRectangleFilled(0, i * (height / 10f), width, height / 10f, color);
-        }
+        Renderer.DrawText(percentText, centerX - 20, centerY + 10, Color.White);
     }
     
     private void DrawSpinner(float centerX, float centerY, float radius, float rotation)
     {
-        if (_renderer == null) return;
+        if (Renderer == null) return;
         
         // Draw spinning circle segments (simulated spinner)
         for (int i = 0; i < 8; i++)
@@ -107,7 +87,7 @@ public class CustomLoadingScreen : LoadingScene
             var alpha = (byte)(255 - i * 30);
             var color = Color.FromArgb(alpha, 100, 200, 255);
             
-            _renderer.DrawCircleFilled(x, y, 5f, color);
+            Renderer.DrawCircleFilled(x, y, 5f, color);
         }
     }
 }

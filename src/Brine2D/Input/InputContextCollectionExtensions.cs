@@ -2,7 +2,7 @@
 
 namespace Brine2D.Input;
 
-public static class InputServiceCollectionExtensions
+public static class InputContextCollectionExtensions
 {
     public static IServiceCollection AddInputLayerManager(this IServiceCollection services)
     {

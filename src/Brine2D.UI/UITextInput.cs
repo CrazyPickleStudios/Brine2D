@@ -160,7 +160,7 @@ public class UITextInput : IUIComponent
     /// <summary>
     /// Called by UICanvas when input is focused.
     /// </summary>
-    internal void SetFocused(bool focused, IInputService input)
+    internal void SetFocused(bool focused, IInputContext input)
     {
         if (IsFocused == focused) return;
         
@@ -183,7 +183,7 @@ public class UITextInput : IUIComponent
     /// <summary>
     /// Called by UICanvas to handle text input.
     /// </summary>
-    internal void HandleTextInput(IInputService input)
+    internal void HandleTextInput(IInputContext input)
     {
         if (!IsFocused || !Enabled) return;
 
@@ -207,22 +207,22 @@ public class UITextInput : IUIComponent
         }
 
         // Arrow keys for cursor movement
-        if (input.IsKeyPressed(Keys.Left) && _cursorPosition > 0)
+        if (input.IsKeyPressed(Key.Left) && _cursorPosition > 0)
         {
             _cursorPosition--;
         }
 
-        if (input.IsKeyPressed(Keys.Right) && _cursorPosition < Text.Length)
+        if (input.IsKeyPressed(Key.Right) && _cursorPosition < Text.Length)
         {
             _cursorPosition++;
         }
 
-        if (input.IsKeyPressed(Keys.Home))
+        if (input.IsKeyPressed(Key.Home))
         {
             _cursorPosition = 0;
         }
 
-        if (input.IsKeyPressed(Keys.End))
+        if (input.IsKeyPressed(Key.End))
         {
             _cursorPosition = Text.Length;
         }

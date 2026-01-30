@@ -45,7 +45,7 @@ public class GameEngine : IGameEngine
         }
 
         // Initialize input service (call Update once to set up initial state)
-        var inputService = _serviceProvider.GetService<IInputService>();
+        var inputService = _serviceProvider.GetService<IInputContext>();
         if (inputService != null)
         {
             _logger.LogDebug("Input service available");

@@ -19,7 +19,6 @@ namespace FeatureDemos.Scenes.UI;
 /// </summary>
 public class UIDemoScene : DemoSceneBase
 {
-    private readonly IRenderer _renderer;
     private readonly UICanvas _uiCanvas;
     private readonly InputLayerManager _inputLayerManager;
     
@@ -32,16 +31,13 @@ public class UIDemoScene : DemoSceneBase
     private int _buttonClickCount = 0;
 
     public UIDemoScene(
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
         UICanvas uiCanvas,
-        InputLayerManager inputLayerManager,
-        ILogger<UIDemoScene> logger)
-        : base(input, sceneManager, gameContext, logger, renderer, world: null)
+        InputLayerManager inputLayerManager)
+        : base(input, sceneManager, gameContext)
     {
-        _renderer = renderer;
         _uiCanvas = uiCanvas;
         _inputLayerManager = inputLayerManager;
     }
@@ -54,7 +50,7 @@ public class UIDemoScene : DemoSceneBase
         Logger.LogInformation("  TAB - Navigate between inputs");
         Logger.LogInformation("  ESC - Return to menu");
         
-        _renderer.ClearColor = Color.FromArgb(30, 30, 45);
+        Renderer.ClearColor = Color.FromArgb(30, 30, 45);
         
         BuildUI();
         
@@ -526,7 +522,7 @@ public class UIDemoScene : DemoSceneBase
     protected override void OnRender(GameTime gameTime)
     {
         // UI canvas renders automatically
-        _uiCanvas.Render(_renderer);
+        _uiCanvas.Render(Renderer);
     }
 
     protected override Task OnUnloadAsync(CancellationToken cancellationToken)

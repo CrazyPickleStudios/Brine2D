@@ -13,21 +13,17 @@ namespace SceneBasics;
 /// </summary>
 public class GameScene : Scene
 {
-    private readonly IRenderer _renderer;
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
     private readonly ISceneManager _sceneManager;
     private readonly IGameContext _gameContext;
     private int _score = 0;
     private float _elapsedTime = 0f;
 
     public GameScene(
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
-        IGameContext gameContext,
-        ILogger<GameScene> logger) : base(logger)
+        IGameContext gameContext)
     {
-        _renderer = renderer;
         _input = input;
         _sceneManager = sceneManager;
         _gameContext = gameContext;
@@ -38,7 +34,7 @@ public class GameScene : Scene
     protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("GameScene: OnLoad - Game starting");
-        _renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
+        Renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
         
         // Initialize state (fresh scene every time)
         _score = 0;
@@ -54,14 +50,14 @@ public class GameScene : Scene
         _score = (int)_elapsedTime; // Score increases over time
 
         // ESC returns to menu
-        if (_input.IsKeyPressed(Keys.Escape))
+        if (_input.IsKeyPressed(Key.Escape))
         {
             Logger.LogInformation("GameScene: Returning to menu");
             _sceneManager.LoadSceneAsync<MenuScene>();
         }
         
         // Q quits game
-        if (_input.IsKeyPressed(Keys.Q))
+        if (_input.IsKeyPressed(Key.Q))
         {
             Logger.LogInformation("GameScene: Quitting game");
             _gameContext.RequestExit();
@@ -70,11 +66,11 @@ public class GameScene : Scene
 
     protected override void OnRender(GameTime gameTime)
     {
-        _renderer.DrawText("GAME SCENE", 100, 100, Color.White);
-        _renderer.DrawText($"Score: {_score}", 100, 140, Color.Yellow);
-        _renderer.DrawText($"Time: {_elapsedTime:F1}s", 100, 180, Color.LightGray);
-        _renderer.DrawText("Press ESC to return to menu", 100, 220, Color.Gray);
-        _renderer.DrawText("Press Q to quit", 100, 260, Color.Gray);
+        Renderer.DrawText("GAME SCENE", 100, 100, Color.White);
+        Renderer.DrawText($"Score: {_score}", 100, 140, Color.Yellow);
+        Renderer.DrawText($"Time: {_elapsedTime:F1}s", 100, 180, Color.LightGray);
+        Renderer.DrawText("Press ESC to return to menu", 100, 220, Color.Gray);
+        Renderer.DrawText("Press Q to quit", 100, 260, Color.Gray);
     }
 
     // OnUnload: Called when scene unloads - cleanup resources

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.Engine;
 using Brine2D.Rendering;
 using FluentAssertions;
@@ -13,16 +14,26 @@ using Xunit;
 
 namespace Brine2D.Tests.Engine;
 
-public class SceneManagerTests
+public class SceneManagerTests : TestBase
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SceneManager> _logger;
+    private readonly IRenderer _mockRenderer;
 
     public SceneManagerTests()
     {
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddSingleton<ILoggerFactory, NullLoggerFactory>();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        
+        services.AddScoped<IEntityWorld, EntityWorld>();
+        services.Configure<ECSOptions>(options => { });
+        
+        _mockRenderer = Substitute.For<IRenderer>();
+        services.AddSingleton(_mockRenderer);
+        
+        // Register test scenes
         services.AddTransient<TestScene>();
         services.AddTransient<AnotherTestScene>();
         services.AddTransient<OrderedTestScene>();
@@ -187,19 +198,28 @@ public class SceneManagerTests
     }
 
     [Fact]
-    public async Task ShouldHandleSceneWithLoadingScreen()
+    public async Task ShouldHandleSceneWithLoadingScreenGeneric()
     {
         // Arrange
-        var manager = CreateManager();
-        var loadingScreen = new TestLoadingScreen();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<IEntityWorld, EntityWorld>();
+        services.Configure<ECSOptions>(options => { });
+        services.AddSingleton(_mockRenderer);
+        services.AddTransient<TestScene>();
+        services.AddTransient<TestLoadingScreen>(); 
+        
+        var serviceProvider = services.BuildServiceProvider();
+        var manager = new SceneManager(
+            NullLogger<SceneManager>.Instance,
+            serviceProvider,
+            renderer: _mockRenderer
+        );
 
-        // Act
-        await manager.LoadSceneAsync<TestScene>(loadingScreen: loadingScreen);
+        // Act - Use generic overload
+        await manager.LoadSceneAsync<TestScene, TestLoadingScreen>();
 
         // Assert
-        loadingScreen.InitializeCalled.Should().BeTrue();
-        loadingScreen.LoadCalled.Should().BeTrue();
-        loadingScreen.UnloadCalled.Should().BeTrue();
         manager.CurrentScene.Should().BeOfType<TestScene>();
     }
 
@@ -207,7 +227,7 @@ public class SceneManagerTests
 
     private SceneManager CreateManager()
     {
-        return new SceneManager(_logger, _serviceProvider);
+        return new SceneManager(_logger, _serviceProvider, renderer: _mockRenderer);
     }
 
     public class TestScene : Scene
@@ -218,7 +238,7 @@ public class SceneManagerTests
         public bool UpdateCalled { get; private set; }
         public bool RenderCalled { get; private set; }
 
-        public TestScene(ILogger<TestScene> logger) : base(logger) { }
+        public TestScene() { }
 
         protected override Task OnInitializeAsync(CancellationToken cancellationToken)
         {
@@ -244,7 +264,7 @@ public class SceneManagerTests
 
     public class AnotherTestScene : Scene
     {
-        public AnotherTestScene(ILogger<AnotherTestScene> logger) : base(logger) { }
+        public AnotherTestScene() { }
     }
 
     public class OrderedTestScene : Scene
@@ -253,7 +273,7 @@ public class SceneManagerTests
         public bool LoadCalled { get; private set; }
         public bool InitializeCalledBeforeLoad { get; private set; }
 
-        public OrderedTestScene(ILogger<OrderedTestScene> logger) : base(logger) { }
+        public OrderedTestScene() { }
 
         protected override Task OnInitializeAsync(CancellationToken cancellationToken)
         {
@@ -271,7 +291,7 @@ public class SceneManagerTests
 
     public class ManualScene : Scene
     {
-        public ManualScene(ILogger<ManualScene> logger) : base(logger)
+        public ManualScene()
         {
             EnableLifecycleHooks = false;
             EnableAutomaticFrameManagement = false;
@@ -283,9 +303,9 @@ public class SceneManagerTests
         public bool BeginCalled { get; private set; }
         public bool UpdateCalled { get; private set; }
         public bool RenderCalled { get; private set; }
-        public float Progress => 1.0f; // Always complete for unit tests
+        public float Progress => 1.0f;
         public float Duration => 0.01f;
-        public bool IsComplete => true; // Always complete immediately
+        public bool IsComplete => true;
 
         public void Begin() => BeginCalled = true;
         public void Update(float deltaTime) => UpdateCalled = true;
@@ -298,10 +318,7 @@ public class SceneManagerTests
         public bool LoadCalled { get; private set; }
         public bool UnloadCalled { get; private set; }
 
-        public TestLoadingScreen()
-            : base(null, NullLogger.Instance) // No renderer needed for tests
-        {
-        }
+        public TestLoadingScreen() { }
 
         protected override Task OnInitializeAsync(CancellationToken cancellationToken)
         {

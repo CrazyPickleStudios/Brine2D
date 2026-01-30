@@ -20,35 +20,25 @@ public class GameScene : Scene
 
     // Configuration options (bound from gamesettings.json)
     private readonly GameOptions _gameOptions;
-    private readonly IInputService _input;
-
-    private readonly ILogger<GameScene> _logger; // Structured logging!
-
-    // Built-in Brine2D services (automatically registered)
-    private readonly IRenderer _renderer;
-
+    private readonly IInputContext _input;
+    
     // Custom service (registered in Program.cs)
     private readonly IScoreService _scoreService;
 
     // Constructor injection - DI container provides all these automatically!
     public GameScene(
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         IGameContext gameContext,
-        ILogger<GameScene> logger,
         IScoreService scoreService, // Custom service
         IOptions<GameOptions> gameOptions) // Configuration
-        : base(logger)
     {
-        _renderer = renderer;
         _input = input;
         _gameContext = gameContext;
-        _logger = logger;
         _scoreService = scoreService;
         _gameOptions = gameOptions.Value; // Unwrap IOptions<T>
 
         // Log configuration on startup (structured logging!)
-        _logger.LogInformation(
+        Logger.LogInformation(
             "GameScene initialized with config: PointsPerSecond={Points}, PlayerName={Name}",
             _gameOptions.PointsPerSecond,
             _gameOptions.PlayerName);
@@ -57,8 +47,8 @@ public class GameScene : Scene
     // OnLoad: Called when scene loads - initialize state
     protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("GameScene: OnLoad");
-        _renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
+        Logger.LogInformation("GameScene: OnLoad");
+        Renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
 
         // Reset score using our custom service
         _scoreService.ResetScore();
@@ -69,32 +59,32 @@ public class GameScene : Scene
     // OnUnload: Called when scene unloads - cleanup
     protected override Task OnUnloadAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("GameScene: OnUnload - Final score: {Score}",
+        Logger.LogInformation("GameScene: OnUnload - Final score: {Score}",
             _scoreService.GetScore());
         return Task.CompletedTask;
     }
 
     protected override void OnRender(GameTime gameTime)
     {
-        _renderer.DrawText("DEPENDENCY INJECTION", 100, 100, Color.White);
+        Renderer.DrawText("DEPENDENCY INJECTION", 100, 100, Color.White);
 
-        _renderer.DrawText(
+        Renderer.DrawText(
             $"Player: {_gameOptions.PlayerName}",
             100, 140, Color.LightGray);
 
-        _renderer.DrawText(
+        Renderer.DrawText(
             $"Score: {_scoreService.GetScore():F1}",
             100, 180, Color.Yellow);
 
-        _renderer.DrawText(
+        Renderer.DrawText(
             $"Points/sec: {_gameOptions.PointsPerSecond}",
             100, 220, Color.LightGray);
 
-        _renderer.DrawText("Press SPACE to reset score", 100, 280, Color.Gray);
-        _renderer.DrawText("Press ESC to quit", 100, 320, Color.Gray);
+        Renderer.DrawText("Press SPACE to reset score", 100, 280, Color.Gray);
+        Renderer.DrawText("Press ESC to quit", 100, 320, Color.Gray);
 
         // Show service lifetime info
-        _renderer.DrawText(
+        Renderer.DrawText(
             "Service Lifetime: Singleton (same instance throughout game)",
             100, 380, Color.DarkGray);
     }
@@ -105,16 +95,16 @@ public class GameScene : Scene
         _scoreService.AddPoints(_gameOptions.PointsPerSecond * (float)gameTime.DeltaTime);
 
         // SPACE to reset score
-        if (_input.IsKeyPressed(Keys.Space))
+        if (_input.IsKeyPressed(Key.Space))
         {
-            _logger.LogInformation("Resetting score");
+            Logger.LogInformation("Resetting score");
             _scoreService.ResetScore();
         }
 
         // ESC to quit
-        if (_input.IsKeyPressed(Keys.Escape))
+        if (_input.IsKeyPressed(Key.Escape))
         {
-            _logger.LogInformation("Exiting game with final score: {Score}",
+            Logger.LogInformation("Exiting game with final score: {Score}",
                 _scoreService.GetScore());
             _gameContext.RequestExit();
         }

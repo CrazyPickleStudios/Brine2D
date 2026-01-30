@@ -15,7 +15,7 @@ public class GameLoop : IGameLoop
     private readonly ILogger<GameLoop> _logger;
     private readonly IGameContext _gameContext;
     private readonly ISceneManager _sceneManager;
-    private readonly IInputService _inputService;
+    private readonly IInputContext _inputService;
     private readonly InputLayerManager? _inputLayerManager;
     private readonly IHostApplicationLifetime _applicationLifetime;
     private readonly IEventPump? _eventPump; 
@@ -29,7 +29,7 @@ public class GameLoop : IGameLoop
         ILogger<GameLoop> logger,
         IGameContext gameContext,
         ISceneManager sceneManager,
-        IInputService inputService,
+        IInputContext inputService,
         IHostApplicationLifetime applicationLifetime,
         InputLayerManager? inputLayerManager = null,
         IEventPump? eventPump = null)

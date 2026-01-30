@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Brine2D.SDL.Input;
 
-public static class SDL3InputServiceCollectionExtensions
+public static class SDL3InputContextCollectionExtensions
 {
     public static IServiceCollection AddSDL3Input(this IServiceCollection services)
     {
-        services.TryAddSingleton<IInputService>(sp => new SDL3InputService(
-            sp.GetRequiredService<ILogger<SDL3InputService>>(),
+        services.TryAddSingleton<IInputContext>(sp => new SDL3InputContext(
+            sp.GetRequiredService<ILogger<SDL3InputContext>>(),
             sp.GetRequiredService<EventBus>(),                       // Public event bus
             sp.GetRequiredKeyedService<EventBus>("SDL_Internal"),    // Internal event bus
             sp.GetService<ISDL3WindowProvider>()                     // Window provider (optional)

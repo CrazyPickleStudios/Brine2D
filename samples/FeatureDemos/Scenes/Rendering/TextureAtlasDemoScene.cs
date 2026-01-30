@@ -46,13 +46,11 @@ public class TextureAtlasDemoScene : DemoSceneBase
     public TextureAtlasDemoScene(
         ITextureAtlasBuilder atlasBuilder,
         ITextureLoader textureLoader,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        IRenderer renderer,
-        ILogger<TextureAtlasDemoScene> logger,
         PerformanceOverlay? perfOverlay = null)
-        : base(input, sceneManager, gameContext, logger, renderer, null, perfOverlay)
+        : base(input, sceneManager, gameContext, perfOverlay)
     {
         _atlasBuilder = atlasBuilder;
         _textureLoader = textureLoader;
@@ -173,7 +171,7 @@ public class TextureAtlasDemoScene : DemoSceneBase
         var deltaTime = (float)gameTime.DeltaTime;
 
         // Toggle atlas mode
-        if (Input.IsKeyPressed(Keys.Space))
+        if (Input.IsKeyPressed(Key.Space))
         {
             _useAtlas = !_useAtlas;
             Logger.LogInformation("Using {Mode}", _useAtlas ? "ATLAS" : "STANDALONE TEXTURES");
@@ -181,14 +179,14 @@ public class TextureAtlasDemoScene : DemoSceneBase
         }
 
         // Adjust sprite count
-        if (Input.IsKeyPressed(Keys.Up))
+        if (Input.IsKeyPressed(Key.Up))
         {
             _spriteCount = Math.Min(_spriteCount + 100, 10000);
             Logger.LogInformation("Sprite count: {Count}", _spriteCount);
             InitializeSprites();
         }
 
-        if (Input.IsKeyPressed(Keys.Down))
+        if (Input.IsKeyPressed(Key.Down))
         {
             _spriteCount = Math.Max(_spriteCount - 100, 10);
             Logger.LogInformation("Sprite count: {Count}", _spriteCount);
@@ -196,7 +194,7 @@ public class TextureAtlasDemoScene : DemoSceneBase
         }
 
         // Toggle rotation
-        if (Input.IsKeyDown(Keys.R))
+        if (Input.IsKeyDown(Key.R))
         {
             _rotation += deltaTime * 2f;
         }

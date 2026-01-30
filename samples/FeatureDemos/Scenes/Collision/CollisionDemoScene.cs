@@ -21,7 +21,6 @@ namespace FeatureDemos.Scenes.Collision;
 /// </summary>
 public class CollisionDemoScene : DemoSceneBase
 {
-    private readonly IRenderer _renderer;
     private readonly CollisionSystem _collisionSystem;
     
     // Player
@@ -58,16 +57,13 @@ public class CollisionDemoScene : DemoSceneBase
     private bool _showVelocity = false;
 
     public CollisionDemoScene(
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
         CollisionSystem collisionSystem,
-        ILogger<CollisionDemoScene> logger,
         PerformanceOverlay? perfOverlay = null)
-        : base(input, sceneManager, gameContext, logger, renderer, world: null, perfOverlay)
+        : base(input, sceneManager, gameContext, perfOverlay)
     {
-        _renderer = renderer;
         _collisionSystem = collisionSystem;
         
         // Initialize colliders
@@ -98,7 +94,7 @@ public class CollisionDemoScene : DemoSceneBase
         Logger.LogInformation("  SPACE - Reset scene");
         Logger.LogInformation("  ESC - Return to menu");
         
-        _renderer.ClearColor = Color.FromArgb(20, 25, 35);
+        Renderer.ClearColor = Color.FromArgb(20, 25, 35);
         
         SetupScene();
 
@@ -168,20 +164,20 @@ public class CollisionDemoScene : DemoSceneBase
         var deltaTime = (float)gameTime.DeltaTime;
         
         // Toggle debug options
-        if (Input.IsKeyPressed(Keys.F1))
+        if (Input.IsKeyPressed(Key.F1))
         {
             _showColliders = !_showColliders;
             Logger.LogInformation("Collider visualization: {State}", _showColliders ? "ON" : "OFF");
         }
         
-        if (Input.IsKeyPressed(Keys.F2))
+        if (Input.IsKeyPressed(Key.F2))
         {
             _showVelocity = !_showVelocity;
             Logger.LogInformation("Velocity vectors: {State}", _showVelocity ? "ON" : "OFF");
         }
         
         // Reset scene
-        if (Input.IsKeyPressed(Keys.Space))
+        if (Input.IsKeyPressed(Key.Space))
         {
             SetupScene();
             Logger.LogInformation("Scene reset");
@@ -204,10 +200,10 @@ public class CollisionDemoScene : DemoSceneBase
     {
         var movement = Vector2.Zero;
         
-        if (Input.IsKeyDown(Keys.W)) movement.Y -= 1;
-        if (Input.IsKeyDown(Keys.S)) movement.Y += 1;
-        if (Input.IsKeyDown(Keys.A)) movement.X -= 1;
-        if (Input.IsKeyDown(Keys.D)) movement.X += 1;
+        if (Input.IsKeyDown(Key.W)) movement.Y -= 1;
+        if (Input.IsKeyDown(Key.S)) movement.Y += 1;
+        if (Input.IsKeyDown(Key.A)) movement.X -= 1;
+        if (Input.IsKeyDown(Key.D)) movement.X += 1;
         
         if (movement != Vector2.Zero)
         {
@@ -265,7 +261,7 @@ public class CollisionDemoScene : DemoSceneBase
         }
         
         // Kick ball
-        if (Input.IsKeyPressed(Keys.R))
+        if (Input.IsKeyPressed(Key.R))
         {
             var direction = Vector2.Normalize(_ballPosition - _playerPosition);
             var distance = Vector2.Distance(_playerPosition, _ballPosition);
@@ -383,46 +379,46 @@ public class CollisionDemoScene : DemoSceneBase
         foreach (var wall in _walls)
         {
             var bounds = wall.GetBounds();
-            _renderer.DrawRectangleFilled(bounds.X, bounds.Y, bounds.Width, bounds.Height, WallColor);
+            Renderer.DrawRectangleFilled(bounds.X, bounds.Y, bounds.Width, bounds.Height, WallColor);
             
             if (_showColliders)
             {
-                _renderer.DrawRectangleOutline(bounds.X, bounds.Y, bounds.Width, bounds.Height, Color.White, 1f);
+                Renderer.DrawRectangleOutline(bounds.X, bounds.Y, bounds.Width, bounds.Height, Color.White, 1f);
             }
         }
         
         // Draw coins
         foreach (var (collider, position) in _coins)
         {
-            _renderer.DrawCircleFilled(position.X, position.Y, 15f, CoinColor);
+            Renderer.DrawCircleFilled(position.X, position.Y, 15f, CoinColor);
             
             if (_showColliders)
             {
-                _renderer.DrawCircleOutline(position.X, position.Y, 15f, Color.White, 1);
+                Renderer.DrawCircleOutline(position.X, position.Y, 15f, Color.White, 1);
             }
         }
         
         // Draw pushable box
-        _renderer.DrawRectangleFilled(_boxPosition.X - 20, _boxPosition.Y - 20, 40, 40, BoxColor);
+        Renderer.DrawRectangleFilled(_boxPosition.X - 20, _boxPosition.Y - 20, 40, 40, BoxColor);
         if (_showColliders)
         {
             var boxBounds = _boxCollider.GetBounds();
-            _renderer.DrawRectangleOutline(boxBounds.X, boxBounds.Y, boxBounds.Width, boxBounds.Height, Color.Yellow, 2f);
+            Renderer.DrawRectangleOutline(boxBounds.X, boxBounds.Y, boxBounds.Width, boxBounds.Height, Color.Yellow, 2f);
         }
         
         // Draw ball
-        _renderer.DrawCircleFilled(_ballPosition.X, _ballPosition.Y, BallRadius, BallColor);
+        Renderer.DrawCircleFilled(_ballPosition.X, _ballPosition.Y, BallRadius, BallColor);
         if (_showColliders)
         {
-            _renderer.DrawCircleOutline(_ballPosition.X, _ballPosition.Y, BallRadius, Color.Red, 2);
+            Renderer.DrawCircleOutline(_ballPosition.X, _ballPosition.Y, BallRadius, Color.Red, 2);
         }
         
         // Draw player
-        _renderer.DrawRectangleFilled(_playerPosition.X - 16, _playerPosition.Y - 24, 32, 48, PlayerColor);
+        Renderer.DrawRectangleFilled(_playerPosition.X - 16, _playerPosition.Y - 24, 32, 48, PlayerColor);
         if (_showColliders)
         {
             var playerBounds = _playerCollider.GetBounds();
-            _renderer.DrawRectangleOutline(playerBounds.X, playerBounds.Y, playerBounds.Width, playerBounds.Height, Color.Cyan, 2f);
+            Renderer.DrawRectangleOutline(playerBounds.X, playerBounds.Y, playerBounds.Width, playerBounds.Height, Color.Cyan, 2f);
         }
         
         // Draw velocity vectors
@@ -441,18 +437,18 @@ public class CollisionDemoScene : DemoSceneBase
         }
         
         // Draw UI
-        _renderer.DrawText("Collision Detection Demo", 10, 10, Color.White);
-        _renderer.DrawText($"Coins: {_coinsCollected} / {_coins.Count + _coinsCollected}", 10, 35, CoinColor);
-        _renderer.DrawText($"Colliders: {(_showColliders ? "ON" : "OFF")} (F1)", 10, 60, Color.Gray);
-        _renderer.DrawText($"Velocity: {(_showVelocity ? "ON" : "OFF")} (F2)", 10, 85, Color.Gray);
-        _renderer.DrawText("WASD: Move | R: Kick Ball | SPACE: Reset | ESC: Menu", 10, 680, Color.Gray);
+        Renderer.DrawText("Collision Detection Demo", 10, 10, Color.White);
+        Renderer.DrawText($"Coins: {_coinsCollected} / {_coins.Count + _coinsCollected}", 10, 35, CoinColor);
+        Renderer.DrawText($"Colliders: {(_showColliders ? "ON" : "OFF")} (F1)", 10, 60, Color.Gray);
+        Renderer.DrawText($"Velocity: {(_showVelocity ? "ON" : "OFF")} (F2)", 10, 85, Color.Gray);
+        Renderer.DrawText("WASD: Move | R: Kick Ball | SPACE: Reset | ESC: Menu", 10, 680, Color.Gray);
 
         RenderPerformanceOverlay();
     }
 
     private void DrawArrow(Vector2 start, Vector2 end, Color color)
     {
-        _renderer.DrawLine(start.X, start.Y, end.X, end.Y, color, 2f);
+        Renderer.DrawLine(start.X, start.Y, end.X, end.Y, color, 2f);
         
         // Arrow head
         var direction = Vector2.Normalize(end - start);
@@ -461,7 +457,7 @@ public class CollisionDemoScene : DemoSceneBase
         var arrowPoint1 = end - direction * 10f + perpendicular * 5f;
         var arrowPoint2 = end - direction * 10f - perpendicular * 5f;
         
-        _renderer.DrawLine(end.X, end.Y, arrowPoint1.X, arrowPoint1.Y, color, 2f);
-        _renderer.DrawLine(end.X, end.Y, arrowPoint2.X, arrowPoint2.Y, color, 2f);
+        Renderer.DrawLine(end.X, end.Y, arrowPoint1.X, arrowPoint1.Y, color, 2f);
+        Renderer.DrawLine(end.X, end.Y, arrowPoint2.X, arrowPoint2.Y, color, 2f);
     }
 }

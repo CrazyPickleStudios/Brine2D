@@ -4,12 +4,12 @@ using Xunit;
 
 namespace Brine2D.Tests.ECS;
 
-public class EntityWorldTests
+public class EntityWorldTests : TestBase
 {
     [Fact]
     public void ShouldCreateEntityAndAddToWorld()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity("TestEntity");
 
         world.Entities.Should().Contain(entity);
@@ -20,7 +20,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldDestroyEntityAndRemoveFromWorld()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         world.Entities.Should().Contain(entity);
 
@@ -32,7 +32,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldQueryEntityById()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         var found = world.GetEntityById(entity.Id);
 
@@ -42,7 +42,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldQueryEntityByName()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity("Hero");
         var found = world.GetEntityByName("Hero");
 
@@ -52,7 +52,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldQueryEntitiesByTag()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity1 = world.CreateEntity();
         entity1.Tags.Add("enemy");
         var entity2 = world.CreateEntity();
@@ -70,7 +70,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldQueryEntitiesByComponent()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity1 = world.CreateEntity();
         entity1.AddComponent(new TestComponent());
         var entity2 = world.CreateEntity();
@@ -87,7 +87,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldFireOnEntityCreatedEvent()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         Entity? created = null;
         world.OnEntityCreated += e => created = e;
 
@@ -99,7 +99,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldFireOnEntityDestroyedEvent()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity = world.CreateEntity();
         Entity? destroyed = null;
         world.OnEntityDestroyed += e => destroyed = e;
@@ -112,7 +112,7 @@ public class EntityWorldTests
     [Fact]
     public void ShouldClearAllEntities()
     {
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         world.CreateEntity();
         world.CreateEntity();
         world.Entities.Count.Should().Be(2);

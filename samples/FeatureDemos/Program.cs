@@ -71,7 +71,7 @@ builder.Services.AddPostProcessing(options =>
 // ECS should have parallelization enabled (default):
 builder.Services.AddObjectECS(options =>
 {
-    options.EnableParallelExecution = false; // Default
+    options.EnableParallelExecution = true; // Default
     options.ParallelEntityThreshold = 100;  // Default
     options.MaxDegreeOfParallelism = -1;    // Use all cores
 });
@@ -136,6 +136,7 @@ builder.Services.AddScene<TextureAtlasDemoScene>();
 builder.Services.AddScene<SpatialAudioDemoScene>();
 
 builder.Services.AddScene<MainMenuScene>();
+builder.Services.AddTransient<CustomLoadingScreen>();
 
 // Add performance monitoring
 builder.Services.AddPerformanceMonitoring(); // Core tracking

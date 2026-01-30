@@ -15,10 +15,10 @@ public interface IInputLayer
     /// <summary>
     /// Process keyboard input. Return true to consume the event and prevent lower layers from receiving it.
     /// </summary>
-    bool ProcessKeyboardInput(IInputService input);
+    bool ProcessKeyboardInput(IInputContext input);
 
     /// <summary>
     /// Process mouse input. Return true to consume the event and prevent lower layers from receiving it.
     /// </summary>
-    bool ProcessMouseInput(IInputService input);
+    bool ProcessMouseInput(IInputContext input);
 }

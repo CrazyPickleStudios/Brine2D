@@ -5,7 +5,7 @@ namespace Brine2D.Input;
 /// <summary>
 /// Provides input handling for keyboard, mouse, and gamepad.
 /// </summary>
-public interface IInputService
+public interface IInputContext
 {
     /// <summary>
     /// Updates the input state for the current frame.
@@ -16,17 +16,17 @@ public interface IInputService
     /// <summary>
     /// Returns true if the key is currently pressed.
     /// </summary>
-    bool IsKeyDown(Keys key);
+    bool IsKeyDown(Key key);
     
     /// <summary>
     /// Returns true if the key was pressed this frame (not held from previous frame).
     /// </summary>
-    bool IsKeyPressed(Keys key);
+    bool IsKeyPressed(Key key);
     
     /// <summary>
     /// Returns true if the key was released this frame.
     /// </summary>
-    bool IsKeyReleased(Keys key);
+    bool IsKeyReleased(Key key);
     
     /// <summary>
     /// Gets the current mouse position in window coordinates.

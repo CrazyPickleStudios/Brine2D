@@ -386,84 +386,93 @@ public class EntityQuery
 
     /// <summary>
     /// Executes the query and returns matching entities.
+    /// Snapshots the entity list for consistency - prevents issues if entities are created/destroyed
+    /// while the query result is being iterated by the caller.
     /// </summary>
     public IEnumerable<Entity> Execute()
     {
-        IEnumerable<Entity> results = _world.Entities.Where(entity =>
-        {
-            // Check active status
-            if (_onlyActive && !entity.IsActive)
-                return false;
-
-            // Check required components
-            if (_withComponents.Any(type => !entity.HasComponent(type)))
-                return false;
-
-            // Check excluded components
-            if (_withoutComponents.Any(type => entity.HasComponent(type)))
-                return false;
-
-            // Check component filters
-            foreach (var kvp in _componentFilters)
+        // Snapshot the entity list for query consistency
+        // This ensures the query result is stable even if entities are created/destroyed
+        // while the caller iterates the results
+        var snapshot = _world.Entities.ToList();
+        
+        // Filter the snapshot
+        IEnumerable<Entity> results = snapshot
+            .Where(entity => entity.IsActive) // Skip deferred-destroy entities
+            .Where(entity =>
             {
-                var componentType = kvp.Key;
-                var filter = kvp.Value;
-
-                // Get component using reflection
-                var component = entity.GetAllComponents()
-                    .FirstOrDefault(c => componentType.IsInstanceOfType(c));
-
-                if (component == null || !filter(component))
-                    return false;
-            }
-
-            // Check required tags (single)
-            if (_withTags.Any(tag => !entity.Tags.Contains(tag)))
-                return false;
-
-            // Check excluded tags
-            if (_withoutTags.Any(tag => entity.Tags.Contains(tag)))
-                return false;
-
-            // Check ALL required tags
-            if (_withAllTags.Count > 0 && !_withAllTags.All(tag => entity.Tags.Contains(tag)))
-                return false;
-
-            // Check ANY required tags
-            if (_withAnyTags.Count > 0 && !_withAnyTags.Any(tag => entity.Tags.Contains(tag)))
-                return false;
-
-            // Check spatial filters
-            if (_spatialCenter.HasValue && _spatialRadius.HasValue)
-            {
-                var transform = entity.GetComponent<TransformComponent>();
-                if (transform == null)
+                // Check active status (redundant but explicit)
+                if (_onlyActive && !entity.IsActive)
                     return false;
 
-                var distance = Vector2.Distance(transform.Position, _spatialCenter.Value);
-                if (distance > _spatialRadius.Value)
-                    return false;
-            }
-
-            if (_spatialBounds.HasValue)
-            {
-                var transform = entity.GetComponent<TransformComponent>();
-                if (transform == null)
+                // Check required components
+                if (_withComponents.Any(type => !entity.HasComponent(type)))
                     return false;
 
-                var bounds = _spatialBounds.Value;
-                var pos = transform.Position;
-                if (pos.X < bounds.X || pos.X > bounds.X + bounds.Width ||
-                    pos.Y < bounds.Y || pos.Y > bounds.Y + bounds.Height)
+                // Check excluded components
+                if (_withoutComponents.Any(type => entity.HasComponent(type)))
                     return false;
-            }
 
-            // Check custom predicate
-            if (_predicate != null && !_predicate(entity))
-                return false;
+                // Check component filters
+                foreach (var kvp in _componentFilters)
+                {
+                    var componentType = kvp.Key;
+                    var filter = kvp.Value;
 
-            return true;
-        });
+                    var component = entity.GetAllComponents()
+                        .FirstOrDefault(c => componentType.IsInstanceOfType(c));
+
+                    if (component == null || !filter(component))
+                        return false;
+                }
+
+                // Check required tags (single)
+                if (_withTags.Any(tag => !entity.Tags.Contains(tag)))
+                    return false;
+
+                // Check excluded tags
+                if (_withoutTags.Any(tag => entity.Tags.Contains(tag)))
+                    return false;
+
+                // Check ALL required tags
+                if (_withAllTags.Count > 0 && !_withAllTags.All(tag => entity.Tags.Contains(tag)))
+                    return false;
+
+                // Check ANY required tags
+                if (_withAnyTags.Count > 0 && !_withAnyTags.Any(tag => entity.Tags.Contains(tag)))
+                    return false;
+
+                // Check spatial filters
+                if (_spatialCenter.HasValue && _spatialRadius.HasValue)
+                {
+                    var transform = entity.GetComponent<TransformComponent>();
+                    if (transform == null)
+                        return false;
+
+                    var distance = Vector2.Distance(transform.Position, _spatialCenter.Value);
+                    if (distance > _spatialRadius.Value)
+                        return false;
+                }
+
+                if (_spatialBounds.HasValue)
+                {
+                    var transform = entity.GetComponent<TransformComponent>();
+                    if (transform == null)
+                        return false;
+
+                    var bounds = _spatialBounds.Value;
+                    var pos = transform.Position;
+                    if (pos.X < bounds.X || pos.X > bounds.X + bounds.Width ||
+                        pos.Y < bounds.Y || pos.Y > bounds.Y + bounds.Height)
+                        return false;
+                }
+
+                // Check custom predicate
+                if (_predicate != null && !_predicate(entity))
+                    return false;
+
+                return true;
+            });
 
         // Apply ordering
         if (_orderBySelector != null)
@@ -472,7 +481,6 @@ public class EntityQuery
                 ? results.OrderByDescending(_orderBySelector)
                 : results.OrderBy(_orderBySelector);
 
-            // Apply secondary sort if specified
             if (_thenBySelector != null)
             {
                 orderedResults = _thenByDescending

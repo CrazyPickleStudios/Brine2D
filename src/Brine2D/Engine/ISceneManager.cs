@@ -25,13 +25,24 @@ namespace Brine2D.Engine
         /// </summary>
         /// <typeparam name="TScene">The scene type to load.</typeparam>
         /// <param name="transition">Optional transition effect to play during scene change.</param>
-        /// <param name="loadingScreen">Optional loading screen to display while loading.</param>
         /// <param name="cancellationToken">Optional cancellation token.</param>
         Task LoadSceneAsync<TScene>(
             ISceneTransition? transition = null,
-            LoadingScene? loadingScreen = null,
             CancellationToken cancellationToken = default) 
             where TScene : IScene;
+
+        /// <summary>
+        /// Loads and activates a scene with optional transition and loading screen.
+        /// </summary>
+        /// <typeparam name="TScene">The scene type to load.</typeparam>
+        /// <typeparam name="TLoadingScene">The loading screen type to display while loading.</typeparam>
+        /// <param name="transition">Optional transition effect to play during scene change.</param>
+        /// <param name="cancellationToken">Optional cancellation token.</param>
+        Task LoadSceneAsync<TScene, TLoadingScene>(
+            ISceneTransition? transition = null,
+            CancellationToken cancellationToken = default) 
+            where TScene : IScene
+            where TLoadingScene : LoadingScene;
 
         /// <summary>
         /// Loads and activates a scene by type with optional transition and loading screen.

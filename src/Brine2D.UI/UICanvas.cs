@@ -11,7 +11,7 @@ namespace Brine2D.UI;
 public class UICanvas : IInputLayer
 {
     private readonly List<IUIComponent> _components = new();
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
 
     private UIButton? _hoveredButton;
     private UIButton? _pressedButton;
@@ -32,7 +32,7 @@ public class UICanvas : IInputLayer
     private UITooltip? _activeTooltip;
     private IUIComponent? _tooltipOwner;
 
-    public UICanvas(IInputService input)
+    public UICanvas(IInputContext input)
     {
         _input = input ?? throw new ArgumentNullException(nameof(input));
     }
@@ -101,7 +101,7 @@ public class UICanvas : IInputLayer
     /// <summary>
     /// Process keyboard input for UI. Returns true if input was consumed.
     /// </summary>
-    public bool ProcessKeyboardInput(IInputService input)
+    public bool ProcessKeyboardInput(IInputContext input)
     {
         // If text input is focused, consume ALL keyboard input
         if (_focusedTextInput != null && _focusedTextInput.IsFocused)
@@ -118,7 +118,7 @@ public class UICanvas : IInputLayer
     /// <summary>
     /// Process mouse input for UI. Returns true if input was consumed.
     /// </summary>
-    public bool ProcessMouseInput(IInputService input)
+    public bool ProcessMouseInput(IInputContext input)
     {
         HandleButtonInput();
         HandleSliderInput();
@@ -484,7 +484,7 @@ public class UICanvas : IInputLayer
         }
     }
 
-    private void HandleTooltips(IInputService input)
+    private void HandleTooltips(IInputContext input)
     {
         var mousePos = input.MousePosition;
         IUIComponent? hoveredComponent = null;

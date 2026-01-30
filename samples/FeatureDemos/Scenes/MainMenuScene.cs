@@ -24,8 +24,7 @@ namespace FeatureDemos.Scenes;
 /// </summary>
 public class MainMenuScene : Scene
 {
-    private readonly IRenderer _renderer;
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
     private readonly ISceneManager _sceneManager;
     private readonly IGameContext _gameContext;
     
@@ -42,17 +41,12 @@ public class MainMenuScene : Scene
     private const float ColumnWidth = 520f;
 
     public MainMenuScene(
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
-        IGameContext gameContext,
-        ILogger<MainMenuScene> logger,
-        DebugRenderer debugRenderer) : base(logger)
+        DebugRenderer debugRenderer)
     {
-        _renderer = renderer;
         _input = input;
         _sceneManager = sceneManager;
-        _gameContext = gameContext;
 
         debugRenderer.ShowEntityNames = false;
         
@@ -88,7 +82,7 @@ public class MainMenuScene : Scene
 
     protected override Task OnInitializeAsync(CancellationToken cancellationToken)
     {
-        _renderer.ClearColor = Color.FromArgb(15, 20, 35);
+        Renderer.ClearColor = Color.FromArgb(15, 20, 35);
         
         Logger.LogInformation("=== Brine2D Feature Demos ===");
         Logger.LogInformation("Available demos: {Count}", _demos.Count);
@@ -104,19 +98,19 @@ public class MainMenuScene : Scene
     protected override void OnUpdate(GameTime gameTime)
     {
         // Navigation - Up/Down
-        if (_input.IsKeyPressed(Keys.Up))
+        if (_input.IsKeyPressed(Key.Up))
         {
             _selectedIndex = (_selectedIndex - 1 + _demos.Count) % _demos.Count;
             Logger.LogDebug("Selected: {Name}", _demos[_selectedIndex].DisplayName);
         }
-        if (_input.IsKeyPressed(Keys.Down))
+        if (_input.IsKeyPressed(Key.Down))
         {
             _selectedIndex = (_selectedIndex + 1) % _demos.Count;
             Logger.LogDebug("Selected: {Name}", _demos[_selectedIndex].DisplayName);
         }
         
         // Navigation - Left/Right (jump to adjacent column)
-        if (_input.IsKeyPressed(Keys.Left))
+        if (_input.IsKeyPressed(Key.Left))
         {
             // Jump to left column (wrap around)
             var targetIndex = _selectedIndex - GetItemsPerColumn();
@@ -124,14 +118,14 @@ public class MainMenuScene : Scene
                 targetIndex = _demos.Count + targetIndex;
             _selectedIndex = targetIndex % _demos.Count;
         }
-        if (_input.IsKeyPressed(Keys.Right))
+        if (_input.IsKeyPressed(Key.Right))
         {
             // Jump to right column (wrap around)
             _selectedIndex = (_selectedIndex + GetItemsPerColumn()) % _demos.Count;
         }
 
         // Selection
-        if (_input.IsKeyPressed(Keys.Enter) || _input.IsKeyPressed(Keys.Space))
+        if (_input.IsKeyPressed(Key.Enter) || _input.IsKeyPressed(Key.Space))
         {
             LoadSelectedDemo();
         }
@@ -139,7 +133,7 @@ public class MainMenuScene : Scene
         // Number key shortcuts (1-9)
         for (int i = 0; i < Math.Min(_demos.Count, 9); i++)
         {
-            var key = Keys.D1 + i; // D1 = '1', D2 = '2', etc.
+            var key = Key.D1 + i; // D1 = '1', D2 = '2', etc.
             if (_input.IsKeyPressed(key))
             {
                 _selectedIndex = i;
@@ -148,7 +142,7 @@ public class MainMenuScene : Scene
         }
 
         // Exit
-        if (_input.IsKeyPressed(Keys.Escape))
+        if (_input.IsKeyPressed(Key.Escape))
         {
             Logger.LogInformation("Exiting Feature Demos");
             _gameContext.RequestExit();
@@ -177,7 +171,7 @@ public class MainMenuScene : Scene
             TitleY + 65, Color.FromArgb(120, 120, 120));
         
         // Draw separator line
-        _renderer.DrawRectangleFilled(50, TitleY + 95, 1180, 2, Color.FromArgb(50, 70, 100));
+        Renderer.DrawRectangleFilled(50, TitleY + 95, 1180, 2, Color.FromArgb(50, 70, 100));
         
         // Determine column split (distribute demos evenly)
         var itemsPerColumn = GetItemsPerColumn();
@@ -190,7 +184,7 @@ public class MainMenuScene : Scene
         
         // Draw column separator
         var separatorX = LeftColumnX + ColumnWidth + (ColumnSpacing / 2);
-        _renderer.DrawRectangleFilled(separatorX, ColumnStartY - 10, 2, 450, Color.FromArgb(50, 70, 100));
+        Renderer.DrawRectangleFilled(separatorX, ColumnStartY - 10, 2, 450, Color.FromArgb(50, 70, 100));
         
         // Footer info
         var footerY = 660f;
@@ -216,7 +210,7 @@ public class MainMenuScene : Scene
                     currentY += CategorySpacing;
                 }
                 
-                _renderer.DrawText(
+                Renderer.DrawText(
                     $"--- {demo.Category} ---", 
                     columnX + 20, 
                     currentY,
@@ -231,22 +225,22 @@ public class MainMenuScene : Scene
             // Selection background
             if (isSelected)
             {
-                _renderer.DrawRectangleFilled(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(150, 40, 80, 120));
-                _renderer.DrawRectangleOutline(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(100, 180, 255), 2f);
+                Renderer.DrawRectangleFilled(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(150, 40, 80, 120));
+                Renderer.DrawRectangleOutline(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(100, 180, 255), 2f);
             }
             
             // Selection arrow
             if (isSelected)
             {
-                _renderer.DrawText(">", columnX - 20, currentY, Color.FromArgb(100, 200, 255));
+                Renderer.DrawText(">", columnX - 20, currentY, Color.FromArgb(100, 200, 255));
             }
             
             // Demo number and name
             var nameColor = isSelected ? Color.FromArgb(255, 255, 255) : Color.FromArgb(200, 200, 200);
-            _renderer.DrawText($"{globalIndex + 1}. {demo.DisplayName}", columnX + 20, currentY, nameColor);
+            Renderer.DrawText($"{globalIndex + 1}. {demo.DisplayName}", columnX + 20, currentY, nameColor);
             
             // Description (smaller text)
-            _renderer.DrawText(demo.Description, columnX + 40, currentY + 22, Color.FromArgb(140, 140, 140));
+            Renderer.DrawText(demo.Description, columnX + 40, currentY + 22, Color.FromArgb(140, 140, 140));
             
             currentY += LineHeight;
         }
@@ -260,11 +254,11 @@ public class MainMenuScene : Scene
 
     private void DrawCenteredText(string text, float y, Color color, bool large = false)
     {
-        var width = _renderer.Camera?.ViewportWidth ?? 1280;
+        var width = Renderer.Camera?.ViewportWidth ?? 1280;
         var textWidth = text.Length * (large ? 12 : 8);
         var x = (width - textWidth) / 2f;
         
-        _renderer.DrawText(text, x, y, color);
+        Renderer.DrawText(text, x, y, color);
     }
 
     /// <summary>

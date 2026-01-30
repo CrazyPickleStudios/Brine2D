@@ -7,13 +7,13 @@ using Xunit;
 
 namespace Brine2D.Tests.ECS;
 
-public class QueryTests
+public class QueryTests : TestBase
 {
     [Fact]
     public void ShouldFindEntitiesWithSpecificComponent()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity1 = world.CreateEntity();
         entity1.AddComponent(new TransformComponent());
 
@@ -32,7 +32,7 @@ public class QueryTests
     public void ShouldFilterEntitiesBySpatialRadius()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var center = world.CreateEntity();
         center.AddComponent(new TransformComponent { Position = new Vector2(0, 0) });
 
@@ -58,7 +58,7 @@ public class QueryTests
     public void ShouldFilterEntitiesByMultipleComponents()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity1 = world.CreateEntity();
         entity1.AddComponent(new TransformComponent());
         entity1.AddComponent(new SpriteComponent());
@@ -81,7 +81,7 @@ public class QueryTests
     public void ShouldReturnCorrectResultsForCachedQueries()
     {
         // Arrange
-        var world = new EntityWorld();
+        var world = CreateTestWorld();
         var entity1 = world.CreateEntity();
         entity1.AddComponent(new TransformComponent());
 

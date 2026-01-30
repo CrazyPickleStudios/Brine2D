@@ -14,20 +14,15 @@ namespace HelloBrine;
 public class GameScene : Scene
 {
     private readonly IGameContext _gameContext;
-    private readonly IInputService _input;
-    private readonly IRenderer _renderer;
+    private readonly IInputContext _input;
 
     // Constructor uses Dependency Injection (just like ASP.NET Core!)
     // Services are automatically injected by the DI container
     public GameScene
     (
-        IRenderer renderer,
-        IInputService input,
-        IGameContext gameContext,
-        ILogger<GameScene> logger
-    ) : base(logger)
+        IInputContext input,
+        IGameContext gameContext)
     {
-        _renderer = renderer;
         _input = input;
         _gameContext = gameContext;
     }
@@ -37,7 +32,7 @@ public class GameScene : Scene
     protected override void OnUpdate(GameTime gameTime)
     {
         // Exit when ESC is pressed
-        if (_input.IsKeyPressed(Keys.Escape))
+        if (_input.IsKeyPressed(Key.Escape))
         {
             _gameContext.RequestExit();
         }
@@ -48,9 +43,9 @@ public class GameScene : Scene
     protected override void OnRender(GameTime gameTime)
     {
         // Draw "Hello, Brine2D!" text at position (100, 100)
-        _renderer.DrawText("Hello, Brine2D!", 100, 100, Color.White);
+        Renderer.DrawText("Hello, Brine2D!", 100, 100, Color.White);
         
         // Show exit instructions
-        _renderer.DrawText("Press ESC to exit", 100, 140, Color.LightGray);
+        Renderer.DrawText("Press ESC to exit", 100, 140, Color.LightGray);
     }
 }

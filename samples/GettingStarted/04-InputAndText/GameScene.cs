@@ -14,8 +14,7 @@ namespace InputAndText;
 /// </summary>
 public class GameScene : Scene
 {
-    private readonly IRenderer _renderer;
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
     private readonly IGameContext _gameContext;
 
     // Player position (controlled by input)
@@ -35,12 +34,9 @@ public class GameScene : Scene
     private string _keysCurrentlyHeld = "";
 
     public GameScene(
-        IRenderer renderer,
-        IInputService input,
-        IGameContext gameContext,
-        ILogger<GameScene> logger) : base(logger)
+        IInputContext input,
+        IGameContext gameContext)
     {
-        _renderer = renderer;
         _input = input;
         _gameContext = gameContext;
     }
@@ -48,7 +44,7 @@ public class GameScene : Scene
     protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("GameScene: OnLoad");
-        _renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
+        Renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
 
         // Reset state
         _playerPosition = new Vector2(400, 300);
@@ -64,16 +60,16 @@ public class GameScene : Scene
         var movement = Vector2.Zero;
 
         // WASD movement
-        if (_input.IsKeyDown(Keys.W) || _input.IsKeyDown(Keys.Up))
+        if (_input.IsKeyDown(Key.W) || _input.IsKeyDown(Key.Up))
             movement.Y -= PlayerSpeed * deltaTime;
         
-        if (_input.IsKeyDown(Keys.S) || _input.IsKeyDown(Keys.Down))
+        if (_input.IsKeyDown(Key.S) || _input.IsKeyDown(Key.Down))
             movement.Y += PlayerSpeed * deltaTime;
         
-        if (_input.IsKeyDown(Keys.A) || _input.IsKeyDown(Keys.Left))
+        if (_input.IsKeyDown(Key.A) || _input.IsKeyDown(Key.Left))
             movement.X -= PlayerSpeed * deltaTime;
         
-        if (_input.IsKeyDown(Keys.D) || _input.IsKeyDown(Keys.Right))
+        if (_input.IsKeyDown(Key.D) || _input.IsKeyDown(Key.Right))
             movement.X += PlayerSpeed * deltaTime;
 
         _playerPosition += movement;
@@ -84,10 +80,10 @@ public class GameScene : Scene
 
         // Track which keys are held (for display)
         var heldKeys = new List<string>();
-        if (_input.IsKeyDown(Keys.W)) heldKeys.Add("W");
-        if (_input.IsKeyDown(Keys.A)) heldKeys.Add("A");
-        if (_input.IsKeyDown(Keys.S)) heldKeys.Add("S");
-        if (_input.IsKeyDown(Keys.D)) heldKeys.Add("D");
+        if (_input.IsKeyDown(Key.W)) heldKeys.Add("W");
+        if (_input.IsKeyDown(Key.A)) heldKeys.Add("A");
+        if (_input.IsKeyDown(Key.S)) heldKeys.Add("S");
+        if (_input.IsKeyDown(Key.D)) heldKeys.Add("D");
         _keysCurrentlyHeld = heldKeys.Count > 0 ? string.Join(", ", heldKeys) : "None";
 
         // ============================================================
@@ -95,13 +91,13 @@ public class GameScene : Scene
         // ============================================================
         // IsKeyPressed returns true ONLY on the frame when key is first pressed
 
-        if (_input.IsKeyPressed(Keys.Space))
+        if (_input.IsKeyPressed(Key.Space))
         {
             _lastKeyPressed = "SPACE";
             Logger.LogInformation("Space bar pressed!");
         }
 
-        if (_input.IsKeyPressed(Keys.R))
+        if (_input.IsKeyPressed(Key.R))
         {
             _lastKeyPressed = "R";
             ResetPlayer();
@@ -111,7 +107,7 @@ public class GameScene : Scene
         // KEYBOARD INPUT - Text Input Demo
         // ============================================================
         // Backspace to delete
-        if (_input.IsKeyPressed(Keys.Backspace) && _textInput.Length > 0)
+        if (_input.IsKeyPressed(Key.Backspace) && _textInput.Length > 0)
         {
             _textInput.Length--;
         }
@@ -120,13 +116,13 @@ public class GameScene : Scene
         if (_textInput.Length < MaxInputLength)
         {
             // Check alphabet keys
-            for (var key = Keys.A; key <= Keys.Z; key++)
+            for (var key = Key.A; key <= Key.Z; key++)
             {
                 if (_input.IsKeyPressed(key))
                 {
                     var letter = key.ToString();
                     // Check if Shift is held for uppercase
-                    if (_input.IsKeyDown(Keys.LeftShift) || _input.IsKeyDown(Keys.RightShift))
+                    if (_input.IsKeyDown(Key.LeftShift) || _input.IsKeyDown(Key.RightShift))
                         _textInput.Append(letter);
                     else
                         _textInput.Append(letter.ToLower());
@@ -134,16 +130,16 @@ public class GameScene : Scene
             }
 
             // Numbers
-            if (_input.IsKeyPressed(Keys.D0)) _textInput.Append('0');
-            if (_input.IsKeyPressed(Keys.D1)) _textInput.Append('1');
-            if (_input.IsKeyPressed(Keys.D2)) _textInput.Append('2');
-            if (_input.IsKeyPressed(Keys.D3)) _textInput.Append('3');
-            if (_input.IsKeyPressed(Keys.D4)) _textInput.Append('4');
-            if (_input.IsKeyPressed(Keys.D5)) _textInput.Append('5');
-            if (_input.IsKeyPressed(Keys.D6)) _textInput.Append('6');
-            if (_input.IsKeyPressed(Keys.D7)) _textInput.Append('7');
-            if (_input.IsKeyPressed(Keys.D8)) _textInput.Append('8');
-            if (_input.IsKeyPressed(Keys.D9)) _textInput.Append('9');
+            if (_input.IsKeyPressed(Key.D0)) _textInput.Append('0');
+            if (_input.IsKeyPressed(Key.D1)) _textInput.Append('1');
+            if (_input.IsKeyPressed(Key.D2)) _textInput.Append('2');
+            if (_input.IsKeyPressed(Key.D3)) _textInput.Append('3');
+            if (_input.IsKeyPressed(Key.D4)) _textInput.Append('4');
+            if (_input.IsKeyPressed(Key.D5)) _textInput.Append('5');
+            if (_input.IsKeyPressed(Key.D6)) _textInput.Append('6');
+            if (_input.IsKeyPressed(Key.D7)) _textInput.Append('7');
+            if (_input.IsKeyPressed(Key.D8)) _textInput.Append('8');
+            if (_input.IsKeyPressed(Key.D9)) _textInput.Append('9');
         }
 
         // ============================================================
@@ -171,7 +167,7 @@ public class GameScene : Scene
         // ============================================================
         // EXIT
         // ============================================================
-        if (_input.IsKeyPressed(Keys.Escape))
+        if (_input.IsKeyPressed(Key.Escape))
         {
             _gameContext.RequestExit();
         }
@@ -182,60 +178,60 @@ public class GameScene : Scene
         // ============================================================
         // TEXT RENDERING - Title and Instructions
         // ============================================================
-        _renderer.DrawText("INPUT AND TEXT DEMO", 100, 50, Color.White);
+        Renderer.DrawText("INPUT AND TEXT DEMO", 100, 50, Color.White);
 
         // Different colors and positions
-        _renderer.DrawText("Keyboard & Mouse Input", 100, 90, Color.LightGray);
+        Renderer.DrawText("Keyboard & Mouse Input", 100, 90, Color.LightGray);
 
         // ============================================================
         // KEYBOARD INPUT DISPLAY
         // ============================================================
-        _renderer.DrawText("KEYBOARD INPUT:", 100, 140, Color.Yellow);
-        _renderer.DrawText($"Keys Held: {_keysCurrentlyHeld}", 100, 170, Color.White);
-        _renderer.DrawText($"Last Pressed: {_lastKeyPressed}", 100, 200, Color.White);
+        Renderer.DrawText("KEYBOARD INPUT:", 100, 140, Color.Yellow);
+        Renderer.DrawText($"Keys Held: {_keysCurrentlyHeld}", 100, 170, Color.White);
+        Renderer.DrawText($"Last Pressed: {_lastKeyPressed}", 100, 200, Color.White);
 
         // Instructions
-        _renderer.DrawText("• WASD or Arrow Keys - Move player (IsKeyDown)", 100, 240, Color.Gray);
-        _renderer.DrawText("• SPACE - Action (IsKeyPressed)", 100, 270, Color.Gray);
-        _renderer.DrawText("• R - Reset position", 100, 300, Color.Gray);
+        Renderer.DrawText("• WASD or Arrow Keys - Move player (IsKeyDown)", 100, 240, Color.Gray);
+        Renderer.DrawText("• SPACE - Action (IsKeyPressed)", 100, 270, Color.Gray);
+        Renderer.DrawText("• R - Reset position", 100, 300, Color.Gray);
 
         // ============================================================
         // TEXT INPUT DISPLAY
         // ============================================================
-        _renderer.DrawText("TEXT INPUT:", 100, 350, Color.Yellow);
-        _renderer.DrawText($"Type: {_textInput}", 100, 380, Color.Cyan);
-        _renderer.DrawText("(Type letters/numbers, Backspace to delete)", 100, 410, Color.Gray);
+        Renderer.DrawText("TEXT INPUT:", 100, 350, Color.Yellow);
+        Renderer.DrawText($"Type: {_textInput}", 100, 380, Color.Cyan);
+        Renderer.DrawText("(Type letters/numbers, Backspace to delete)", 100, 410, Color.Gray);
 
         // ============================================================
         // MOUSE INPUT DISPLAY
         // ============================================================
-        _renderer.DrawText("MOUSE INPUT:", 100, 460, Color.Yellow);
-        _renderer.DrawText($"Position: ({_mousePosition.X}, {_mousePosition.Y})", 100, 490, Color.White);
-        _renderer.DrawText($"Left Click: {(_mouseClicked ? "CLICKED!" : "No")}", 100, 520, Color.White);
-        _renderer.DrawText("• Left Click - Detect click", 100, 560, Color.Gray);
-        _renderer.DrawText("• Right Click - Teleport player", 100, 590, Color.Gray);
+        Renderer.DrawText("MOUSE INPUT:", 100, 460, Color.Yellow);
+        Renderer.DrawText($"Position: ({_mousePosition.X}, {_mousePosition.Y})", 100, 490, Color.White);
+        Renderer.DrawText($"Left Click: {(_mouseClicked ? "CLICKED!" : "No")}", 100, 520, Color.White);
+        Renderer.DrawText("• Left Click - Detect click", 100, 560, Color.Gray);
+        Renderer.DrawText("• Right Click - Teleport player", 100, 590, Color.Gray);
 
         // ============================================================
         // PLAYER RENDERING
         // ============================================================
         // Draw player as a simple rectangle
-        _renderer.DrawCircleFilled(_playerPosition, 15f, Color.Lime);
+        Renderer.DrawCircleFilled(_playerPosition, 15f, Color.Lime);
         
         // Draw line from center to player
         var center = new Vector2(640, 360);
-        _renderer.DrawLine(center, _playerPosition, Color.Yellow, 2f);
+        Renderer.DrawLine(center, _playerPosition, Color.Yellow, 2f);
         
         // Draw rectangle at player position
         var rect = new Rectangle((int)_playerPosition.X - 20, (int)_playerPosition.Y - 20, 40, 40);
-        _renderer.DrawRectangleOutline(rect, Color.Cyan, 2f);
+        Renderer.DrawRectangleOutline(rect, Color.Cyan, 2f);
 
         // Draw player label
-        _renderer.DrawText("YOU", (int)_playerPosition.X - 15, (int)_playerPosition.Y - 40, Color.White);
+        Renderer.DrawText("YOU", (int)_playerPosition.X - 15, (int)_playerPosition.Y - 40, Color.White);
 
         // ============================================================
         // EXIT INSTRUCTION
         // ============================================================
-        _renderer.DrawText("Press ESC to exit", 100, 650, Color.DarkGray);
+        Renderer.DrawText("Press ESC to exit", 100, 650, Color.DarkGray);
     }
 
     private void ResetPlayer()

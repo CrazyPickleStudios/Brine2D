@@ -11,12 +11,10 @@ namespace FeatureDemos.Scenes.Transitions;
 public class SceneB : TransitionDemoScene
 {
     public SceneB(
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
-        IGameContext gameContext,
-        ILogger<SceneB> logger) 
-        : base(renderer, input, sceneManager, gameContext, logger)
+        IGameContext gameContext) 
+        : base(input, sceneManager, gameContext)
     {
     }
 }

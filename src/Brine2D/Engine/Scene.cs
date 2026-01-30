@@ -1,179 +1,145 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Brine2D.Core;
+﻿using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.Engine.Systems;
+using Brine2D.Rendering;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
-namespace Brine2D.Engine
+namespace Brine2D.Engine;
+
+/// <summary>
+/// Base class for game scenes.
+/// Framework properties (Logger, World) are set automatically by SceneManager.
+/// Derive from this and inject only YOUR dependencies via constructor.
+/// </summary>
+public abstract class Scene : IScene
 {
     /// <summary>
-    /// Base class for game scenes.
+    /// Logger for this scene. Set automatically by the framework.
     /// </summary>
-    public abstract class Scene : IScene
+    internal protected ILogger Logger { get; internal set; } = null!;
+
+    /// <summary>
+    /// Entity world for this scene. Set automatically by the framework.
+    /// Each scene gets its own isolated world.
+    /// </summary>
+    internal protected IEntityWorld World { get; internal set; } = null!;
+
+    /// <summary>
+    /// Renderer for this scene. Set automatically by the framework.
+    /// Use this for immediate-mode rendering in OnRender().
+    /// </summary>
+    protected internal IRenderer Renderer { get; internal set; } = null!;
+    
+    /// <summary>
+    /// Internal access for SceneManager and lifecycle hooks.
+    /// </summary>
+    internal IEntityWorld EntityWorld => World;
+
+    public virtual string Name => GetType().Name;
+    public virtual bool EnableLifecycleHooks { get; set; } = true;
+    public virtual bool EnableAutomaticFrameManagement { get; set; } = true;
+    
+    /// <summary>
+    /// Constructs a scene.
+    /// Framework properties (Logger, World) are set automatically by SceneManager.
+    /// Override and add your own constructor parameters for dependencies you need.
+    /// </summary>
+    protected Scene() { }
+
+    #region Resource Lifecycle
+
+    public virtual async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        private readonly ILogger _logger;
-
-        /// <summary>
-        /// Gets the logger for this scene.
-        /// </summary>
-        protected ILogger Logger => _logger;
-
-        /// <inheritdoc/>
-        public virtual string Name => GetType().Name;
-        
-        /// <summary>
-        /// Set to false to disable automatic lifecycle hook execution (ECS pipelines, etc.).
-        /// Use this when you want complete manual control over system execution.
-        /// Default: true (hooks execute automatically - recommended for most users).
-        /// </summary>
-        public virtual bool EnableLifecycleHooks { get; set; } = true;
-        
-        /// <summary>
-        /// Set to false to handle frame management manually (Clear/BeginFrame/EndFrame).
-        /// Use this when you need custom render targets, multi-pass rendering, or post-processing.
-        /// Default: true (automatic frame management - recommended for most users).
-        /// </summary>
-        public virtual bool EnableAutomaticFrameManagement { get; set; } = true;
-        
-        protected Scene(ILogger logger)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
-
-        #region Resource Lifecycle (called once per scene lifetime)
-
-        /// <inheritdoc/>
-        public virtual async Task InitializeAsync(CancellationToken cancellationToken = default)
-        {
-            _logger.LogDebug("Initializing scene: {SceneName}", Name);
-            await OnInitializeAsync(cancellationToken);
-        }
-
-        /// <inheritdoc/>
-        public virtual async Task LoadAsync(CancellationToken cancellationToken = default)
-        {
-            _logger.LogInformation("Loading scene: {SceneName}", Name);
-            await OnLoadAsync(cancellationToken);
-        }
-
-        /// <inheritdoc/>
-        public virtual async Task UnloadAsync(CancellationToken cancellationToken = default)
-        {
-            _logger.LogInformation("Unloading scene: {SceneName}", Name);
-            await OnUnloadAsync(cancellationToken);
-        }
-
-        /// <summary>
-        /// Called during initialization. Override to provide custom initialization logic.
-        /// This is for setup and configuration tasks (NOT asset loading - use OnLoadAsync for that).
-        /// </summary>
-        /// <remarks>
-        /// Initialize is for fast setup: configuring state, creating entities (without assets), registering handlers.
-        /// For loading textures, sounds, or other assets, use <see cref="OnLoadAsync"/> instead.
-        /// </remarks>
-        protected virtual Task OnInitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        /// <summary>
-        /// Called during loading. Override to load resources asynchronously.
-        /// This is where you load textures, sounds, build atlases, create GPU resources, and initialize scene state.
-        /// </summary>
-        protected virtual Task OnLoadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        /// <summary>
-        /// Called during unloading. Override to clean up resources.
-        /// </summary>
-        protected virtual Task OnUnloadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        #endregion
-
-        #region Frame Lifecycle (called every frame)
-
-        /// <inheritdoc/>
-        public void Update(GameTime gameTime)
-        {
-            OnUpdate(gameTime);
-        }
-
-        /// <inheritdoc/>
-        public void Render(GameTime gameTime)
-        {
-            OnRender(gameTime);
-        }
-
-        /// <summary>
-        /// Called every frame to update game logic. Override to provide custom update logic.
-        /// </summary>
-        protected virtual void OnUpdate(GameTime gameTime) { }
-
-        /// <summary>
-        /// Called every frame to render. Override to provide custom rendering logic.
-        /// </summary>
-        protected virtual void OnRender(GameTime gameTime) { }
-
-        #endregion
-
-        #region Scene-Specific Systems
-
-        private SceneSystemConfigurator? _systemConfigurator;
-
-        /// <summary>
-        /// Override to configure scene-specific systems.
-        /// Called automatically when scene loads, before OnInitializeAsync.
-        /// Global systems (registered in Program.cs) run by default.
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// protected override void ConfigureSystems(ISystemConfigurator systems)
-        /// {
-        ///     // Add scene-specific system
-        ///     systems.AddUpdateSystem&lt;BenchmarkSystem&gt;();
-        ///     
-        ///     // Disable global system for this scene
-        ///     systems.DisableSystem&lt;VelocitySystem&gt;();
-        /// }
-        /// </code>
-        /// </example>
-        protected virtual void ConfigureSystems(ISystemConfigurator systems)
-        {
-            // Default: no scene-specific configuration
-        }
-        
-        /// <summary>
-        /// Gets the scene's system configurator (if configured).
-        /// </summary>
-        internal SceneSystemConfigurator? SystemConfigurator => _systemConfigurator;
-        
-        /// <summary>
-        /// Initializes scene-specific systems before OnInitializeAsync.
-        /// Called by SceneManager during scene loading.
-        /// </summary>
-        internal void InitializeSystems(IServiceProvider services, ILogger logger)
-        {
-            _systemConfigurator = new SceneSystemConfigurator(
-                services, 
-                services.GetService<ILoggerFactory>()?.CreateLogger<SceneSystemConfigurator>());
-            
-            try
-            {
-                ConfigureSystems(_systemConfigurator);
-                
-                // Log configuration summary
-                if (_systemConfigurator.SceneSystems.Count > 0 || 
-                    _systemConfigurator.DisabledSystemNames.Count > 0)
-                {
-                    logger.LogInformation(
-                        "Scene '{SceneName}' configured: {SystemCount} scene-specific systems, {DisabledCount} disabled systems",
-                        Name,
-                        _systemConfigurator.SceneSystems.Count,
-                        _systemConfigurator.DisabledSystemNames.Count);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to configure systems for scene '{SceneName}'", Name);
-                throw;
-            }
-        }
-
-        #endregion
+        Logger.LogDebug("Initializing scene: {SceneName}", Name);
+        await OnInitializeAsync(cancellationToken);
     }
+
+    public virtual async Task LoadAsync(CancellationToken cancellationToken = default)
+    {
+        Logger.LogInformation("Loading scene: {SceneName}", Name);
+        await OnLoadAsync(cancellationToken);
+    }
+
+    public virtual async Task UnloadAsync(CancellationToken cancellationToken = default)
+    {
+        Logger.LogInformation("Unloading scene: {SceneName}", Name);
+        await OnUnloadAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Called during initialization. Override to provide custom initialization logic.
+    /// This is for setup and configuration tasks (NOT asset loading - use OnLoadAsync for that).
+    /// </summary>
+    protected virtual Task OnInitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Called during loading. Override to load resources asynchronously.
+    /// This is where you load textures, sounds, build atlases, create GPU resources, and initialize scene state.
+    /// </summary>
+    protected virtual Task OnLoadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Called during unloading. Override to clean up resources.
+    /// </summary>
+    protected virtual Task OnUnloadAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    #endregion
+
+    #region Frame Lifecycle
+
+    public void Update(GameTime gameTime)
+    {
+        OnUpdate(gameTime);
+    }
+
+    public void Render(GameTime gameTime)
+    {
+        OnRender(gameTime);
+    }
+
+    protected virtual void OnUpdate(GameTime gameTime) { }
+    protected virtual void OnRender(GameTime gameTime) { }
+
+    #endregion
+
+    #region Scene-Specific Systems
+
+    private SceneSystemConfigurator? _systemConfigurator;
+
+    protected virtual void ConfigureSystems(ISystemConfigurator systems)
+    {
+        // Default: no scene-specific configuration
+    }
+    
+    internal SceneSystemConfigurator? SystemConfigurator => _systemConfigurator;
+    
+    internal void InitializeSystems(IServiceProvider services, ILogger logger)
+    {
+        _systemConfigurator = new SceneSystemConfigurator(
+            services, 
+            services.GetService<ILoggerFactory>()?.CreateLogger<SceneSystemConfigurator>());
+        
+        try
+        {
+            ConfigureSystems(_systemConfigurator);
+            
+            if (_systemConfigurator.SceneSystems.Count > 0 || 
+                _systemConfigurator.DisabledSystemNames.Count > 0)
+            {
+                logger.LogInformation(
+                    "Scene '{SceneName}' configured: {SystemCount} scene-specific systems, {DisabledCount} disabled systems",
+                    Name,
+                    _systemConfigurator.SceneSystems.Count,
+                    _systemConfigurator.DisabledSystemNames.Count);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to configure systems for scene '{SceneName}'", Name);
+            throw;
+        }
+    }
+
+    #endregion
 }

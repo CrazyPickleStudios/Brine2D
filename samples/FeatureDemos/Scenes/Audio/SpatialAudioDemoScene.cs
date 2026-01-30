@@ -20,9 +20,7 @@ namespace FeatureDemos.Scenes.Audio;
 public class SpatialAudioDemoScene : DemoSceneBase
 {
     private readonly IAudioService _audio;
-    private readonly IEntityWorld _world;
-    private readonly IRenderer _renderer;
-    private readonly IInputService _input;
+    private readonly IInputContext _input;
 
     private Entity? _player;
     private Entity? _soundSource1;
@@ -36,18 +34,13 @@ public class SpatialAudioDemoScene : DemoSceneBase
     private bool _soundsLoaded = false;
 
     public SpatialAudioDemoScene(
-        IEntityWorld world,
-        IRenderer renderer,
-        IInputService input,
+        IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        ILogger<SpatialAudioDemoScene> logger,
         IAudioService audio,
         PerformanceOverlay? perfOverlay = null)
-        : base(input, sceneManager, gameContext, logger, renderer, world, perfOverlay)
+        : base(input, sceneManager, gameContext, perfOverlay)
     {
-        _world = world;
-        _renderer = renderer;
         _input = input;
         _audio = audio;
     }
@@ -62,7 +55,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         Logger.LogInformation("  ESC - Return to menu");
         Logger.LogInformation("");
 
-        _renderer.ClearColor = Color.FromArgb(20, 20, 30);
+        Renderer.ClearColor = Color.FromArgb(20, 20, 30);
 
         // Try to load sounds
         await LoadSoundsAsync(cancellationToken);
@@ -121,7 +114,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
 
     private void CreatePlayer()
     {
-        _player = _world.CreateEntity("Player");
+        _player = World.CreateEntity("Player");
         
         var transform = _player.AddComponent<TransformComponent>();
         transform.Position = new Vector2(640, 360);
@@ -134,7 +127,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
     private void CreateSoundSources()
     {
         // Sound source 1 - Left side, looping coin
-        _soundSource1 = _world.CreateEntity("CoinSource");
+        _soundSource1 = World.CreateEntity("CoinSource");
         var transform1 = _soundSource1.AddComponent<TransformComponent>();
         transform1.Position = new Vector2(200, 360);
 
@@ -151,7 +144,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         audio1.PlayOnEnable = true;
 
         // Sound source 2 - Right side, explosion (triggered)
-        _soundSource2 = _world.CreateEntity("ExplosionSource");
+        _soundSource2 = World.CreateEntity("ExplosionSource");
         var transform2 = _soundSource2.AddComponent<TransformComponent>();
         transform2.Position = new Vector2(1080, 360);
 
@@ -165,7 +158,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         audio2.Volume = 0.8f;
 
         // Sound source 3 - Center top, ambient loop
-        _soundSource3 = _world.CreateEntity("AmbientSource");
+        _soundSource3 = World.CreateEntity("AmbientSource");
         var transform3 = _soundSource3.AddComponent<TransformComponent>();
         transform3.Position = new Vector2(640, 100);
 
@@ -196,10 +189,10 @@ public class SpatialAudioDemoScene : DemoSceneBase
                 var moveSpeed = 300f * (float)gameTime.DeltaTime;
                 var movement = Vector2.Zero;
 
-                if (_input.IsKeyDown(Keys.W)) movement.Y -= moveSpeed;
-                if (_input.IsKeyDown(Keys.S)) movement.Y += moveSpeed;
-                if (_input.IsKeyDown(Keys.A)) movement.X -= moveSpeed;
-                if (_input.IsKeyDown(Keys.D)) movement.X += moveSpeed;
+                if (_input.IsKeyDown(Key.W)) movement.Y -= moveSpeed;
+                if (_input.IsKeyDown(Key.S)) movement.Y += moveSpeed;
+                if (_input.IsKeyDown(Key.A)) movement.X -= moveSpeed;
+                if (_input.IsKeyDown(Key.D)) movement.X += moveSpeed;
 
                 transform.Position += movement;
 
@@ -211,7 +204,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         }
 
         // Toggle sound sources
-        if (_input.IsKeyPressed(Keys.D1) && _soundSource1 != null)
+        if (_input.IsKeyPressed(Key.D1) && _soundSource1 != null)
         {
             var audio = _soundSource1.GetComponent<AudioSourceComponent>();
             if (audio != null)
@@ -221,7 +214,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
             }
         }
 
-        if (_input.IsKeyPressed(Keys.D2) && _soundSource2 != null)
+        if (_input.IsKeyPressed(Key.D2) && _soundSource2 != null)
         {
             var audio = _soundSource2.GetComponent<AudioSourceComponent>();
             if (audio != null)
@@ -231,7 +224,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
             }
         }
 
-        if (_input.IsKeyPressed(Keys.D3) && _soundSource3 != null)
+        if (_input.IsKeyPressed(Key.D3) && _soundSource3 != null)
         {
             var audio = _soundSource3.GetComponent<AudioSourceComponent>();
             if (audio != null)
@@ -248,32 +241,32 @@ public class SpatialAudioDemoScene : DemoSceneBase
         var y = 10f;
         var lineHeight = 20f;
 
-        _renderer.DrawText("=== 2D Spatial Audio Demo ===", 10, y, Color.White);
+        Renderer.DrawText("=== 2D Spatial Audio Demo ===", 10, y, Color.White);
         y += lineHeight * 2;
 
-        _renderer.DrawText("Move the player (green) with WASD", 10, y, Color.Cyan);
+        Renderer.DrawText("Move the player (green) with WASD", 10, y, Color.Cyan);
         y += lineHeight;
-        _renderer.DrawText("Hear sounds change based on distance & position", 10, y, Color.Cyan);
+        Renderer.DrawText("Hear sounds change based on distance & position", 10, y, Color.Cyan);
         y += lineHeight * 2;
 
-        _renderer.DrawText("CONTROLS:", 10, y, Color.Yellow);
+        Renderer.DrawText("CONTROLS:", 10, y, Color.Yellow);
         y += lineHeight;
-        _renderer.DrawText("  WASD - Move player (listener)", 10, y, Color.White);
+        Renderer.DrawText("  WASD - Move player (listener)", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  1 - Toggle Coin (left)", 10, y, Color.White);
+        Renderer.DrawText("  1 - Toggle Coin (left)", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  2 - Trigger Explosion (right)", 10, y, Color.White);
+        Renderer.DrawText("  2 - Trigger Explosion (right)", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  3 - Toggle Ambient (top)", 10, y, Color.White);
+        Renderer.DrawText("  3 - Toggle Ambient (top)", 10, y, Color.White);
         y += lineHeight;
-        _renderer.DrawText("  ESC - Return to menu", 10, y, Color.White);
+        Renderer.DrawText("  ESC - Return to menu", 10, y, Color.White);
         y += lineHeight * 2;
 
         if (!_soundsLoaded)
         {
-            _renderer.DrawText("No sounds loaded - visualization only!", 10, y, Color.Orange);
+            Renderer.DrawText("No sounds loaded - visualization only!", 10, y, Color.Orange);
             y += lineHeight;
-            _renderer.DrawText("Add WAV files to assets/sounds/ folder", 10, y, Color.Orange);
+            Renderer.DrawText("Add WAV files to assets/sounds/ folder", 10, y, Color.Orange);
             y += lineHeight;
         }
 
@@ -283,8 +276,8 @@ public class SpatialAudioDemoScene : DemoSceneBase
             var transform = _player.GetComponent<TransformComponent>();
             if (transform != null)
             {
-                _renderer.DrawCircleFilled(transform.Position.X, transform.Position.Y, 15, Color.Green);
-                _renderer.DrawText("Player", transform.Position.X - 20, transform.Position.Y - 30, Color.Green);
+                Renderer.DrawCircleFilled(transform.Position.X, transform.Position.Y, 15, Color.Green);
+                Renderer.DrawText("Player", transform.Position.X - 20, transform.Position.Y - 30, Color.Green);
             }
         }
 
@@ -321,21 +314,21 @@ public class SpatialAudioDemoScene : DemoSceneBase
         var isActive = audio.IsEnabled;
 
         // Draw min/max distance circles
-        _renderer.DrawCircleOutline(pos.X, pos.Y, audio.MinDistance, Color.FromArgb(50, color.R, color.G, color.B), 1);
-        _renderer.DrawCircleOutline(pos.X, pos.Y, audio.MaxDistance, Color.FromArgb(30, color.R, color.G, color.B), 1);
+        Renderer.DrawCircleOutline(pos.X, pos.Y, audio.MinDistance, Color.FromArgb(50, color.R, color.G, color.B), 1);
+        Renderer.DrawCircleOutline(pos.X, pos.Y, audio.MaxDistance, Color.FromArgb(30, color.R, color.G, color.B), 1);
 
         // Draw source
         var sourceColor = isActive ? color : Color.FromArgb((byte)(color.R / 2), (byte)(color.G / 2), (byte)(color.B / 2));
-        _renderer.DrawCircleFilled(pos.X, pos.Y, 10, sourceColor);
+        Renderer.DrawCircleFilled(pos.X, pos.Y, 10, sourceColor);
         
         // Label
-        _renderer.DrawText(label, pos.X - 20, pos.Y - 25, sourceColor);
+        Renderer.DrawText(label, pos.X - 20, pos.Y - 25, sourceColor);
         
         string status = audio.LoopCount == -1 
             ? (isActive ? "ON" : "OFF")        // Looping sounds
             : (audio.IsPlaying ? "FIRING" : "READY");  // One-shot sounds
     
-        _renderer.DrawText(status, pos.X - 20, pos.Y + 15, sourceColor);
+        Renderer.DrawText(status, pos.X - 20, pos.Y + 15, sourceColor);
 
         // Show spatial volume
         if (_player != null && isActive)
@@ -344,7 +337,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
             if (playerPos.HasValue)
             {
                 var distance = Vector2.Distance(pos, playerPos.Value);
-                _renderer.DrawText($"d:{distance:F0} v:{audio.SpatialVolume:F2} p:{audio.SpatialPan:F2}", 
+                Renderer.DrawText($"d:{distance:F0} v:{audio.SpatialVolume:F2} p:{audio.SpatialPan:F2}", 
                     pos.X - 40, pos.Y + 30, Color.White);
             }
         }
@@ -360,6 +353,6 @@ public class SpatialAudioDemoScene : DemoSceneBase
         if (transform == null || audio == null || !audio.IsEnabled) return;
 
         var lineColor = Color.FromArgb(100, color.R, color.G, color.B);
-        _renderer.DrawLine(playerPos.X, playerPos.Y, transform.Position.X, transform.Position.Y, lineColor, 1);
+        Renderer.DrawLine(playerPos.X, playerPos.Y, transform.Position.X, transform.Position.Y, lineColor, 1);
     }
 }
