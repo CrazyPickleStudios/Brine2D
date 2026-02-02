@@ -19,7 +19,7 @@ public class ParticleSystemTests : TestBase
     {
         _world = CreateTestWorld();
         var poolProvider = new DefaultObjectPoolProvider();
-        _particleSystem = new ParticleSystem(_world, poolProvider);
+        _particleSystem = new ParticleSystem(poolProvider);
     }
 
     #region Emission Tests
@@ -38,7 +38,7 @@ public class ParticleSystemTests : TestBase
         emitter.ParticleLifetime = 2f;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)), _world);
 
         // Assert - Use ParticleCount (public API)
         emitter.ParticleCount.Should().BeGreaterThan(0);
@@ -56,7 +56,7 @@ public class ParticleSystemTests : TestBase
         emitter.IsEmitting = false;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)), _world); 
 
         // Assert
         emitter.ParticleCount.Should().Be(0);
@@ -74,7 +74,7 @@ public class ParticleSystemTests : TestBase
         emitter.ParticleLifetime = 10f;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)), _world); 
 
         // Assert
         emitter.ParticleCount.Should().BeLessThanOrEqualTo(50);
@@ -91,7 +91,7 @@ public class ParticleSystemTests : TestBase
         emitter.IsEnabled = false;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)), _world); 
 
         // Assert
         emitter.ParticleCount.Should().Be(0);
@@ -117,10 +117,10 @@ public class ParticleSystemTests : TestBase
         emitter.SpeedVariation = 0;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)), _world); 
         var initialCount = emitter.ParticleCount;
 
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(0.1)));
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(0.1)), _world); 
 
         // Assert
         emitter.ParticleCount.Should().Be(initialCount + 1);
@@ -146,8 +146,8 @@ public class ParticleSystemTests : TestBase
         emitter.SpeedVariation = 0;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)));
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)), _world); 
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1.0)), _world); 
 
         // Assert - Use ActiveParticles
         var particlesMovedDown = emitter.ActiveParticles.Count(p => p.Position.Y > 0);
@@ -166,13 +166,13 @@ public class ParticleSystemTests : TestBase
         emitter.LifetimeVariation = 0;
 
         // Act - Emit particles
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)), _world);
         emitter.IsEmitting = false; // Now stop emitting after first batch
         var initialCount = emitter.ParticleCount;
         initialCount.Should().BeGreaterThan(0);
 
         // Wait for particles to expire
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(1.0)), _world);
 
         // Assert - All particles should be expired
         emitter.ParticleCount.Should().Be(0);
@@ -194,21 +194,21 @@ public class ParticleSystemTests : TestBase
         emitter.LifetimeVariation = 0;
 
         // Act - Emit first batch
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)), _world); 
         var firstBatchCount = emitter.ParticleCount;
         
         // Stop emitting so no new particles are created
         emitter.IsEmitting = false;
 
         // Wait for particles to expire (they get returned to pool)
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(0.5)));
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(0.5)), _world);
         emitter.ParticleCount.Should().Be(0);
         
         // Re-enable emission
         emitter.IsEmitting = true;
 
         // Emit again (should reuse pooled particles)
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.6), TimeSpan.FromSeconds(0.1)));
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.6), TimeSpan.FromSeconds(0.1)), _world); 
         var secondBatchCount = emitter.ParticleCount;
 
         // Assert - Should have emitted similar amounts (pooling working)
@@ -230,7 +230,7 @@ public class ParticleSystemTests : TestBase
         emitter.InitialVelocity = new Vector2(100, 100);
 
         // Act - Update for 0.15 seconds to emit at least 1 particle (10 * 0.15 = 1.5 particles)
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.15)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.15)), _world); 
         
         var particle = emitter.ActiveParticles.FirstOrDefault();
         particle.Should().NotBeNull();
@@ -239,10 +239,10 @@ public class ParticleSystemTests : TestBase
         particle.Velocity.Should().NotBe(Vector2.Zero);
 
         // Wait for particle to expire (returns to pool)
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.15), TimeSpan.FromSeconds(0.2)));
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.15), TimeSpan.FromSeconds(0.2)), _world); 
 
         // Emit new particles (reuses pool)
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.35), TimeSpan.FromSeconds(0.15)));
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.35), TimeSpan.FromSeconds(0.15)), _world); 
 
         // Assert - New particles should start fresh (pooled particles were reset)
         emitter.ParticleCount.Should().BeGreaterThan(0);
@@ -267,7 +267,7 @@ public class ParticleSystemTests : TestBase
         emitter.VelocitySpread = 0;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)), _world); 
 
         // Assert - Use ActiveParticles
         foreach (var particle in emitter.ActiveParticles)
@@ -292,7 +292,7 @@ public class ParticleSystemTests : TestBase
         emitter.InitialVelocity = Vector2.Zero;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)), _world); 
 
         // Assert - Use ActiveParticles
         foreach (var particle in emitter.ActiveParticles)
@@ -318,11 +318,11 @@ public class ParticleSystemTests : TestBase
         emitter.RotationSpeedVariation = 0;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)), _world); 
         // Use ActiveParticles
         var initialRotations = emitter.ActiveParticles.Select(p => p.Rotation).ToList();
 
-        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(1.0)), _world); 
 
         // Assert
         for (int i = 0; i < emitter.ActiveParticles.Count && i < initialRotations.Count; i++)
@@ -345,7 +345,7 @@ public class ParticleSystemTests : TestBase
         emitter.EmissionRate = 10f;
 
         // Act & Assert
-        var act = () => _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)));
+        var act = () => _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)), _world); 
         act.Should().NotThrow();
         emitter.ParticleCount.Should().Be(0);
     }
@@ -360,7 +360,7 @@ public class ParticleSystemTests : TestBase
         emitter.EmissionRate = 0f;
 
         // Act
-        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)));
+        _particleSystem.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0)), _world); 
 
         // Assert
         emitter.ParticleCount.Should().Be(0);
