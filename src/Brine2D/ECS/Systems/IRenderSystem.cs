@@ -4,7 +4,6 @@ namespace Brine2D.ECS.Systems;
 
 /// <summary>
 /// Interface for systems that render visuals.
-/// Lives in Brine2D.Rendering.ECS because it depends on IRenderer.
 /// </summary>
 public interface IRenderSystem : ISystem
 {
@@ -16,5 +15,7 @@ public interface IRenderSystem : ISystem
     /// <summary>
     /// Renders the system for the current frame.
     /// </summary>
-    void Render(IRenderer renderer);
+    /// <param name="renderer">The renderer to draw with.</param>
+    /// <param name="world">The entity world to operate on.</param>
+    void Render(IRenderer renderer, IEntityWorld world);
 }

@@ -14,9 +14,9 @@ namespace Brine2D.Systems.Audio;
 /// </summary>
 public class AudioSystem : IUpdateSystem
 {
+    public string Name => "AudioSystem";
     public int UpdateOrder => 400;
 
-    private readonly IEntityWorld _world;
     private readonly IAudioService _audio;
     
     // Thread-safe queue for audio events from SDL thread
@@ -28,9 +28,8 @@ public class AudioSystem : IUpdateSystem
     // Track previous enabled state to detect changes
     private readonly Dictionary<Entity, bool> _previousEnabledState = new();
 
-    public AudioSystem(IEntityWorld world, IAudioService audio)
+    public AudioSystem(IAudioService audio)
     {
-        _world = world;
         _audio = audio;
         
         _audio.OnTrackStopped += OnTrackStopped;
@@ -46,15 +45,15 @@ public class AudioSystem : IUpdateSystem
         });
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         // Process audio events from SDL thread (thread-safe)
         ProcessAudioEvents();
         
         // Find the active audio listener
-        var listener = FindActiveListener();
+        var listener = FindActiveListener(world);
 
-        var audioSources = _world.GetEntitiesWithComponent<AudioSourceComponent>();
+        var audioSources = world.GetEntitiesWithComponent<AudioSourceComponent>();
 
         foreach (var entity in audioSources)
         {
@@ -189,9 +188,9 @@ public class AudioSystem : IUpdateSystem
         }
     }
 
-    private Entity? FindActiveListener()
+    private Entity? FindActiveListener(IEntityWorld world)
     {
-        var listeners = _world.GetEntitiesWithComponent<AudioListenerComponent>();
+        var listeners = world.GetEntitiesWithComponent<AudioListenerComponent>();
         
         // Return first enabled listener
         foreach (var listener in listeners)
@@ -221,8 +220,8 @@ public class AudioSystem : IUpdateSystem
         }
 
         // Calculate distance
-        var sourcePos = sourceTransform.WorldPosition;
-        var listenerPos = listenerTransform.WorldPosition;
+        var sourcePos = sourceTransform.Position;
+        var listenerPos = listenerTransform.Position;
         var distance = Vector2.Distance(sourcePos, listenerPos);
 
         // Calculate distance-based attenuation

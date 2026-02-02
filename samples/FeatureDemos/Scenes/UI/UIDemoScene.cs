@@ -72,7 +72,7 @@ public class UIDemoScene : DemoSceneBase
         // ===== LEFT COLUMN: Basic Components =====
         
         // Panel for basic components
-        var basicPanel = new UIPanel(new Vector2(20, 60), new Vector2(280, 540)) // ← Shortened height
+        var basicPanel = new UIPanel(new Vector2(20, 60), new Vector2(280, 540)) 
         {
             BackgroundColor = Color.FromArgb(200, 40, 40, 60),
             BorderColor = Color.FromArgb(100, 100, 150)

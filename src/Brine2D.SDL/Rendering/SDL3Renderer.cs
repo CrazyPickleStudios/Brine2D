@@ -18,7 +18,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 {
     private readonly ILogger<SDL3Renderer> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly RenderingOptions _options;  
+    private readonly RenderingOptions _renderingOptions;  
+    private readonly WindowOptions _windowOptions;
     private readonly IFontLoader? _fontLoader;
     private readonly EventBus? _eventBus;  
 
@@ -54,17 +55,19 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public SDL3Renderer(
         ILogger<SDL3Renderer> logger,
         ILoggerFactory loggerFactory,
-        IOptions<RenderingOptions> options,
+        IOptions<RenderingOptions> renderingOptions,
+        IOptions<WindowOptions> windowOptions,
         IFontLoader? fontLoader = null,
         EventBus? eventBus = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _renderingOptions = renderingOptions?.Value ?? throw new ArgumentNullException(nameof(renderingOptions));
+        _windowOptions = windowOptions?.Value ?? throw new ArgumentNullException(nameof(windowOptions));
         _fontLoader = fontLoader;
         _eventBus = eventBus;
 
-        _viewport = new ViewportState(_options.WindowWidth, _options.WindowHeight);
+        _viewport = new ViewportState(_windowOptions.Width, _windowOptions.Height);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -85,15 +88,15 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
 
         SDL3.SDL.WindowFlags windowFlags = 0;
-        if (_options.Resizable)
+        if (_windowOptions.Resizable)
             windowFlags |= SDL3.SDL.WindowFlags.Resizable;
-        if (_options.Fullscreen)
+        if (_windowOptions.Fullscreen)
             windowFlags |= SDL3.SDL.WindowFlags.Fullscreen;
 
         _window = SDL3.SDL.CreateWindow(
-            _options.WindowTitle,
-            _options.WindowWidth,
-            _options.WindowHeight,
+            _windowOptions.Title,    
+            _windowOptions.Width,    
+            _windowOptions.Height,  
             windowFlags
         );
 
@@ -114,7 +117,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
 
         // Set VSync
-        if (!SDL3.SDL.SetRenderVSync(_renderer, _options.VSync ? 1 : 0))
+        if (!SDL3.SDL.SetRenderVSync(_renderer, _renderingOptions.VSync ? 1 : 0))
         {
             _logger.LogWarning("Failed to set VSync: {Error}", SDL3.SDL.GetError());
         }

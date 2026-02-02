@@ -12,9 +12,9 @@ var builder = GameApplication.CreateBuilder(args);
 // Add Brine2D services (just like ASP.NET!)
 builder.Services.AddBrine2D(options =>
 {
-    options.WindowTitle = "03 - Dependency Injection";
-    options.WindowWidth = 1280;
-    options.WindowHeight = 720;
+    options.Window.Title = "03 - Dependency Injection";
+    options.Window.Width = 1280;
+    options.Window.Height = 720;
 });
 
 // Register custom services (just like ASP.NET!)

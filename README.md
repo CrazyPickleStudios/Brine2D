@@ -79,7 +79,7 @@ public class GameScene : Scene
 | Request scope (DI) | **Scene scope (EntityWorld)** |
 | Property injection | **Property injection** |
 | Middleware pipeline | ECS System pipelines |
-| `appsettings.json` | `gamesettings.json` |
+| `appsettings.json` | `appsettings.json` |
 | Convention over configuration | Convention over configuration |
 
 ## Features

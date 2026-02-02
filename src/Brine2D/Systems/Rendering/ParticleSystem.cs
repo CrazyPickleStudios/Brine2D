@@ -16,31 +16,26 @@ namespace Brine2D.Systems.Rendering;
 /// Lives in Brine2D.Rendering.ECS because it's the bridge between ECS and Rendering.
 /// Now supports textures, rotation, and trails!
 /// </summary>
-/// </summary>
 public class ParticleSystem : IUpdateSystem, IRenderSystem
 {
+    public string Name => "ParticleSystem";
     public int UpdateOrder => 250; 
     public int RenderOrder => 100;
 
-    private readonly IEntityWorld _world;
     private readonly Random _random = new();
     private readonly ObjectPool<Particle> _particlePool;
 
-    public ParticleSystem(
-        IEntityWorld world, 
-        ObjectPoolProvider poolProvider)
+    public ParticleSystem(ObjectPoolProvider poolProvider)
     {
-        _world = world;
-        
         // Create particle pool
         _particlePool = poolProvider.Create(new PoolableObjectPolicy<Particle>());
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         var deltaTime = (float)gameTime.DeltaTime;
         
-        var emitters = _world.GetEntitiesWithComponent<ParticleEmitterComponent>();
+        var emitters = world.GetEntitiesWithComponent<ParticleEmitterComponent>(); 
 
         foreach (var entity in emitters)
         {
@@ -108,7 +103,7 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
                 break;
 
             // Spawn position based on shape
-            var spawnPos = transform.WorldPosition + emitter.SpawnOffset;
+            var spawnPos = transform.Position + emitter.SpawnOffset;
             spawnPos += GetSpawnOffsetForShape(emitter);
 
             // Random velocity
@@ -225,9 +220,9 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
             MathF.Sin(angle) * distance);
     }
 
-    public void Render(IRenderer renderer)
+    public void Render(IRenderer renderer, IEntityWorld world)
     {
-        var emitters = _world.GetEntitiesWithComponent<ParticleEmitterComponent>();
+        var emitters = world.GetEntitiesWithComponent<ParticleEmitterComponent>();
 
         foreach (var entity in emitters)
         {

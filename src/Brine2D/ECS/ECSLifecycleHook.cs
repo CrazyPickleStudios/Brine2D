@@ -11,21 +11,32 @@ namespace Brine2D.ECS;
 internal class ECSLifecycleHook : ISceneLifecycleHook
 {
     private readonly UpdatePipeline _updatePipeline;
-        
-    public int Order => 100;
+
+    public int Order => 100; // Run after most other hooks
 
     public ECSLifecycleHook(UpdatePipeline updatePipeline)
     {
         _updatePipeline = updatePipeline ?? throw new ArgumentNullException(nameof(updatePipeline));
     }
 
-    public void PreUpdate(GameTime gameTime) { }
-
-    public void PostUpdate(GameTime gameTime)
+    public void PreUpdate(GameTime gameTime, IEntityWorld world)
     {
-        _updatePipeline.Execute(gameTime);
+        // Nothing needed - systems run in PostUpdate
     }
 
-    public void PreRender(GameTime gameTime) { }
-    public void PostRender(GameTime gameTime) { }
+    public void PostUpdate(GameTime gameTime, IEntityWorld world)
+    {
+        // Execute all ECS update systems
+        _updatePipeline.Execute(gameTime, world);
+    }
+
+    public void PreRender(GameTime gameTime, IEntityWorld world)
+    {
+        // Nothing needed - rendering happens in ECSRenderHook
+    }
+
+    public void PostRender(GameTime gameTime, IEntityWorld world)
+    {
+        // Nothing needed - rendering happens in ECSRenderHook
+    }
 }

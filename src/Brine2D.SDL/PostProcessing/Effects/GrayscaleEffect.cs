@@ -202,7 +202,6 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
         {
             new()
             {
-                // CHANGED: Match the render target format (R8G8B8A8Unorm by default)
                 Format = SDL3.SDL.GPUTextureFormat.R8G8B8A8Unorm,
                 BlendState = new SDL3.SDL.GPUColorTargetBlendState
                 {

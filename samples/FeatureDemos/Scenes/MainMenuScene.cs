@@ -43,10 +43,12 @@ public class MainMenuScene : Scene
     public MainMenuScene(
         IInputContext input,
         ISceneManager sceneManager,
+        IGameContext gameContext,  
         DebugRenderer debugRenderer)
     {
         _input = input;
         _sceneManager = sceneManager;
+        _gameContext = gameContext; 
 
         debugRenderer.ShowEntityNames = false;
         

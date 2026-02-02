@@ -14,23 +14,22 @@ namespace Brine2D.Systems.Rendering;
 /// </summary>
 public class CameraSystem : IUpdateSystem
 {
+    public string Name => "CameraSystem"; 
     public int UpdateOrder => 500; 
 
-    private readonly IEntityWorld _world;
     private readonly ICameraManager _cameraManager;
 
-    public CameraSystem(IEntityWorld world, ICameraManager cameraManager)
+    public CameraSystem(ICameraManager cameraManager)
     {
-        _world = world;
         _cameraManager = cameraManager;
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         var deltaTime = (float)gameTime.DeltaTime;
 
         // Group targets by camera name
-        var targetsByCamera = _world.GetEntitiesWithComponent<CameraFollowComponent>()
+        var targetsByCamera = world.GetEntitiesWithComponent<CameraFollowComponent>() 
             .Select(e => new { Entity = e, Follow = e.GetComponent<CameraFollowComponent>() })
             .Where(x => x.Follow?.IsActive == true)
             .GroupBy(x => x.Follow!.CameraName);
@@ -58,7 +57,7 @@ public class CameraSystem : IUpdateSystem
                 continue;
 
             // Calculate target position
-            var targetPos = transform.WorldPosition + follow.Offset;
+            var targetPos = transform.Position + follow.Offset;
 
             // Apply deadzone
             var currentPos = camera.Position;

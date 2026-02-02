@@ -63,8 +63,8 @@ public class ManualControlScene : DemoSceneBase
         }
         else
         {
-            // Execute pipeline manually
-            _updatePipeline.Execute(gameTime);
+            // Execute pipeline manually - CHANGED: Pass world!
+            _updatePipeline.Execute(gameTime, World);
             World.Update(gameTime);
         }
     }
@@ -74,8 +74,8 @@ public class ManualControlScene : DemoSceneBase
         // Manually control frame management
         Renderer.BeginFrame();
         
-        // Manually control rendering order
-        _renderPipeline.Execute(Renderer);
+        // Manually control rendering order - CHANGED: Pass world!
+        _renderPipeline.Execute(Renderer, World);
         
         // Draw custom UI on top
         Renderer.DrawText("Manual Control Mode", 10, 10, Color.Yellow);

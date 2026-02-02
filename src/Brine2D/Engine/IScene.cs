@@ -1,14 +1,11 @@
 ﻿using Brine2D.Core;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
+using Brine2D.ECS;
 
 namespace Brine2D.Engine;
 
 /// <summary>
 /// Interface for game scenes.
+/// All scenes have an entity world for managing game objects.
 /// </summary>
 public interface IScene
 {
@@ -16,6 +13,16 @@ public interface IScene
     /// Gets the name of the scene.
     /// </summary>
     string Name { get; }
+
+    /// <summary>
+    /// Gets the entity world for this scene.
+    /// Each scene has its own isolated world for managing entities and components.
+    /// </summary>
+    /// <remarks>
+    /// The world is automatically created and managed by the framework for Scene-based implementations.
+    /// Custom IScene implementations must provide their own world.
+    /// </remarks>
+    IEntityWorld World { get; }
 
     /// <summary>
     /// Gets whether lifecycle hooks should execute automatically.

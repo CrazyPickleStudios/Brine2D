@@ -11,18 +11,12 @@ namespace Brine2D.Rendering.SDL;
 
 public static class SDL3RenderingServiceCollectionExtensions
 {
-    public static IServiceCollection AddSDL3Rendering(
-        this IServiceCollection services,
-        Action<RenderingOptions>? configureOptions = null)
+    // Remove the configureOptions parameter - configuration now comes from Brine2DOptions
+    public static IServiceCollection AddSDL3Rendering(this IServiceCollection services)
     {
         if (services == null)
         {
             throw new ArgumentNullException(nameof(services));
-        }
-
-        if (configureOptions != null)
-        {
-            services.Configure(configureOptions);
         }
 
         services.TryAddSingleton<IFontLoader, SDL3FontLoader>();
@@ -30,29 +24,29 @@ public static class SDL3RenderingServiceCollectionExtensions
         // Register renderer
         services.TryAddSingleton<IRenderer>(provider =>
         {
-            var options = provider.GetRequiredService<IOptions<RenderingOptions>>();
+            var renderingOptions = provider.GetRequiredService<IOptions<RenderingOptions>>();
+            var windowOptions = provider.GetRequiredService<IOptions<WindowOptions>>();
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var logger = loggerFactory.CreateLogger("SDL3Rendering");
             var fontLoader = provider.GetService<IFontLoader>();
             var eventBus = provider.GetService<EventBus>();
             var postProcessingOptions = provider.GetService<IOptions<PostProcessingOptions>>();
-            var postProcessPipeline = provider.GetService<SDL3PostProcessPipeline>(); // Changed to SDL3PostProcessPipeline
+            var postProcessPipeline = provider.GetService<SDL3PostProcessPipeline>();
 
             // Warn if post-processing is enabled with legacy renderer
             if (postProcessingOptions?.Value?.Enabled == true && 
-                options.Value.Backend == GraphicsBackend.LegacyRenderer)
+                renderingOptions.Value.Backend == GraphicsBackend.LegacyRenderer)
             {
-                logger.LogWarning("Post-processing is not supported with LegacyRenderer backend. " +
-                                 "Switch to GraphicsBackend.GPU to enable post-processing effects. " +
-                                 "Post-processing will be disabled.");
+                logger.LogWarning("Post-processing is not supported with LegacyRenderer backend.");
             }
 
-            return options.Value.Backend switch
+            return renderingOptions.Value.Backend switch
             {
                 GraphicsBackend.GPU => new SDL3GPURenderer(
                     provider.GetRequiredService<ILogger<SDL3GPURenderer>>(),
                     loggerFactory,
-                    options,
+                    renderingOptions,
+                    windowOptions,
                     postProcessingOptions,
                     postProcessPipeline,
                     fontLoader,
@@ -60,18 +54,20 @@ public static class SDL3RenderingServiceCollectionExtensions
                 GraphicsBackend.LegacyRenderer => new SDL3Renderer(
                     provider.GetRequiredService<ILogger<SDL3Renderer>>(),
                     loggerFactory,
-                    options,
+                    renderingOptions,
+                    windowOptions,
                     fontLoader,
                     eventBus),
                 GraphicsBackend.Auto => new SDL3GPURenderer(
                     provider.GetRequiredService<ILogger<SDL3GPURenderer>>(),
                     loggerFactory,
-                    options,
+                    renderingOptions,
+                    windowOptions,
                     postProcessingOptions,
                     postProcessPipeline,
                     fontLoader,
                     eventBus), 
-                _ => throw new NotSupportedException($"Backend {options.Value.Backend} not supported")
+                _ => throw new NotSupportedException($"Backend {renderingOptions.Value.Backend} not supported")
             };
         });
 

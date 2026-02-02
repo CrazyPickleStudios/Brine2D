@@ -9,21 +9,29 @@ namespace Brine2D.Engine;
 
 /// <summary>
 /// Base class for game scenes.
-/// Framework properties (Logger, World) are set automatically by SceneManager.
-/// Derive from this and inject only YOUR dependencies via constructor.
 /// </summary>
+/// <remarks>
+/// <para><strong>Lifecycle Order:</strong></para>
+/// <para>Update: PreUpdate hooks → Scene.Update() → World.Update() → PostUpdate hooks</para>
+/// <para>Render: PreRender hooks → World.Render() → Scene.Render() → PostRender hooks</para>
+/// <para>
+/// <strong>When to use Scene.OnRender():</strong>
+/// Use for UI, HUD, overlays, and scene-specific effects that should render on top of entities.
+/// Entity/Component rendering happens automatically before Scene.OnRender().
+/// </para>
+/// </remarks>
 public abstract class Scene : IScene
 {
     /// <summary>
     /// Logger for this scene. Set automatically by the framework.
     /// </summary>
-    internal protected ILogger Logger { get; internal set; } = null!;
+    protected internal ILogger Logger { get; internal set; } = null!;
 
     /// <summary>
     /// Entity world for this scene. Set automatically by the framework.
     /// Each scene gets its own isolated world.
     /// </summary>
-    internal protected IEntityWorld World { get; internal set; } = null!;
+    public IEntityWorld World { get; internal set; } = null!;
 
     /// <summary>
     /// Renderer for this scene. Set automatically by the framework.
@@ -32,7 +40,7 @@ public abstract class Scene : IScene
     protected internal IRenderer Renderer { get; internal set; } = null!;
     
     /// <summary>
-    /// Internal access for SceneManager and lifecycle hooks.
+    /// Internal access for SceneManager.
     /// </summary>
     internal IEntityWorld EntityWorld => World;
 
@@ -42,7 +50,7 @@ public abstract class Scene : IScene
     
     /// <summary>
     /// Constructs a scene.
-    /// Framework properties (Logger, World) are set automatically by SceneManager.
+    /// Framework properties (Logger, World, Renderer) are set automatically by SceneManager.
     /// Override and add your own constructor parameters for dependencies you need.
     /// </summary>
     protected Scene() { }

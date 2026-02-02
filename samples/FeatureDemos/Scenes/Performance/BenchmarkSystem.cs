@@ -9,22 +9,19 @@ namespace FeatureDemos.Scenes.Performance;
 
 public class BenchmarkSystem : IUpdateSystem
 {
-    private readonly IEntityWorld _world;
-    
     public string Name => "BenchmarkSystem";
     public int UpdateOrder => 50;
     
-    public BenchmarkSystem(IEntityWorld world)
+    public BenchmarkSystem()
     {
-        _world = world;
     }
     
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         var deltaTime = (float)gameTime.DeltaTime;
         
         // Heavy CPU workload - now it will show in F4!
-        _world.Query()
+        world.Query()
             .With<TransformComponent>()
             .With<VelocityComponent>()
             .ForEach((Entity entity, TransformComponent transform, VelocityComponent velocity) =>

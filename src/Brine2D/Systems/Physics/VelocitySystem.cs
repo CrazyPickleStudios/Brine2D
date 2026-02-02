@@ -11,19 +11,17 @@ namespace Brine2D.Systems.Physics;
 /// </summary>
 public class VelocitySystem : IUpdateSystem
 {
-    private readonly IEntityWorld _world;
-
+    public string Name => "VelocitySystem";
     public int UpdateOrder => 100; 
 
-    public VelocitySystem(IEntityWorld world)
+    public VelocitySystem()
     {
-        _world = world;
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         var deltaTime = (float)gameTime.DeltaTime;
-        var entities = _world.GetEntitiesWithComponents<TransformComponent, VelocityComponent>();
+        var entities = world.GetEntitiesWithComponents<TransformComponent, VelocityComponent>();
 
         foreach (var entity in entities)
         {

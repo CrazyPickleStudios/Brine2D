@@ -21,9 +21,9 @@ namespace Brine2D.Hosting
         {
             _hostBuilder = Host.CreateApplicationBuilder(args);
 
-            // Configure default settings
-            Configuration.AddJsonFile("gamesettings.json", optional: true, reloadOnChange: true);
-            Configuration.AddJsonFile($"gamesettings.{System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: true);
+            // Configure default settings - use ASP.NET conventions
+            Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+            Configuration.AddJsonFile($"appsettings.{System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: true);
 
             // Add core engine services
             Services.AddBrineEngine();

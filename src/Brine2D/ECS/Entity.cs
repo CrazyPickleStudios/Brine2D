@@ -17,6 +17,10 @@ public class Entity
     private readonly ILogger<Entity>? _logger;
     private readonly Dictionary<Type, Component> _components = new();
     private readonly HashSet<string> _tags = new();
+    
+    // Hierarchy support
+    private Entity? _parent;
+    private readonly List<Entity> _children = new();
 
     public Guid Id { get; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
@@ -27,8 +31,26 @@ public class Entity
     /// Gets the tags collection for this entity.
     /// </summary>
     public HashSet<string> Tags => _tags;
+    
+    /// <summary>
+    /// Gets the parent entity, or null if this is a root entity.
+    /// </summary>
+    public Entity? Parent => _parent;
+    
+    /// <summary>
+    /// Gets the read-only collection of child entities.
+    /// </summary>
+    public IReadOnlyList<Entity> Children => _children.AsReadOnly();
+    
+    /// <summary>
+    /// Gets whether this entity is a root entity (has no parent).
+    /// </summary>
+    public bool IsRoot => _parent == null;
 
-    public Entity(ILogger<Entity>? logger = null)
+    /// <summary>
+    /// Internal constructor. Entities should be created via World.CreateEntity().
+    /// </summary>
+    internal Entity(ILogger<Entity>? logger = null)
     {
         _logger = logger;
     }
@@ -69,6 +91,15 @@ public class Entity
     public virtual void OnRender(IRenderer renderer)
     {
         // Override in derived classes
+        
+        // Render all enabled components
+        foreach (var component in _components.Values)
+        {
+            if (component.IsEnabled)
+            {
+                component.OnRender(renderer);
+            }
+        }
     }
 
     /// <summary>
@@ -79,6 +110,19 @@ public class Entity
     {
         // Override in derived classes
         
+        // Destroy all children first (cascade destruction)
+        foreach (var child in _children.ToList()) // ToList to avoid modification during iteration
+        {
+            World?.DestroyEntity(child);
+        }
+        
+        // Remove from parent
+        if (_parent != null)
+        {
+            _parent._children.Remove(this);
+            _parent = null;
+        }
+        
         // Notify all components they're being removed
         foreach (var component in _components.Values.ToList())
         {
@@ -86,6 +130,210 @@ public class Entity
         }
         
         _components.Clear();
+        _children.Clear();
+    }
+
+    #endregion
+
+    #region Hierarchy Management
+
+    /// <summary>
+    /// Sets the parent of this entity.
+    /// </summary>
+    /// <param name="newParent">The new parent entity, or null to make this a root entity.</param>
+    /// <returns>This entity for method chaining.</returns>
+    /// <remarks>
+    /// Changing parent affects transform hierarchy if TransformComponent is present.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var weapon = World.CreateEntity("Sword");
+    /// weapon.SetParent(player); // Weapon follows player
+    /// </code>
+    /// </example>
+    public Entity SetParent(Entity? newParent)
+    {
+        // Don't parent to self
+        if (newParent == this)
+        {
+            _logger?.LogWarning("Cannot set entity {Name} as its own parent", Name);
+            return this;
+        }
+        
+        // Don't create circular references
+        if (newParent != null && newParent.IsDescendantOf(this))
+        {
+            _logger?.LogWarning("Cannot set parent - would create circular reference");
+            return this;
+        }
+        
+        // Remove from old parent
+        if (_parent != null)
+        {
+            _parent._children.Remove(this);
+        }
+        
+        // Set new parent
+        _parent = newParent;
+        
+        // Add to new parent's children
+        if (_parent != null)
+        {
+            _parent._children.Add(this);
+        }
+        
+        return this;
+    }
+    
+    /// <summary>
+    /// Adds a child entity to this entity.
+    /// </summary>
+    /// <param name="child">The entity to add as a child.</param>
+    /// <returns>This entity for method chaining.</returns>
+    public Entity AddChild(Entity child)
+    {
+        child.SetParent(this);
+        return this;
+    }
+    
+    /// <summary>
+    /// Removes a child entity from this entity (makes it a root entity).
+    /// </summary>
+    /// <param name="child">The child entity to remove.</param>
+    /// <returns>True if the child was removed, false if it wasn't a child of this entity.</returns>
+    public bool RemoveChild(Entity child)
+    {
+        if (_children.Remove(child))
+        {
+            child._parent = null;
+            return true;
+        }
+        return false;
+    }
+    
+    /// <summary>
+    /// Checks if this entity is a descendant of the specified entity.
+    /// </summary>
+    private bool IsDescendantOf(Entity potentialAncestor)
+    {
+        var current = _parent;
+        while (current != null)
+        {
+            if (current == potentialAncestor)
+                return true;
+            current = current._parent;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Gets all descendant entities (children, grandchildren, etc.) recursively.
+    /// </summary>
+    /// <returns>All descendants of this entity.</returns>
+    /// <example>
+    /// <code>
+    /// // Disable all descendants
+    /// foreach (var descendant in entity.GetDescendants())
+    /// {
+    ///     descendant.IsActive = false;
+    /// }
+    /// </code>
+    /// </example>
+    public IEnumerable<Entity> GetDescendants()
+    {
+        foreach (var child in _children)
+        {
+            yield return child;
+
+            foreach (var descendant in child.GetDescendants())
+            {
+                yield return descendant;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finds the first descendant entity with the specified name.
+    /// </summary>
+    /// <param name="name">The name to search for.</param>
+    /// <returns>The first descendant with matching name, or null if not found.</returns>
+    /// <example>
+    /// <code>
+    /// var leftWheel = car.FindDescendant("LeftWheel");
+    /// </code>
+    /// </example>
+    public Entity? FindDescendant(string name)
+    {
+        foreach (var child in _children)
+        {
+            if (child.Name == name)
+                return child;
+            
+            var found = child.FindDescendant(name);
+            if (found != null)
+                return found;
+        }
+        
+        return null;
+    }
+
+    /// <summary>
+    /// Gets all descendants with the specified tag.
+    /// </summary>
+    /// <param name="tag">The tag to filter by.</param>
+    /// <returns>All descendant entities with the specified tag.</returns>
+    /// <example>
+    /// <code>
+    /// // Find all "Weapon" tagged children of player
+    /// var weapons = player.GetDescendantsWithTag("Weapon");
+    /// </code>
+    /// </example>
+    public IEnumerable<Entity> GetDescendantsWithTag(string tag)
+    {
+        foreach (var descendant in GetDescendants())
+        {
+            if (descendant.HasTag(tag))
+                yield return descendant;
+        }
+    }
+
+    /// <summary>
+    /// Gets the depth of this entity in the hierarchy (0 = root).
+    /// </summary>
+    /// <returns>The depth level, where 0 is a root entity.</returns>
+    public int GetDepth()
+    {
+        int depth = 0;
+        var current = _parent;
+        while (current != null)
+        {
+            depth++;
+            current = current._parent;
+        }
+        return depth;
+    }
+
+    /// <summary>
+    /// Detaches this entity from its parent, making it a root entity.
+    /// </summary>
+    /// <returns>This entity for method chaining.</returns>
+    public Entity DetachFromParent()
+    {
+        return SetParent(null);
+    }
+
+    /// <summary>
+    /// Gets the root entity of this hierarchy.
+    /// </summary>
+    /// <returns>The root entity (entity with no parent).</returns>
+    public Entity GetRoot()
+    {
+        var current = this;
+        while (current._parent != null)
+        {
+            current = current._parent;
+        }
+        return current;
     }
 
     #endregion
@@ -112,7 +360,7 @@ public class Entity
         if (_components.TryGetValue(type, out var existing))
         {
             _logger?.LogDebug("Entity {Id} already has component {Type}, returning existing", Id, type.Name);
-            return (T)existing; // Return the attached component, not the new one
+            return (T)existing;
         }
 
         _components[type] = component;
@@ -189,25 +437,58 @@ public class Entity
     }
 
     /// <summary>
-    /// Gets a component in this entity or its children.
-    /// Note: Requires hierarchical entity support (parent/child relationships).
-    /// Returns null if hierarchy is not set up.
+    /// Gets a component in this entity or any of its children (recursive search).
     /// </summary>
+    /// <returns>The first matching component found, or null if none found.</returns>
+    /// <example>
+    /// <code>
+    /// // Find a Rigidbody component in player or any child (like equipped weapon)
+    /// var rb = player.GetComponentInChildren&lt;Rigidbody&gt;();
+    /// </code>
+    /// </example>
     public T? GetComponentInChildren<T>() where T : Component
     {
-        // First check this entity
+        // Check this entity first
         var component = GetComponent<T>();
         if (component != null)
             return component;
 
-        // TODO: If you add parent/child relationships, search children here
-        // For now, just return null
+        // Search children recursively (depth-first)
+        foreach (var child in _children)
+        {
+            component = child.GetComponentInChildren<T>();
+            if (component != null)
+                return component;
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// Gets a component in this entity or any of its ancestors.
+    /// </summary>
+    /// <returns>The first matching component found walking up the hierarchy, or null if none found.</returns>
+    /// <example>
+    /// <code>
+    /// // Find a Canvas component in this UI element or any parent
+    /// var canvas = uiElement.GetComponentInParent&lt;Canvas&gt;();
+    /// </code>
+    /// </example>
+    public T? GetComponentInParent<T>() where T : Component
+    {
+        // Check this entity first
+        var component = GetComponent<T>();
+        if (component != null)
+            return component;
+
+        // Walk up parent chain
+        return _parent?.GetComponentInParent<T>();
     }
 
     /// <summary>
     /// Destroys this entity, removing it from the world.
     /// The destruction will be deferred if called during frame processing.
+    /// Children are also destroyed (cascade destruction).
     /// </summary>
     public void Destroy()
     {
@@ -218,23 +499,6 @@ public class Entity
         }
 
         World.DestroyEntity(this);
-    }
-
-    /// <summary>
-    /// Gets a component in this entity or its parent.
-    /// Note: Requires hierarchical entity support (parent/child relationships).
-    /// Returns null if hierarchy is not set up.
-    /// </summary>
-    public T? GetComponentInParent<T>() where T : Component
-    {
-        // First check this entity
-        var component = GetComponent<T>();
-        if (component != null)
-            return component;
-
-        // TODO: If you add parent/child relationships, search parent here
-        // For now, just return null
-        return null;
     }
 
     #endregion
@@ -260,6 +524,8 @@ public class Entity
 
     public override string ToString()
     {
-        return $"Entity {Name} ({Id}) - Active: {IsActive}, Components: {_components.Count}, Tags: {_tags.Count}";
+        var parentInfo = _parent != null ? $", Parent: {_parent.Name}" : "";
+        var childrenInfo = _children.Count > 0 ? $", Children: {_children.Count}" : "";
+        return $"Entity {Name} ({Id}) - Active: {IsActive}, Components: {_components.Count}, Tags: {_tags.Count}{parentInfo}{childrenInfo}";
     }
 }

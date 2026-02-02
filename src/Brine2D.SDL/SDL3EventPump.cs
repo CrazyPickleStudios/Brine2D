@@ -2,31 +2,33 @@ using Brine2D.Events;
 using Brine2D.Hosting;
 using Brine2D.SDL.Common.Events;
 using Brine2D.SDL.Events;
+using Microsoft.Extensions.Hosting; // Use Microsoft's interface
 using Microsoft.Extensions.Logging;
 
-namespace Brine2D.SDL.Common;
+namespace Brine2D.SDL;
 
 /// <summary>
 /// Central SDL3 event processing service.
 /// Polls SDL events and routes them to appropriate event buses.
 /// Similar to ASP.NET's event pipeline - single source of truth for platform events.
 /// </summary>
-public class SDL3EventPump : IEventPump, IHostApplicationLifetime
+public class SDL3EventPump : IEventPump
 {
     private readonly ILogger<SDL3EventPump> _logger;
     private readonly EventBus _publicEventBus;
     private readonly EventBus _internalEventBus;
-
-    public bool IsExitRequested { get; private set; }
+    private readonly IHostApplicationLifetime _lifetime;
 
     public SDL3EventPump(
         ILogger<SDL3EventPump> logger,
         EventBus publicEventBus,
-        EventBus internalEventBus)
+        EventBus internalEventBus,
+        IHostApplicationLifetime lifetime)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _publicEventBus = publicEventBus ?? throw new ArgumentNullException(nameof(publicEventBus));
         _internalEventBus = internalEventBus ?? throw new ArgumentNullException(nameof(internalEventBus));
+        _lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
     }
 
     /// <summary>
@@ -124,13 +126,8 @@ public class SDL3EventPump : IEventPump, IHostApplicationLifetime
 
     private void HandleQuit()
     {
-        IsExitRequested = true;
+        _lifetime.StopApplication();
         _publicEventBus.Publish(new ApplicationQuitRequestedEvent());
         _logger.LogInformation("Application quit requested");
-    }
-
-    public void RequestExit()
-    {
-        HandleQuit();
     }
 }

@@ -1,4 +1,5 @@
 using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.Engine;
 
 namespace Brine2D.Performance;
@@ -18,23 +19,23 @@ public class PerformanceLifecycleHook : ISceneLifecycleHook
         _monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
     }
     
-    public void PreUpdate(GameTime gameTime)
+    public void PreUpdate(GameTime gameTime, IEntityWorld world)
     {
         // Begin frame timing at the very start
         _monitor.BeginFrame();
     }
     
-    public void PostUpdate(GameTime gameTime)
+    public void PostUpdate(GameTime gameTime, IEntityWorld world)
     {
         // Nothing needed here
     }
     
-    public void PreRender(GameTime gameTime)
+    public void PreRender(GameTime gameTime, IEntityWorld world)
     {
         // Nothing needed here
     }
     
-    public void PostRender(GameTime gameTime)
+    public void PostRender(GameTime gameTime, IEntityWorld world)
     {
         // End frame timing at the very end
         _monitor.EndFrame();

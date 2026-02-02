@@ -13,20 +13,15 @@ namespace Brine2D.Systems.AI;
 /// </summary>
 public class AISystem : IUpdateSystem
 {
+    public string Name => "AISystem";
     public int UpdateOrder => 50; 
 
-    private readonly IEntityWorld _world;
     private readonly Random _random = new();
 
-    public AISystem(IEntityWorld world)
-    {
-        _world = world;
-    }
-
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         var deltaTime = (float)gameTime.DeltaTime;
-        var aiEntities = _world.GetEntitiesWithComponent<AIControllerComponent>();
+        var aiEntities = world.GetEntitiesWithComponent<AIControllerComponent>(); 
 
         foreach (var entity in aiEntities)
         {
@@ -42,8 +37,8 @@ public class AISystem : IUpdateSystem
             {
                 AIBehavior.Idle => Vector2.Zero,
                 AIBehavior.Patrol => UpdatePatrolBehavior(ai, transform, deltaTime),
-                AIBehavior.Chase => UpdateChaseBehavior(ai, transform),
-                AIBehavior.Flee => UpdateFleeBehavior(ai, transform),
+                AIBehavior.Chase => UpdateChaseBehavior(ai, transform, world), 
+                AIBehavior.Flee => UpdateFleeBehavior(ai, transform, world), 
                 AIBehavior.Wander => UpdateWanderBehavior(ai, transform, deltaTime),
                 _ => Vector2.Zero
             };
@@ -87,10 +82,10 @@ public class AISystem : IUpdateSystem
         return Vector2.Normalize(direction);
     }
 
-    private Vector2 UpdateChaseBehavior(AIControllerComponent ai, TransformComponent transform)
+    private Vector2 UpdateChaseBehavior(AIControllerComponent ai, TransformComponent transform, IEntityWorld world)
     {
         // Find target
-        var target = FindNearestTarget(ai, transform);
+        var target = FindNearestTarget(ai, transform, world); 
         ai.CurrentTarget = target;
 
         if (target == null)
@@ -111,10 +106,10 @@ public class AISystem : IUpdateSystem
         return Vector2.Normalize(direction);
     }
 
-    private Vector2 UpdateFleeBehavior(AIControllerComponent ai, TransformComponent transform)
+    private Vector2 UpdateFleeBehavior(AIControllerComponent ai, TransformComponent transform, IEntityWorld world)
     {
         // Find target to flee from
-        var target = FindNearestTarget(ai, transform);
+        var target = FindNearestTarget(ai, transform, world); 
         ai.CurrentTarget = target;
 
         if (target == null)
@@ -164,9 +159,9 @@ public class AISystem : IUpdateSystem
         return ai.MoveDirection;
     }
 
-    private Entity? FindNearestTarget(AIControllerComponent ai, TransformComponent transform)
+    private Entity? FindNearestTarget(AIControllerComponent ai, TransformComponent transform, IEntityWorld world)
     {
-        var targets = _world.GetEntitiesByTag(ai.TargetTag);
+        var targets = world.GetEntitiesByTag(ai.TargetTag); 
         Entity? nearestTarget = null;
         float nearestDistance = float.MaxValue;
 

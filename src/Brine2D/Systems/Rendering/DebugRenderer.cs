@@ -17,23 +17,21 @@ namespace Brine2D.Systems.Rendering;
 /// </summary>
 public class DebugRenderer : IRenderSystem
 {
+    public string Name => "DebugRenderer"; 
     public int RenderOrder => 1000;
-
-    private readonly IEntityWorld _world;
 
     public bool ShowColliders { get; set; } = true;
     public bool ShowVelocities { get; set; } = true;
     public bool ShowAIDebug { get; set; } = true;
     public bool ShowEntityNames { get; set; } = true;
 
-    public DebugRenderer(IEntityWorld world)
+    public DebugRenderer()
     {
-        _world = world;
     }
 
-    public void Render(IRenderer renderer)
+    public void Render(IRenderer renderer, IEntityWorld world)
     {
-        var entities = _world.Entities;
+        var entities = world.Entities;
 
         foreach (var entity in entities)
         {

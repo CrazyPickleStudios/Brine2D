@@ -9,9 +9,9 @@ var builder = GameApplication.CreateBuilder(args);
 
 builder.Services.AddBrine2D(options =>
 {
-    options.WindowTitle = "02 - Scene Basics";
-    options.WindowWidth = 1280;
-    options.WindowHeight = 720;
+    options.Window.Title = "02 - Scene Basics";
+    options.Window.Width = 1280;
+    options.Window.Height = 720;
 });
 
 // Register both scenes

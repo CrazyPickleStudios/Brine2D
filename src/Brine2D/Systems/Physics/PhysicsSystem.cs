@@ -8,35 +8,33 @@ namespace Brine2D.Systems.Physics;
 
 /// <summary>
 /// System that handles collision detection between entities.
-/// Bridges ECS with the existing CollisionSystem.
 /// </summary>
 public class PhysicsSystem : IUpdateSystem, IDisposable
 {
+    public string Name => "PhysicsSystem";
     public int UpdateOrder => 200;
 
-    private readonly IEntityWorld _world;
     private readonly CollisionSystem _collisionSystem;
     private readonly Dictionary<Entity, CollisionShape> _entityShapes = new();
     private readonly Dictionary<Entity, HashSet<Entity>> _previousCollisions = new();
 
-    public PhysicsSystem(IEntityWorld world, CollisionSystem collisionSystem)
+    public PhysicsSystem(CollisionSystem collisionSystem)
     {
-        _world = world;
         _collisionSystem = collisionSystem;
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         // Sync collider positions with transforms
-        SyncColliders();
+        SyncColliders(world);
 
         // Detect collisions
-        DetectCollisions();
+        DetectCollisions(world);
     }
 
-    private void SyncColliders()
+    private void SyncColliders(IEntityWorld world)
     {
-        var entities = _world.GetEntitiesWithComponent<ColliderComponent>();
+        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
 
         foreach (var entity in entities)
         {
@@ -47,7 +45,7 @@ public class PhysicsSystem : IUpdateSystem, IDisposable
                 continue;
 
             // Update shape position
-            collider.Shape.Position = transform.WorldPosition;
+            collider.Shape.Position = transform.Position;
 
             // Register with collision system if not already
             if (!_entityShapes.ContainsKey(entity))
@@ -67,9 +65,9 @@ public class PhysicsSystem : IUpdateSystem, IDisposable
         }
     }
 
-    private void DetectCollisions()
+    private void DetectCollisions(IEntityWorld world)
     {
-        var entities = _world.GetEntitiesWithComponent<ColliderComponent>();
+        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
 
         foreach (var entity in entities)
         {

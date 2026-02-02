@@ -1,5 +1,6 @@
 ﻿using Brine2D.Core;
 using Brine2D.ECS.Query;
+using Brine2D.Rendering;
 
 namespace Brine2D.ECS;
 
@@ -60,43 +61,24 @@ public interface IEntityWorld
 
     /// <summary>
     /// Gets all entities with a specific tag.
-    /// Returns a snapshot to safely iterate during entity modifications.
     /// </summary>
     IReadOnlyList<Entity> GetEntitiesByTag(string tag);
 
     /// <summary>
     /// Gets all entities with a specific component type.
-    /// Returns a snapshot to safely iterate during entity modifications.
     /// </summary>
     IReadOnlyList<Entity> GetEntitiesWithComponent<T>() where T : Component;
 
     /// <summary>
     /// Gets all entities that have both specified component types.
-    /// Returns a snapshot to safely iterate during entity modifications.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// // Get all entities with both Transform and Velocity
-    /// var movingEntities = world.GetEntitiesWithComponents&lt;TransformComponent, VelocityComponent&gt;();
-    /// </code>
-    /// </example>
     IReadOnlyList<Entity> GetEntitiesWithComponents<T1, T2>()
         where T1 : Component 
         where T2 : Component;
 
     /// <summary>
     /// Finds the first entity that matches the specified predicate.
-    /// Returns null if no entity is found.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// // Find player with most health
-    /// var player = world.FindEntity(e => 
-    ///     e.Tags.Contains("Player") && 
-    ///     e.GetComponent&lt;HealthComponent&gt;()?.CurrentHealth > 0
-    /// );
-    /// </code>
-    /// </example>
     Entity? FindEntity(Func<Entity, bool> predicate);
 
     /// <summary>
@@ -105,61 +87,76 @@ public interface IEntityWorld
     void Update(GameTime gameTime);
 
     /// <summary>
+    /// Renders all entities in the world.
+    /// </summary>
+    void Render(IRenderer renderer);
+
+    /// <summary>
     /// Clears all entities from the world.
-    /// Useful for scene transitions to prevent entity leaks.
-    /// Entities are destroyed in reverse creation order to handle dependencies properly.
     /// </summary>
     void Clear();
 
     /// <summary>
-    /// Internal notification that a component was added.
+    /// Gets a service from the DI container.
     /// </summary>
-    internal void NotifyComponentAdded(Entity entity, Component component);
+    T? GetService<T>() where T : class;
 
     /// <summary>
-    /// Internal notification that a component was removed.
+    /// Gets a required service from the DI container.
     /// </summary>
-    internal void NotifyComponentRemoved(Entity entity, Component component);
+    T GetRequiredService<T>() where T : class;
 
     /// <summary>
-    /// Internal notification that an entity was destroyed.
+    /// Notifies the world that a component was added to an entity.
     /// </summary>
-    internal void NotifyEntityDestroyed(Entity entity);
+    void NotifyComponentAdded(Entity entity, Component component);
 
     /// <summary>
-    /// Creates a new fluent query builder for complex entity searches.
+    /// Notifies the world that a component was removed from an entity.
+    /// </summary>
+    void NotifyComponentRemoved(Entity entity, Component component);
+
+    /// <summary>
+    /// Notifies the world that an entity was destroyed.
+    /// </summary>
+    void NotifyEntityDestroyed(Entity entity);
+
+    /// <summary>
+    /// Creates a fluent query builder for searching entities.
     /// </summary>
     /// <example>
     /// <code>
-    /// var enemies = world.Query()
-    ///     .With&lt;EnemyComponent&gt;()
-    ///     .With&lt;HealthComponent&gt;()
-    ///     .Without&lt;DeadComponent&gt;()
-    ///     .WithTag("Boss")
-    ///     .Where(e => e.GetComponent&lt;HealthComponent&gt;().CurrentHealth &lt; 50)
+    /// var enemies = World.Query()
+    ///     .With&lt;TransformComponent&gt;()
+    ///     .WithTag("Enemy")
+    ///     .WithinRadius(playerPos, 100f)
     ///     .Execute();
     /// </code>
     /// </example>
     EntityQuery Query();
 
     /// <summary>
-    /// Creates a cached query for entities with one component type.
-    /// Cached queries maintain results and update automatically when entities change.
+    /// Creates a cached query for better performance when querying repeatedly.
     /// </summary>
     CachedEntityQuery<T1> CreateCachedQuery<T1>() where T1 : Component;
 
     /// <summary>
-    /// Creates a cached query for entities with two component types.
+    /// Creates a cached query for better performance when querying repeatedly.
     /// </summary>
-    CachedEntityQuery<T1, T2> CreateCachedQuery<T1, T2>() 
-        where T1 : Component 
+    CachedEntityQuery<T1, T2> CreateCachedQuery<T1, T2>()
+        where T1 : Component
         where T2 : Component;
 
     /// <summary>
-    /// Creates a cached query for entities with three component types.
+    /// Creates a cached query for better performance when querying repeatedly.
     /// </summary>
-    CachedEntityQuery<T1, T2, T3> CreateCachedQuery<T1, T2, T3>() 
-        where T1 : Component 
-        where T2 : Component 
+    CachedEntityQuery<T1, T2, T3> CreateCachedQuery<T1, T2, T3>()
+        where T1 : Component
+        where T2 : Component
         where T3 : Component;
+
+    /// <summary>
+    /// Forces immediate processing of all deferred operations.
+    /// </summary>
+    void FlushDeferredOperations();
 }

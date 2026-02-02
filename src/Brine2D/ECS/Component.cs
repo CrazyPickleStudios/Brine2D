@@ -1,5 +1,6 @@
 ﻿using Brine2D.Core;
 using Brine2D.ECS.Components;
+using Brine2D.Rendering;
 
 namespace Brine2D.ECS;
 
@@ -23,7 +24,7 @@ public abstract class Component
     public bool IsAttached => Entity != null;
 
     /// <summary>
-    /// Whether this component is enabled and should be updated.
+    /// Whether this component is enabled and should be updated/rendered.
     /// </summary>
     public bool IsEnabled
     {
@@ -59,6 +60,8 @@ public abstract class Component
 
     /// <summary>
     /// Gets the Transform component (shortcut for GetComponent&lt;TransformComponent&gt;).
+    /// Returns null if the entity has no TransformComponent.
+    /// Use GetRequiredComponent&lt;TransformComponent&gt;() if Transform is required.
     /// </summary>
     public TransformComponent? Transform => Entity?.GetComponent<TransformComponent>();
 
@@ -149,4 +152,9 @@ public abstract class Component
     /// Called every frame to update component logic.
     /// </summary>
     protected internal virtual void OnUpdate(GameTime gameTime) { }
+    
+    /// <summary>
+    /// Called every frame to render component visuals.
+    /// </summary>
+    protected internal virtual void OnRender(IRenderer renderer) { }
 }

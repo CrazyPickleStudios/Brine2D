@@ -6,7 +6,6 @@ namespace Brine2D.ECS.Systems;
 
 /// <summary>
 /// Manages and executes render systems in order.
-/// Lives in Brine2D.Rendering.ECS because it depends on IRenderer.
 /// </summary>
 public class RenderPipeline
 {
@@ -14,8 +13,11 @@ public class RenderPipeline
     private readonly ILogger<RenderPipeline>? _logger;
     private readonly ScopedProfiler? _profiler;
     private bool _isSorted;
-
     private readonly HashSet<string> _disabledSystems = new();
+    
+    private readonly List<IRenderSystem> _systemsToAdd = new();
+    private readonly List<IRenderSystem> _systemsToRemove = new();
+    private bool _isExecuting = false;
 
     public IReadOnlyList<IRenderSystem> Systems => _systems.AsReadOnly();
 
@@ -27,13 +29,35 @@ public class RenderPipeline
 
     public RenderPipeline AddSystem(IRenderSystem system)
     {
-        _systems.Add(system);
-        _isSorted = false;
-        _logger?.LogDebug("Added render system: {SystemName} (order: {Order})", system.Name, system.RenderOrder);
+        if (_isExecuting)
+        {
+            _systemsToAdd.Add(system);
+            _logger?.LogDebug("Deferred render system addition: {SystemType}", system.GetType().Name);
+        }
+        else
+        {
+            _systems.Add(system);
+            _isSorted = false;
+            _logger?.LogDebug("Added render system: {SystemType} (order: {Order})", 
+                system.GetType().Name, system.RenderOrder);
+        }
+        
         return this;
     }
 
-    public bool RemoveSystem(IRenderSystem system) => _systems.Remove(system);
+    public bool RemoveSystem(IRenderSystem system)
+    {
+        if (_isExecuting)
+        {
+            _systemsToRemove.Add(system);
+            _logger?.LogDebug("Deferred render system removal: {SystemType}", system.GetType().Name);
+            return true;
+        }
+        else
+        {
+            return _systems.Remove(system);
+        }
+    }
 
     public void Clear()
     {
@@ -54,45 +78,78 @@ public class RenderPipeline
         _disabledSystems.Clear();
     }
 
-    public void Execute(IRenderer renderer)
+    public void Execute(IRenderer renderer, IEntityWorld world)
     {
         if (!_isSorted)
         {
             _systems.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
             _isSorted = true;
-            
-            _logger?.LogDebug("Render system execution order:");
-            foreach (var system in _systems)
-            {
-                _logger?.LogDebug("  {Order}: {SystemName}", system.RenderOrder, system.Name);
-            }
         }
 
-        foreach (var system in _systems)
-        {
-            // Skip disabled systems
-            if (_disabledSystems.Contains(system.Name))
-                continue;
+        _isExecuting = true;
 
-            try
+        try
+        {
+            ApplyDeferredModifications();
+
+            foreach (var system in _systems)
             {
-                // Profile system execution
-                if (_profiler != null)
+                var systemName = system.GetType().Name;
+                
+                if (_disabledSystems.Contains(systemName))
                 {
-                    using (_profiler.BeginScope($"Render/{system.Name}"))
+                    continue;
+                }
+                
+                try
+                {
+                    if (_profiler != null)
                     {
-                        system.Render(renderer);
+                        using (_profiler.BeginScope($"Render/{systemName}"))
+                        {
+                            system.Render(renderer, world);
+                        }
+                    }
+                    else
+                    {
+                        system.Render(renderer, world);
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    system.Render(renderer);
+                    _logger?.LogError(ex, "Error executing render system: {SystemType}", systemName);
                 }
             }
-            catch (Exception ex)
+        }
+        finally
+        {
+            _isExecuting = false;
+            ApplyDeferredModifications();
+        }
+    }
+
+    private void ApplyDeferredModifications()
+    {
+        if (_systemsToAdd.Count > 0)
+        {
+            foreach (var system in _systemsToAdd)
             {
-                _logger?.LogError(ex, "Error executing render system: {SystemName}", system.Name);
+                _systems.Add(system);
+                _isSorted = false;
+                _logger?.LogDebug("Applied deferred addition: {SystemType} (order: {Order})", 
+                    system.GetType().Name, system.RenderOrder);
             }
+            _systemsToAdd.Clear();
+        }
+
+        if (_systemsToRemove.Count > 0)
+        {
+            foreach (var system in _systemsToRemove)
+            {
+                _systems.Remove(system);
+                _logger?.LogDebug("Applied deferred removal: {SystemType}", system.GetType().Name);
+            }
+            _systemsToRemove.Clear();
         }
     }
 }

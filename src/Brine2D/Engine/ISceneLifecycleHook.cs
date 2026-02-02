@@ -1,44 +1,37 @@
 using Brine2D.Core;
+using Brine2D.ECS;
 
 namespace Brine2D.Engine;
 
 /// <summary>
-/// Hook that runs before/after scene update and render.
-/// Used by ECS pipelines, UI systems, or other frameworks to inject behavior automatically.
-/// Similar to ASP.NET middleware - registered once, runs automatically.
+/// Hook interface for systems that need to execute during scene lifecycle.
+/// Hooks run before/after scene update/render methods.
+/// Order determines execution sequence (lower values execute first).
 /// </summary>
 public interface ISceneLifecycleHook
 {
     /// <summary>
-    /// Execution order (lower runs first).
-    /// Recommended ranges:
-    /// - 0-50: Pre-processing (input layers, camera setup)
-    /// - 100-200: ECS systems
-    /// - 500+: Post-processing (debug overlays, UI)
+    /// Execution order for this hook (lower values execute first).
     /// </summary>
     int Order { get; }
-    
+
     /// <summary>
-    /// Called before scene.Update().
-    /// Use for input processing, camera setup, etc.
+    /// Called before Scene.Update().
     /// </summary>
-    void PreUpdate(GameTime gameTime);
-    
+    void PreUpdate(GameTime gameTime, IEntityWorld world);
+
     /// <summary>
-    /// Called after scene.Update().
-    /// Use for ECS systems, physics, AI, etc.
+    /// Called after Scene.Update().
     /// </summary>
-    void PostUpdate(GameTime gameTime);
-    
+    void PostUpdate(GameTime gameTime, IEntityWorld world);
+
     /// <summary>
-    /// Called before scene.Render().
-    /// Use for ECS rendering, sprite batching, etc.
+    /// Called before Scene.Render().
     /// </summary>
-    void PreRender(GameTime gameTime);
-    
+    void PreRender(GameTime gameTime, IEntityWorld world);
+
     /// <summary>
-    /// Called after scene.Render().
-    /// Use for debug overlays, UI chrome, etc.
+    /// Called after Scene.Render().
     /// </summary>
-    void PostRender(GameTime gameTime);
+    void PostRender(GameTime gameTime, IEntityWorld world);
 }

@@ -1,6 +1,6 @@
 using Brine2D.Core;
-using Brine2D.Performance;
 using Brine2D.ECS;
+using Brine2D.Performance;
 using Brine2D.Systems.Rendering;
 using Brine2D.Engine;
 
@@ -12,40 +12,36 @@ namespace Brine2D.Systems.Performance;
 public class RenderingStatsCollector : ISceneLifecycleHook
 {
     private readonly PerformanceMonitor _monitor;
-    private readonly IEntityWorld _world;
     private readonly SpriteRenderingSystem? _spriteSystem;
     
     public int Order => int.MaxValue; // Run last to collect final stats
     
     public RenderingStatsCollector(
         PerformanceMonitor monitor,
-        IEntityWorld world,
         SpriteRenderingSystem? spriteSystem = null)
     {
         _monitor = monitor;
-        _world = world;
         _spriteSystem = spriteSystem;
     }
     
-    public void PreUpdate(GameTime gameTime)
-    {
+    public void PreUpdate(GameTime gameTime, IEntityWorld world) 
+    { 
         // Nothing needed
     }
     
-    public void PostUpdate(GameTime gameTime)
-    {
+    public void PostUpdate(GameTime gameTime, IEntityWorld world) 
+    { 
         // Nothing needed
     }
     
-    public void PreRender(GameTime gameTime)
-    {
+    public void PreRender(GameTime gameTime, IEntityWorld world) 
+    { 
         // Nothing needed
     }
     
-    public void PostRender(GameTime gameTime)
+    public void PostRender(GameTime gameTime, IEntityWorld world)
     {
-        // Collect stats after rendering
-        var entityCount = _world.Entities.Count();
+        var entityCount = world.Entities.Count();
         
         int renderedSprites = 0;
         int totalSprites = 0;

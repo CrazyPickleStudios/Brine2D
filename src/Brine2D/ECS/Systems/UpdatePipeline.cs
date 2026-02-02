@@ -46,7 +46,7 @@ public class UpdatePipeline
             // Log if system is marked sequential
             var isSequential = system.GetType().GetCustomAttribute<SequentialAttribute>() != null;
             _logger?.LogDebug("Added update system: {SystemName} (order: {Order}, parallel: {Parallel})", 
-                system.Name, system.UpdateOrder, !isSequential && _options.EnableParallelExecution);
+                system.Name, system.UpdateOrder, !isSequential && _options.EnableMultiThreading);
         }
         
         return this;
@@ -92,7 +92,7 @@ public class UpdatePipeline
         _disabledSystems.Clear();
     }
 
-    public void Execute(GameTime gameTime)
+    public void Execute(GameTime gameTime, IEntityWorld world)
     {
         if (!_isSorted)
         {
@@ -121,12 +121,12 @@ public class UpdatePipeline
                     {
                         using (_profiler.BeginScope($"Update/{system.Name}"))
                         {
-                            system.Update(gameTime);
+                            system.Update(gameTime, world);
                         }
                     }
                     else
                     {
-                        system.Update(gameTime);
+                        system.Update(gameTime, world);
                     }
                 }
                 catch (Exception ex)
@@ -156,7 +156,7 @@ public class UpdatePipeline
                 // Log if system is marked sequential
                 var isSequential = system.GetType().GetCustomAttribute<SequentialAttribute>() != null;
                 _logger?.LogDebug("Applied deferred addition: {SystemName} (order: {Order}, parallel: {Parallel})", 
-                    system.Name, system.UpdateOrder, !isSequential && _options.EnableParallelExecution);
+                    system.Name, system.UpdateOrder, !isSequential && _options.EnableMultiThreading);
             }
             _systemsToAdd.Clear();
         }

@@ -92,7 +92,7 @@ public class ColliderComponent : Component
     /// <summary>
     /// Gets the world-space center of this collider.
     /// </summary>
-    public Vector2 WorldCenter => (_transform?.WorldPosition ?? Vector2.Zero) + Offset;
+    public Vector2 WorldCenter => (_transform?.Position ?? Vector2.Zero) + Offset;
 
     protected internal override void OnAdded()
     {

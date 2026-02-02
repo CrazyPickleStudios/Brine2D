@@ -20,7 +20,8 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
 {
     private readonly ILogger<SDL3GPURenderer> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly RenderingOptions _options;
+    private readonly RenderingOptions _renderingOptions;
+    private readonly WindowOptions _windowOptions;
     private readonly IFontLoader? _fontLoader;
     private readonly EventBus? _eventBus;
     private readonly List<Vertex> _vertexBatch = new(MaxVertices);
@@ -57,7 +58,7 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     private RenderTarget? _mainRenderTarget;
     private RenderTarget? _pingPongTarget;
-    private SDL3PostProcessPipeline? _postProcessPipeline; // Changed type
+    private SDL3PostProcessPipeline? _postProcessPipeline;
     private PostProcessingOptions? _postProcessingOptions;
     private bool _usePostProcessing;
 
@@ -91,23 +92,26 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public SDL3GPURenderer(
         ILogger<SDL3GPURenderer> logger,
         ILoggerFactory loggerFactory,
-        IOptions<RenderingOptions> options,
+        IOptions<RenderingOptions> renderingOptions,
+        IOptions<WindowOptions> windowOptions,
         IOptions<PostProcessingOptions>? postProcessingOptions = null,
-        SDL3PostProcessPipeline? postProcessPipeline = null,  // Changed type
+        SDL3PostProcessPipeline? postProcessPipeline = null,
         IFontLoader? fontLoader = null,
         EventBus? eventBus = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _renderingOptions = renderingOptions?.Value ?? throw new ArgumentNullException(nameof(renderingOptions));
+        _windowOptions = windowOptions?.Value ?? throw new ArgumentNullException(nameof(windowOptions));
         _postProcessingOptions = postProcessingOptions?.Value;
         _postProcessPipeline = postProcessPipeline;
+
         _fontLoader = fontLoader;
         _eventBus = eventBus;
 
         _usePostProcessing = _postProcessingOptions?.Enabled == true && _postProcessPipeline != null;
 
-        _viewport = new ViewportState(_options.WindowWidth, _options.WindowHeight);
+        _viewport = new ViewportState(_windowOptions.Width, _windowOptions.Height);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -128,15 +132,15 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
 
         var windowFlags = SDL3.SDL.WindowFlags.Vulkan;
-        if (_options.Resizable)
+        if (_windowOptions.Resizable)
             windowFlags |= SDL3.SDL.WindowFlags.Resizable;
-        if (_options.Fullscreen)
+        if (_windowOptions.Fullscreen)
             windowFlags |= SDL3.SDL.WindowFlags.Fullscreen;
 
         _window = SDL3.SDL.CreateWindow(
-            _options.WindowTitle,
-            _options.WindowWidth,
-            _options.WindowHeight,
+            _windowOptions.Title,    
+            _windowOptions.Width,    
+            _windowOptions.Height,  
             windowFlags
         );
 
@@ -151,7 +155,7 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
                             SDL3.SDL.GPUShaderFormat.MSL |
                             SDL3.SDL.GPUShaderFormat.DXIL;
 
-        _device = SDL3.SDL.CreateGPUDevice(shaderFormats, true, _options.PreferredGPUDriver);
+        _device = SDL3.SDL.CreateGPUDevice(shaderFormats, true, _renderingOptions.PreferredGPUDriver);
 
         if (_device == nint.Zero)
         {

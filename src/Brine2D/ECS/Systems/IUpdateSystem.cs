@@ -15,5 +15,7 @@ public interface IUpdateSystem : ISystem
     /// <summary>
     ///     Updates the system for the current frame.
     /// </summary>
-    void Update(GameTime gameTime);
+    /// <param name="gameTime">Time information for the current frame.</param>
+    /// <param name="world">The entity world to operate on.</param>
+    void Update(GameTime gameTime, IEntityWorld world);
 }

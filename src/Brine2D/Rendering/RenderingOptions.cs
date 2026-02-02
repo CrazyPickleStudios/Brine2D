@@ -1,54 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Text;
 
 namespace Brine2D.Rendering;
 
 /// <summary>
-/// Configuration options for rendering.
+/// Configuration options for the rendering system.
 /// </summary>
 public class RenderingOptions
 {
+    /// <summary>
+    /// Configuration section name for binding from JSON.
+    /// </summary>
     public const string SectionName = "Rendering";
 
     /// <summary>
-    /// Gets or sets the window title.
-    /// </summary>
-    public string WindowTitle { get; set; } = "Brine2D Game";
-
-    /// <summary>
-    /// Gets or sets the window width in pixels.
-    /// </summary>
-    public int WindowWidth { get; set; } = 1280;
-
-    /// <summary>
-    /// Gets or sets the window height in pixels.
-    /// </summary>
-    public int WindowHeight { get; set; } = 720;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the window starts in fullscreen mode.
-    /// </summary>
-    public bool Fullscreen { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether VSync is enabled.
-    /// </summary>
-    public bool VSync { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the window is resizable.
-    /// </summary>
-    public bool Resizable { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the graphics backend to use.
+    /// Gets or sets the graphics backend to use (GPU or LegacyRenderer).
     /// </summary>
     public GraphicsBackend Backend { get; set; } = GraphicsBackend.GPU;
-
+    
+    /// <summary>
+    /// Gets or sets whether VSync is enabled.
+    /// </summary>
+    public bool VSync { get; set; } = true;
+    
     /// <summary>
     /// Gets or sets the preferred GPU driver (Vulkan, Metal, D3D11, D3D12).
-    /// Null = auto-select.
+    /// Null = auto-select based on platform.
     /// </summary>
     public string? PreferredGPUDriver { get; set; } = null;
+    
+    /// <summary>
+    /// Gets or sets the target frames per second for the game loop.
+    /// </summary>
+    public int TargetFPS { get; set; } = 60;
+    
+    /// <summary>
+    /// Gets or sets the clear color used when clearing the screen each frame.
+    /// </summary>
+    public Color ClearColor { get; set; } = Color.FromArgb(255, 52, 78, 65);
 }

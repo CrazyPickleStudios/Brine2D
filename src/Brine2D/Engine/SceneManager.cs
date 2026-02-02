@@ -163,9 +163,9 @@ namespace Brine2D.Engine
                     _logger.LogDebug("Unloading scene: {SceneName}", oldScene.Name);
                     
                     // Remove scene-specific systems
-                    if (oldScene is Scene)
+                    if (oldScene is Scene oldSceneBase)
                     {
-                        RemoveSceneSystemConfiguration((Scene)oldScene);
+                        RemoveSceneSystemConfiguration(oldSceneBase);
                     }
                     
                     await oldScene.UnloadAsync(cancellationToken);
@@ -326,15 +326,19 @@ namespace Brine2D.Engine
                 return; // Don't update current scene while loading
             }
             
-            // Only execute hooks if there IS a scene
-            if (currentScene != null && currentScene.EnableLifecycleHooks)
+            // Early exit if no scene
+            if (currentScene == null) return;
+            
+            var world = currentScene.World; // Get world once
+            
+            // Pre-update hooks (input layers, camera setup, etc.)
+            if (currentScene.EnableLifecycleHooks)
             {
-                // Pre-update hooks (input layers, camera setup, etc.)
                 foreach (var hook in _hooks)
                 {
                     try
                     {
-                        hook.PreUpdate(gameTime);
+                        hook.PreUpdate(gameTime, world);
                     }
                     catch (Exception ex)
                     {
@@ -344,22 +348,19 @@ namespace Brine2D.Engine
             }
             
             // Scene update
-            currentScene?.Update(gameTime);
+            currentScene.Update(gameTime);
             
-            if (currentScene is Scene scene)
-            {
-                scene.EntityWorld.Update(gameTime);
-            }
+            // World update - direct access
+            world.Update(gameTime);
             
-            // Only execute hooks if there IS a scene
-            if (currentScene != null && currentScene.EnableLifecycleHooks)
+            // Post-update hooks (ECS systems, physics, AI, etc.)
+            if (currentScene.EnableLifecycleHooks)
             {
-                // Post-update hooks (ECS systems, physics, AI, etc.)
                 foreach (var hook in _hooks)
                 {
                     try
                     {
-                        hook.PostUpdate(gameTime);
+                        hook.PostUpdate(gameTime, world);
                     }
                     catch (Exception ex)
                     {
@@ -386,15 +387,17 @@ namespace Brine2D.Engine
             }
             else if (currentScene != null) // Only render scene if it exists
             {
+                var world = currentScene.World; // Get world once
+                
                 // Normal scene rendering
                 if (currentScene.EnableLifecycleHooks)
                 {
-                    // Pre-render hooks (ECS rendering, sprites, particles, etc.)
+                    // Pre-render hooks (data-oriented ECS systems: sprites, particles, etc.)
                     foreach (var hook in _hooks)
                     {
                         try
                         {
-                            hook.PreRender(gameTime);
+                            hook.PreRender(gameTime, world); 
                         }
                         catch (Exception ex)
                         {
@@ -403,7 +406,13 @@ namespace Brine2D.Engine
                     }
                 }
                 
-                // Scene render (UI, debug overlays)
+                // World render (OOP components)
+                if (_renderer != null && currentScene.EnableLifecycleHooks)
+                {
+                    world.Render(_renderer);
+                }
+                
+                // Scene render (UI, debug overlays, custom rendering)
                 currentScene.Render(gameTime);
                 
                 if (currentScene.EnableLifecycleHooks)
@@ -413,7 +422,7 @@ namespace Brine2D.Engine
                     {
                         try
                         {
-                            hook.PostRender(gameTime);
+                            hook.PostRender(gameTime, world); 
                         }
                         catch (Exception ex)
                         {

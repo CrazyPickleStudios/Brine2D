@@ -1,6 +1,7 @@
 ﻿using Brine2D.Core;
 using Brine2D.Hosting;
 using Brine2D.Input;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
@@ -69,7 +70,7 @@ public class GameLoop : IGameLoop
             while (IsRunning
                 && !token.IsCancellationRequested
                 && _gameContext.IsRunning
-                && !_applicationLifetime.IsExitRequested)
+                && !_applicationLifetime.ApplicationStopping.IsCancellationRequested)
             {
                 // Update input state (clears per-frame data, updates mouse position)
                 _inputService.Update();

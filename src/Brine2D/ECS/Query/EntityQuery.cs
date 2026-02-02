@@ -613,11 +613,13 @@ public class EntityQuery
     {
         var entities = Execute().ToList(); // Snapshot to avoid collection modification
         
-        if (_options.EnableParallelExecution && entities.Count >= _options.ParallelEntityThreshold)
+        // Use EnableMultiThreading instead of EnableParallelExecution
+        if (_options.EnableMultiThreading && entities.Count >= _options.ParallelEntityThreshold)
         {
             var parallelOptions = new ParallelOptions
             {
-                MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism
+                // WorkerThreadCount is nullable: null = -1 (use all cores)
+                MaxDegreeOfParallelism = _options.WorkerThreadCount ?? -1
             };
 
             Parallel.ForEach(entities, parallelOptions, action);
@@ -636,27 +638,16 @@ public class EntityQuery
     /// Components are passed directly - no GetComponent() needed!
     /// Automatically uses parallel execution if enabled and threshold is met.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// // Much faster than calling GetComponent() in the loop!
-    /// world.Query()
-    ///     .With&lt;VelocityComponent&gt;()
-    ///     .ForEach((entity, VelocityComponent velocity) => 
-    ///     {
-    ///         velocity.Value *= 1.1f; // Speed boost
-    ///     });
-    /// </code>
-    /// </example>
     public void ForEach<T1>(Action<Entity, T1> action) 
         where T1 : Component
     {
         var entities = Execute().ToList();
         
-        if (_options.EnableParallelExecution && entities.Count >= _options.ParallelEntityThreshold)
+        if (_options.EnableMultiThreading && entities.Count >= _options.ParallelEntityThreshold)
         {
             Parallel.ForEach(entities, new ParallelOptions 
             { 
-                MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism 
+                MaxDegreeOfParallelism = _options.WorkerThreadCount ?? -1
             }, entity =>
             {
                 var c1 = entity.GetComponent<T1>();
@@ -678,29 +669,17 @@ public class EntityQuery
     /// Components are passed directly - no GetComponent() needed!
     /// Automatically uses parallel execution if enabled and threshold is met.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// // Clean and fast - no GetComponent() calls!
-    /// world.Query()
-    ///     .With&lt;TransformComponent&gt;()
-    ///     .With&lt;VelocityComponent&gt;()
-    ///     .ForEach((entity, TransformComponent t, VelocityComponent v) => 
-    ///     {
-    ///         t.Position += v.Value * gameTime.DeltaTime;
-    ///     });
-    /// </code>
-    /// </example>
     public void ForEach<T1, T2>(Action<Entity, T1, T2> action) 
         where T1 : Component
         where T2 : Component
     {
         var entities = Execute().ToList();
         
-        if (_options.EnableParallelExecution && entities.Count >= _options.ParallelEntityThreshold)
+        if (_options.EnableMultiThreading && entities.Count >= _options.ParallelEntityThreshold)
         {
             Parallel.ForEach(entities, new ParallelOptions 
             { 
-                MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism 
+                MaxDegreeOfParallelism = _options.WorkerThreadCount ?? -1
             }, entity =>
             {
                 var c1 = entity.GetComponent<T1>();
@@ -724,18 +703,6 @@ public class EntityQuery
     /// Components are passed directly - no GetComponent() needed!
     /// Automatically uses parallel execution if enabled and threshold is met.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// world.Query()
-    ///     .With&lt;TransformComponent&gt;()
-    ///     .With&lt;SpriteComponent&gt;()
-    ///     .With&lt;HealthComponent&gt;()
-    ///     .ForEach((entity, TransformComponent t, SpriteComponent s, HealthComponent h) => 
-    ///     {
-    ///         s.Color = h.CurrentHealth &lt; 20 ? Color.Red : Color.White;
-    ///     });
-    /// </code>
-    /// </example>
     public void ForEach<T1, T2, T3>(Action<Entity, T1, T2, T3> action) 
         where T1 : Component
         where T2 : Component
@@ -743,11 +710,11 @@ public class EntityQuery
     {
         var entities = Execute().ToList();
         
-        if (_options.EnableParallelExecution && entities.Count >= _options.ParallelEntityThreshold)
+        if (_options.EnableMultiThreading && entities.Count >= _options.ParallelEntityThreshold)
         {
             Parallel.ForEach(entities, new ParallelOptions 
             { 
-                MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism 
+                MaxDegreeOfParallelism = _options.WorkerThreadCount ?? -1
             }, entity =>
             {
                 var c1 = entity.GetComponent<T1>();
@@ -775,19 +742,6 @@ public class EntityQuery
     /// Components are passed directly - no GetComponent() needed!
     /// Automatically uses parallel execution if enabled and threshold is met.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// world.Query()
-    ///     .With&lt;TransformComponent&gt;()
-    ///     .With&lt;VelocityComponent&gt;()
-    ///     .With&lt;HealthComponent&gt;()
-    ///     .With&lt;AIComponent&gt;()
-    ///     .ForEach((entity, TransformComponent t, VelocityComponent v, HealthComponent h, AIComponent ai) => 
-    ///     {
-    ///         // Complex AI logic with all components available
-    ///     });
-    /// </code>
-    /// </example>
     public void ForEach<T1, T2, T3, T4>(Action<Entity, T1, T2, T3, T4> action) 
         where T1 : Component
         where T2 : Component
@@ -796,11 +750,11 @@ public class EntityQuery
     {
         var entities = Execute().ToList();
         
-        if (_options.EnableParallelExecution && entities.Count >= _options.ParallelEntityThreshold)
+        if (_options.EnableMultiThreading && entities.Count >= _options.ParallelEntityThreshold)
         {
             Parallel.ForEach(entities, new ParallelOptions 
             { 
-                MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism 
+                MaxDegreeOfParallelism = _options.WorkerThreadCount ?? -1
             }, entity =>
             {
                 var c1 = entity.GetComponent<T1>();

@@ -15,7 +15,7 @@
 
 	<!-- Copy gamesettings.json to output directory -->
 	<ItemGroup>
-		<None Update="gamesettings.json">
+		<None Update="appsettings.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>

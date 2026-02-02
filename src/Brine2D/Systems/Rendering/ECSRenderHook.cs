@@ -1,4 +1,5 @@
 using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.ECS.Systems;
 using Brine2D.Engine;
 using Brine2D.Rendering;
@@ -15,7 +16,7 @@ internal class ECSRenderHook : ISceneLifecycleHook
     private readonly RenderPipeline _renderPipeline;
     private readonly IRenderer _renderer;
     
-    public int Order => 50;
+    public int Order => 50; // Render before scene UI (Order 100)
 
     public ECSRenderHook(RenderPipeline renderPipeline, IRenderer renderer)
     {
@@ -23,23 +24,23 @@ internal class ECSRenderHook : ISceneLifecycleHook
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
     }
 
-    public void PreUpdate(GameTime gameTime)
+    public void PreUpdate(GameTime gameTime, IEntityWorld world)
     {
         // Nothing needed
     }
 
-    public void PostUpdate(GameTime gameTime)
+    public void PostUpdate(GameTime gameTime, IEntityWorld world)
     {
         // Nothing needed
     }
 
-    public void PreRender(GameTime gameTime)
+    public void PreRender(GameTime gameTime, IEntityWorld world)
     {
         // Execute all ECS render systems (sprites, particles, debug, etc.)
-        _renderPipeline.Execute(_renderer);
+        _renderPipeline.Execute(_renderer, world);
     }
 
-    public void PostRender(GameTime gameTime)
+    public void PostRender(GameTime gameTime, IEntityWorld world)
     {
         // Nothing needed (scene renders UI after)
     }

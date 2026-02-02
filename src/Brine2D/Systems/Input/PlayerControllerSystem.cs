@@ -13,20 +13,19 @@ namespace Brine2D.Systems.Input;
 /// </summary>
 public class PlayerControllerSystem : IUpdateSystem
 {
+    public string Name => "PlayerControllerSystem"; 
     public int UpdateOrder => 10; 
 
-    private readonly IEntityWorld _world;
     private readonly IInputContext _input;
 
-    public PlayerControllerSystem(IEntityWorld world, IInputContext input)
+    public PlayerControllerSystem(IInputContext input)
     {
-        _world = world;
         _input = input;
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
-        var players = _world.GetEntitiesWithComponent<PlayerControllerComponent>();
+        var players = world.GetEntitiesWithComponent<PlayerControllerComponent>(); 
 
         foreach (var entity in players)
         {

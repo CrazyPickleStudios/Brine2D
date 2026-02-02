@@ -3,6 +3,7 @@ using Brine2D.ECS.Components;
 using Brine2D.Rendering;
 using System.Numerics;
 using Brine2D.ECS.Systems;
+using Brine2D.Engine;
 
 namespace Brine2D.Systems.Rendering;
 
@@ -14,8 +15,8 @@ namespace Brine2D.Systems.Rendering;
 public class SpriteRenderingSystem : IRenderSystem
 {
     public int RenderOrder => 0;
+    public string Name => "SpriteRenderingSystem";
 
-    private readonly IEntityWorld _world;
     private readonly ITextureLoader _textureLoader;
     private readonly ICamera? _camera;
     private readonly Dictionary<string, ITexture> _textureCache = new();
@@ -28,11 +29,9 @@ public class SpriteRenderingSystem : IRenderSystem
     private List<(Entity Entity, SpriteComponent Sprite)> _cachedSprites = new();
 
     public SpriteRenderingSystem(
-        IEntityWorld world, 
         ITextureLoader textureLoader,
         ICamera? camera = null)
     {
-        _world = world;
         _textureLoader = textureLoader;
         _camera = camera;
     }
@@ -40,9 +39,11 @@ public class SpriteRenderingSystem : IRenderSystem
     /// <summary>
     /// Loads textures for all sprites that need them.
     /// </summary>
-    public async Task LoadTexturesAsync(CancellationToken cancellationToken = default)
+    /// <param name="world">The entity world to load textures for.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task LoadTexturesAsync(IEntityWorld world, CancellationToken cancellationToken = default)
     {
-        var sprites = _world.GetEntitiesWithComponent<SpriteComponent>();
+        var sprites = world.GetEntitiesWithComponent<SpriteComponent>();
 
         foreach (var entity in sprites)
         {
@@ -73,11 +74,11 @@ public class SpriteRenderingSystem : IRenderSystem
     /// Renders all entities with SpriteComponent using batching.
     /// Automatically culls off-screen sprites when a camera is present.
     /// </summary>
-    public void Render(IRenderer renderer)
+    public void Render(IRenderer renderer, IEntityWorld world)
     {
         _cachedSprites.Clear();
         
-        var sprites = _world.GetEntitiesWithComponent<SpriteComponent>();
+        var sprites = world.GetEntitiesWithComponent<SpriteComponent>();
         
         foreach (var entity in sprites)
         {
@@ -104,7 +105,7 @@ public class SpriteRenderingSystem : IRenderSystem
             }
 
             // Frustum culling (if camera exists)
-            if (_camera != null && !IsVisible(transform.WorldPosition, sprite, _camera))
+            if (_camera != null && !IsVisible(transform.Position, sprite, _camera))
             {
                 culledCount++;
                 continue;
@@ -122,7 +123,7 @@ public class SpriteRenderingSystem : IRenderSystem
             // Add to batch
             _batcher.Draw(
                 texture: sprite.Texture!,
-                position: transform.WorldPosition + sprite.Offset,
+                position: transform.Position + sprite.Offset,
                 sourceRect: sprite.SourceRect,
                 scale: finalScale,
                 rotation: transform.Rotation,

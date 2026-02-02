@@ -19,29 +19,27 @@ public class CollisionDetectionSystem : IUpdateSystem, IDisposable
     public string Name => "CollisionDetectionSystem";
     public int UpdateOrder => 200; // After movement, before rendering
 
-    private readonly IEntityWorld _world;
     private readonly CollisionSystem _collisionSystem;
     private readonly Dictionary<Entity, CollisionShape> _entityShapes = new();
     private readonly Dictionary<Entity, HashSet<Entity>> _previousCollisions = new();
 
-    public CollisionDetectionSystem(IEntityWorld world, CollisionSystem collisionSystem)
+    public CollisionDetectionSystem(CollisionSystem collisionSystem)
     {
-        _world = world;
         _collisionSystem = collisionSystem;
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, IEntityWorld world)
     {
         // Sync collider positions with transforms and create shapes if needed
-        SyncColliders();
+        SyncColliders(world);
 
         // Detect collisions
-        DetectCollisions();
+        DetectCollisions(world);
     }
 
-    private void SyncColliders()
+    private void SyncColliders(IEntityWorld world)
     {
-        var entities = _world.GetEntitiesWithComponent<ColliderComponent>();
+        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
 
         foreach (var entity in entities)
         {
@@ -75,7 +73,7 @@ public class CollisionDetectionSystem : IUpdateSystem, IDisposable
             }
 
             // Update shape position (world position from transform)
-            collider.Shape.Position = transform.WorldPosition;
+            collider.Shape.Position = transform.Position;
         }
 
         // Remove shapes for destroyed/disabled entities
@@ -91,9 +89,9 @@ public class CollisionDetectionSystem : IUpdateSystem, IDisposable
         }
     }
 
-    private void DetectCollisions()
+    private void DetectCollisions(IEntityWorld world)
     {
-        var entities = _world.GetEntitiesWithComponent<ColliderComponent>();
+        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
 
         foreach (var entity in entities)
         {

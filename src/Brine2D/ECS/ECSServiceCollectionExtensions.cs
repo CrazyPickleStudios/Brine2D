@@ -2,91 +2,42 @@
 using Brine2D.Pooling;
 using Brine2D.ECS.Serialization;
 using Brine2D.ECS.Systems;
+using Brine2D.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Brine2D.Events;
-using Brine2D.Engine;
-using Brine2D.Systems.AI;
-using Brine2D.Systems.Physics;
 
 namespace Brine2D.ECS;
 
 /// <summary>
-/// Post-build configuration to populate update and render pipelines.
-/// This is registered as a hosted service to run automatically.
+/// Extension methods for configuring ECS system pipelines.
 /// </summary>
-internal class SystemPipelineHostedService : IHostedService
-{
-    private readonly IServiceProvider _serviceProvider;
-
-    public SystemPipelineHostedService(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
-        // Configure pipelines when the host starts
-        SystemPipelineConfigurator.ConfigureUpdatePipeline(_serviceProvider);
-        SystemPipelineConfigurator.ConfigureRenderPipeline(_serviceProvider);
-        return Task.CompletedTask;
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}
-
 public static class ECSServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds the object-based ECS system to the service collection.
-    /// Automatically registers lifecycle hook for pipeline execution and object pooling.
+    /// Configures the update and render pipelines with custom ECS systems.
     /// </summary>
-    public static IServiceCollection AddObjectECS(this IServiceCollection services, Action<ECSOptions>? configure = null)
-    {
-        // Configure options (ASP.NET style)
-        services.Configure<ECSOptions>(options =>
-        {
-            configure?.Invoke(options);
-        });
-
-        services.AddScoped<IEntityWorld, EntityWorld>();
-
-        // Pipelines are singletons (shared across all scenes)
-        services.AddSingleton<UpdatePipeline>();
-        services.AddSingleton<RenderPipeline>();
-        
-        // Register pure ECS systems
-        services.TryAddSingleton<VelocitySystem>();
-        services.TryAddSingleton<PhysicsSystem>();
-        services.TryAddSingleton<AISystem>();
-        
-        // Register lifecycle hook for automatic pipeline execution
-        services.AddSingleton<ISceneLifecycleHook, ECSLifecycleHook>();
-        
-        // Register hosted service to auto-configure pipelines
-        services.AddHostedService<SystemPipelineHostedService>();
-        
-        // Add object pooling infrastructure (automatic!)
-        services.AddObjectPooling();
-        
-        return services;
-    }
-
-    /// <summary>
-    /// Configures the update and render pipelines with ECS systems.
+    /// <remarks>
+    /// <para>
+    /// Use this to add custom systems to the global pipelines.
+    /// Built-in systems are automatically registered by <c>.UseSystems()</c>.
+    /// </para>
+    /// <para>
     /// Systems are executed in order of their UpdateOrder/RenderOrder properties.
-    /// </summary>
+    /// Systems implementing both IUpdateSystem and IRenderSystem are automatically
+    /// added to both pipelines.
+    /// </para>
+    /// </remarks>
     /// <example>
     /// <code>
+    /// // Built-in systems are auto-registered by .UseSystems()
+    /// builder.Services.AddBrine2D().UseSystems().UseSDL();
+    /// 
+    /// // Add custom systems
     /// builder.Services.ConfigureSystemPipelines(pipelines =>
     /// {
-    ///     pipelines.AddSystem&lt;PlayerControllerSystem&gt;();
-    ///     pipelines.AddSystem&lt;AISystem&gt;();
-    ///     pipelines.AddSystem&lt;SpriteRenderingSystem&gt;();
-    ///     pipelines.AddSystem&lt;ParticleSystem&gt;(); // Both update and render
+    ///     pipelines.AddSystem&lt;MyCustomAISystem&gt;();
+    ///     pipelines.AddSystem&lt;MyCustomRenderSystem&gt;();
     /// });
     /// </code>
     /// </example>
@@ -94,135 +45,21 @@ public static class ECSServiceCollectionExtensions
         this IServiceCollection services, 
         Action<SystemPipelineBuilder> configure)
     {
+        // Ensure hosted service is registered (auto-populates pipelines)
+        services.AddHostedService<SystemPipelineHostedService>();
+        
         var builder = new SystemPipelineBuilder(services);
         configure(builder);
         return services;
     }
-}
-
-/// <summary>
-/// Builder for configuring update and render system pipelines.
-/// </summary>
-public class SystemPipelineBuilder
-{
-    private readonly IServiceCollection _services;
-
-    internal SystemPipelineBuilder(IServiceCollection services)
-    {
-        _services = services;
-    }
 
     /// <summary>
-    /// Adds a system to the appropriate pipeline(s).
-    /// - If the system implements only IUpdateSystem, adds to update pipeline.
-    /// - If the system implements IRenderSystem, adds to render pipeline.
-    /// - If the system implements both, automatically adds to BOTH pipelines.
+    /// Adds ECS lifecycle hook for automatic update pipeline execution.
+    /// Called automatically when systems are registered.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// pipelines.AddSystem&lt;VelocitySystem&gt;();        // Update only
-    /// pipelines.AddSystem&lt;SpriteRenderingSystem&gt;(); // Render only
-    /// pipelines.AddSystem&lt;ParticleSystem&gt;();        // Both (auto-detected)
-    /// </code>
-    /// </example>
-    public SystemPipelineBuilder AddSystem<T>() where T : class
+    public static IServiceCollection AddECSLifecycleHook(this IServiceCollection services)
     {
-        var systemType = typeof(T);
-        
-        var isUpdateSystem = typeof(IUpdateSystem).IsAssignableFrom(systemType);
-        var isRenderSystem = typeof(IRenderSystem).IsAssignableFrom(systemType);
-
-        if (!isUpdateSystem && !isRenderSystem)
-        {
-            throw new InvalidOperationException(
-                $"Type {systemType.Name} must implement IUpdateSystem, IRenderSystem, or both.");
-        }
-
-        // Register the system itself
-        _services.TryAddSingleton<T>();
-
-        // Add to update pipeline if applicable
-        if (isUpdateSystem)
-        {
-            var registrationType = typeof(UpdateSystemRegistration<>).MakeGenericType(systemType);
-            var registration = Activator.CreateInstance(registrationType) as IUpdateSystemRegistration;
-            _services.AddSingleton(registration!);
-        }
-
-        // Add to render pipeline if applicable
-        if (isRenderSystem)
-        {
-            var registrationType = typeof(RenderSystemRegistration<>).MakeGenericType(systemType);
-            var registration = Activator.CreateInstance(registrationType) as IRenderSystemRegistration;
-            _services.AddSingleton(registration!);
-        }
-
-        return this;
-    }
-}
-
-// Registration helpers for deferred system resolution
-internal interface IUpdateSystemRegistration
-{
-    IUpdateSystem Resolve(IServiceProvider serviceProvider);
-}
-
-internal interface IRenderSystemRegistration
-{
-    IRenderSystem Resolve(IServiceProvider serviceProvider);
-}
-
-/// <summary>
-/// Registration for update systems.
-/// </summary>
-internal class UpdateSystemRegistration<T> : IUpdateSystemRegistration 
-    where T : IUpdateSystem
-{
-    public IUpdateSystem Resolve(IServiceProvider serviceProvider)
-    {
-        return serviceProvider.GetRequiredService<T>();
-    }
-}
-
-/// <summary>
-/// Registration for render systems.
-/// </summary>
-internal class RenderSystemRegistration<T> : IRenderSystemRegistration 
-    where T : IRenderSystem
-{
-    public IRenderSystem Resolve(IServiceProvider serviceProvider)
-    {
-        return serviceProvider.GetRequiredService<T>();
-    }
-}
-
-/// <summary>
-/// Post-build configuration to populate update and render pipelines.
-/// Called after the service provider is built.
-/// </summary>
-public static class SystemPipelineConfigurator
-{
-    public static void ConfigureUpdatePipeline(IServiceProvider serviceProvider)
-    {
-        var pipeline = serviceProvider.GetRequiredService<UpdatePipeline>();
-        var registrations = serviceProvider.GetServices<IUpdateSystemRegistration>();
-
-        foreach (var registration in registrations)
-        {
-            var system = registration.Resolve(serviceProvider);
-            pipeline.AddSystem(system);
-        }
-    }
-
-    public static void ConfigureRenderPipeline(IServiceProvider serviceProvider)
-    {
-        var pipeline = serviceProvider.GetRequiredService<RenderPipeline>();
-        var registrations = serviceProvider.GetServices<IRenderSystemRegistration>();
-
-        foreach (var registration in registrations)
-        {
-            var system = registration.Resolve(serviceProvider);
-            pipeline.AddSystem(system);
-        }
+        services.AddSingleton<ISceneLifecycleHook, ECSLifecycleHook>();
+        return services;
     }
 }

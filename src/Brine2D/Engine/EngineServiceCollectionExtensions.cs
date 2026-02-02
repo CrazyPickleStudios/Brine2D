@@ -2,6 +2,7 @@
 using Brine2D.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.Engine;
@@ -40,6 +41,21 @@ public static class EngineServiceCollectionExtensions
     /// <summary>
     /// Registers a scene in the service collection.
     /// </summary>
+    /// <typeparam name="TScene">The scene type to register.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <remarks>
+    /// Scenes are registered as transient services, meaning a new instance
+    /// is created each time the scene is loaded. This ensures clean state
+    /// between scene transitions.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// builder.Services.AddScene&lt;MenuScene&gt;();
+    /// builder.Services.AddScene&lt;GameScene&gt;();
+    /// builder.Services.AddScene&lt;SettingsScene&gt;();
+    /// </code>
+    /// </example>
     public static IServiceCollection AddScene<TScene>(this IServiceCollection services)
         where TScene : class, IScene
     {
