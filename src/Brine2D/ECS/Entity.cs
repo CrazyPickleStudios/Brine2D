@@ -361,6 +361,48 @@ public class Entity
     }
 
     /// <summary>
+    /// Creates and adds a component of the specified type with inline configuration.
+    /// If a component of this type already exists, does nothing.
+    /// </summary>
+    /// <param name="configure">Optional action to configure the component after creation.</param>
+    /// <returns>This entity for method chaining.</returns>
+    /// <example>
+    /// <code>
+    /// var player = World.CreateEntity("Player")
+    ///     .AddComponent&lt;TransformComponent&gt;(t => t.LocalPosition = new Vector2(100, 100))
+    ///     .AddComponent&lt;SpriteComponent&gt;(s => {
+    ///         s.TexturePath = "player.png";
+    ///         s.Tint = Color.Red;
+    ///         s.Layer = 10;
+    ///     })
+    ///     .AddComponent&lt;VelocityComponent&gt;(v => v.MaxSpeed = 200f);
+    /// </code>
+    /// </example>
+    public Entity AddComponent<T>(Action<T>? configure) where T : Component, new()
+    {
+        var type = typeof(T);
+
+        // Check for existing component
+        if (_components.TryGetValue(type, out var existing))
+        {
+            _logger?.LogDebug("Entity {Name} ({Id}) already has component {Type}, skipping", 
+                Name, Id, type.Name);
+            
+            // Still apply configuration to existing component if provided
+            configure?.Invoke((T)existing);
+            return this;
+        }
+
+        // Create and configure new component
+        var component = new T();
+        configure?.Invoke(component);
+        
+        // Add component
+        AddComponent(component);
+        return this;
+    }
+
+    /// <summary>
     /// Adds an existing component instance to this entity.
     /// If a component of this type already exists, does nothing.
     /// </summary>
