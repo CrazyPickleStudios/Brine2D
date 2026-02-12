@@ -17,6 +17,7 @@ public class RenderingOptions
 
     /// <summary>
     /// Gets or sets the graphics backend to use (GPU or LegacyRenderer).
+    /// Defaults to GPU for modern hardware-accelerated rendering.
     /// </summary>
     public GraphicsBackend Backend { get; set; } = GraphicsBackend.GPU;
     

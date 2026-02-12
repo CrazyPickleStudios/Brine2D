@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Core;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -50,22 +50,22 @@ public class UISlider : IUIComponent
     /// <summary>
     /// Track color (background bar).
     /// </summary>
-    public Color TrackColor { get; set; } = Color.FromArgb(60, 60, 60);
+    public Color TrackColor { get; set; } = new Color(60, 60, 60);
 
     /// <summary>
     /// Fill color (filled portion).
     /// </summary>
-    public Color FillColor { get; set; } = Color.FromArgb(100, 150, 255);
+    public Color FillColor { get; set; } = new Color(100, 150, 255);
 
     /// <summary>
     /// Handle (thumb) color.
     /// </summary>
-    public Color HandleColor { get; set; } = Color.FromArgb(200, 200, 200);
+    public Color HandleColor { get; set; } = new Color(200, 200, 200);
 
     /// <summary>
     /// Handle color when hovered.
     /// </summary>
-    public Color HandleHoverColor { get; set; } = Color.FromArgb(255, 255, 255);
+    public Color HandleHoverColor { get; set; } = new Color(255, 255, 255);
 
     /// <summary>
     /// Handle size in pixels.

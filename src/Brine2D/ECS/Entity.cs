@@ -342,36 +342,55 @@ public class Entity
 
     /// <summary>
     /// Creates and adds a component of the specified type.
+    /// If a component of this type already exists, does nothing.
     /// </summary>
-    public T AddComponent<T>() where T : Component, new()
+    /// <returns>This entity for method chaining.</returns>
+    /// <example>
+    /// <code>
+    /// var player = World.CreateEntity("Player")
+    ///     .AddComponent&lt;TransformComponent&gt;()
+    ///     .AddComponent&lt;SpriteRenderer&gt;()
+    ///     .AddComponent&lt;PlayerController&gt;()
+    ///     .AddTag("Player");
+    /// </code>
+    /// </example>
+    public Entity AddComponent<T>() where T : Component, new()
     {
-        var component = new T();
-        return AddComponent(component);
+        AddComponent(new T());
+        return this;
     }
 
     /// <summary>
     /// Adds an existing component instance to this entity.
-    /// If a component of this type already exists, returns the existing component instead.
+    /// If a component of this type already exists, does nothing.
     /// </summary>
-    public T AddComponent<T>(T component) where T : Component
+    /// <returns>This entity for method chaining.</returns>
+    public Entity AddComponent<T>(T component) where T : Component
     {
         var type = typeof(T);
 
+        // Check for existing component
         if (_components.TryGetValue(type, out var existing))
         {
-            _logger?.LogDebug("Entity {Id} already has component {Type}, returning existing", Id, type.Name);
-            return (T)existing;
+            _logger?.LogDebug("Entity {Name} ({Id}) already has component {Type}, skipping", 
+                Name, Id, type.Name);
+            return this;
         }
 
+        // Add new component
         _components[type] = component;
         component.Entity = this;
-
-        // Call lifecycle method
+        
+        // Notify world (for cached queries, etc.)
+        if (World is EntityWorld world)
+        {
+            world.NotifyComponentAdded(this, component);
+        }
+        
+        // Trigger lifecycle
         component.OnAdded();
 
-        World?.NotifyComponentAdded(this, component);
-
-        return component;
+        return this;
     }
 
     public T? GetComponent<T>() where T : Component
@@ -405,6 +424,10 @@ public class Entity
         return _components.ContainsKey(componentType);
     }
 
+    /// <summary>
+    /// Removes a component of the specified type from this entity.
+    /// </summary>
+    /// <returns>True if a component was removed, false if no component of that type existed.</returns>
     public bool RemoveComponent<T>() where T : Component
     {
         return RemoveComponent(typeof(T));
@@ -413,17 +436,22 @@ public class Entity
     /// <summary>
     /// Removes a component by type.
     /// </summary>
+    /// <returns>True if a component was removed, false if no component of that type existed.</returns>
     public bool RemoveComponent(Type componentType)
     {
         if (_components.TryGetValue(componentType, out var component))
         {
             _components.Remove(componentType);
             
-            // Call lifecycle method
+            // Trigger lifecycle
             component.OnRemoved();
             component.Entity = null;
             
-            World?.NotifyComponentRemoved(this, component);
+            // Notify world (for cached queries, etc.)
+            if (World is EntityWorld world)
+            {
+                world.NotifyComponentRemoved(this, component);
+            }
             
             return true;
         }
@@ -505,19 +533,103 @@ public class Entity
 
     #region Tag Management
 
-    public void AddTag(string tag)
+    /// <summary>
+    /// Adds a tag to this entity.
+    /// </summary>
+    /// <param name="tag">The tag to add.</param>
+    /// <returns>This entity for method chaining.</returns>
+    /// <example>
+    /// <code>
+    /// var enemy = World.CreateEntity("Goblin")
+    ///     .AddComponent&lt;TransformComponent&gt;()
+    ///     .AddTag("Enemy")
+    ///     .AddTag("Melee");
+    /// </code>
+    /// </example>
+    public Entity AddTag(string tag)
     {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            _logger?.LogWarning("Attempted to add null or empty tag to entity {Name}", Name);
+            return this;
+        }
+        
         _tags.Add(tag);
+        return this;
     }
 
-    public void RemoveTag(string tag)
+    /// <summary>
+    /// Adds multiple tags to this entity.
+    /// </summary>
+    /// <param name="tags">The tags to add.</param>
+    /// <returns>This entity for method chaining.</returns>
+    /// <example>
+    /// <code>
+    /// var boss = World.CreateEntity("Dragon")
+    ///     .AddTags("Enemy", "Boss", "Flying", "FireBreathing");
+    /// </code>
+    /// </example>
+    public Entity AddTags(params string[] tags)
+    {
+        foreach (var tag in tags)
+        {
+            if (!string.IsNullOrWhiteSpace(tag))
+            {
+                _tags.Add(tag);
+            }
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Removes a tag from this entity.
+    /// </summary>
+    /// <param name="tag">The tag to remove.</param>
+    /// <returns>This entity for method chaining.</returns>
+    public Entity RemoveTag(string tag)
     {
         _tags.Remove(tag);
+        return this;
     }
 
+    /// <summary>
+    /// Checks if this entity has the specified tag.
+    /// </summary>
+    /// <param name="tag">The tag to check for.</param>
+    /// <returns>True if the entity has the tag, false otherwise.</returns>
     public bool HasTag(string tag)
     {
         return _tags.Contains(tag);
+    }
+
+    /// <summary>
+    /// Checks if this entity has all of the specified tags.
+    /// </summary>
+    /// <param name="tags">Tags to check for.</param>
+    /// <returns>True if the entity has all tags, false otherwise.</returns>
+    public bool HasAllTags(params string[] tags)
+    {
+        return tags.All(tag => _tags.Contains(tag));
+    }
+
+    /// <summary>
+    /// Checks if this entity has any of the specified tags.
+    /// </summary>
+    /// <param name="tags">Tags to check for.</param>
+    /// <returns>True if the entity has at least one tag, false otherwise.</returns>
+    public bool HasAnyTag(params string[] tags)
+    {
+        return tags.Any(tag => _tags.Contains(tag));
+    }
+
+    /// <summary>
+    /// Clears all tags from this entity.
+    /// </summary>
+    /// <returns>This entity for method chaining.</returns>
+    public Entity ClearTags()
+    {
+        _tags.Clear();
+        return this;
     }
 
     #endregion

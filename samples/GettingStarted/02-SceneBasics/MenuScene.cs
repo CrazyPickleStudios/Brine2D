@@ -3,7 +3,6 @@ using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
-using System.Drawing;
 
 namespace SceneBasics
 {

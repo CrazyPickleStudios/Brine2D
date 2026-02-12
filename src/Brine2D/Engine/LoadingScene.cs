@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Core;
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
@@ -29,7 +28,7 @@ public abstract class LoadingScene : Scene
         }
     }
     
-    protected override void OnRender(GameTime gameTime)
+    internal protected override void OnRender(GameTime gameTime)
     {
         OnRenderLoading(gameTime);
     }
@@ -52,13 +51,13 @@ public abstract class LoadingScene : Scene
         var barY = centerY;
         
         // Background (dark gray)
-        Renderer.DrawRectangleFilled(barX, barY, barWidth, barHeight, Color.FromArgb(50, 50, 50));
+        Renderer.DrawRectangleFilled(barX, barY, barWidth, barHeight, new Color(50, 50, 50));
         
         // Filled portion (white)
         Renderer.DrawRectangleFilled(barX, barY, barWidth * LoadingProgress, barHeight, Color.White);
         
         // Border (light gray)
-        Renderer.DrawRectangleOutline(barX, barY, barWidth, barHeight, Color.FromArgb(150, 150, 150), 2f);
+        Renderer.DrawRectangleOutline(barX, barY, barWidth, barHeight, new Color(150, 150, 150), 2f);
         
         // Percentage text
         var percentText = $"{(int)(LoadingProgress * 100)}%";

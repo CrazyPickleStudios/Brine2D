@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Input;
@@ -42,7 +41,7 @@ public class UIDemoScene : DemoSceneBase
         _inputLayerManager = inputLayerManager;
     }
 
-    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== UI Components Demo ===");
         Logger.LogInformation("Controls:");
@@ -50,7 +49,7 @@ public class UIDemoScene : DemoSceneBase
         Logger.LogInformation("  TAB - Navigate between inputs");
         Logger.LogInformation("  ESC - Return to menu");
         
-        Renderer.ClearColor = Color.FromArgb(30, 30, 45);
+        Renderer.ClearColor = new Color(30, 30, 45);
         
         BuildUI();
         
@@ -74,8 +73,8 @@ public class UIDemoScene : DemoSceneBase
         // Panel for basic components
         var basicPanel = new UIPanel(new Vector2(20, 60), new Vector2(280, 540)) 
         {
-            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
-            BorderColor = Color.FromArgb(100, 100, 150)
+            BackgroundColor = new Color(40, 40, 60, 200),
+            BorderColor = new Color(100, 150, 100)
         };
         _uiCanvas.Add(basicPanel);
         
@@ -174,7 +173,7 @@ public class UIDemoScene : DemoSceneBase
         _healthBar = new UIProgressBar(new Vector2(30, buttonY + 25), new Vector2(220, 25))
         {
             Label = "HP",
-            FillColor = Color.FromArgb(0, 200, 0),
+            FillColor = new Color(0, 200, 0),
             Value = 0.65f,
             Tooltip = new UITooltip("Player health: 65%")
         };
@@ -223,8 +222,8 @@ public class UIDemoScene : DemoSceneBase
         
         var radioPanel = new UIPanel(new Vector2(20, 610), new Vector2(280, 100))
         {
-            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
-            BorderColor = Color.FromArgb(100, 100, 150)
+            BackgroundColor = new Color(40, 40, 60, 200),
+            BorderColor = new Color(100, 150, 100)
         };
         _uiCanvas.Add(radioPanel);
         
@@ -369,8 +368,8 @@ public class UIDemoScene : DemoSceneBase
         
         var dialogPanel = new UIPanel(new Vector2(320, 480), new Vector2(380, 110))
         {
-            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
-            BorderColor = Color.FromArgb(100, 100, 150)
+            BackgroundColor = new Color(40, 40, 60, 200),
+            BorderColor = new Color(100, 150, 100)
         };
         _uiCanvas.Add(dialogPanel);
         
@@ -389,8 +388,8 @@ public class UIDemoScene : DemoSceneBase
         
         var controlPanel = new UIPanel(new Vector2(320, 610), new Vector2(380, 100))
         {
-            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
-            BorderColor = Color.FromArgb(100, 100, 150)
+            BackgroundColor = new Color(40, 40, 60, 200),
+            BorderColor = new Color(100, 150, 100)
         };
         _uiCanvas.Add(controlPanel);
         
@@ -431,8 +430,8 @@ public class UIDemoScene : DemoSceneBase
         
         var statusPanel = new UIPanel(new Vector2(720, 610), new Vector2(540, 100))
         {
-            BackgroundColor = Color.FromArgb(200, 40, 40, 60),
-            BorderColor = Color.FromArgb(100, 100, 150)
+            BackgroundColor = new Color(40, 40, 60, 200),
+            BorderColor = new Color(100, 150, 100)
         };
         _uiCanvas.Add(statusPanel);
         

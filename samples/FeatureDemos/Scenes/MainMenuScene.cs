@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Core;
 using Brine2D.Engine.Transitions;
 using Brine2D.Input;
@@ -35,7 +34,7 @@ public class MainMenuScene : Scene
     private const float ColumnStartY = 160f;
     private const float LineHeight = 50f;
     private const float CategorySpacing = 20f;
-    private const float ColumnSpacing = 40f; // Space between columns
+    private const float ColumnSpacing = 40f;
     private const float LeftColumnX = 100f;
     private const float RightColumnX = 640f;
     private const float ColumnWidth = 520f;
@@ -61,6 +60,7 @@ public class MainMenuScene : Scene
             
             // Rendering Demos (Left Column)
             new("Texture Atlasing", typeof(TextureAtlasDemoScene), "Sprite batching & atlases", "Rendering"),
+            new("Scissor Rects", typeof(ScissorRectDemoScene), "UI clipping & scroll views", "Rendering"),
             
             // Collision Demos (Left Column)
             new("Collision Detection", typeof(CollisionDemoScene), "Physics & colliders", "Collision"),
@@ -76,22 +76,23 @@ public class MainMenuScene : Scene
             
             // Performance Demos (Right Column)
             new("Performance Benchmark", typeof(SpriteBenchmarkScene), "Batching & culling test", "Performance"),
+            new("Background Loading", typeof(BackgroundLoadingDemoScene), "Async asset streaming", "Performance"),
             
             // Advanced Demos (Right Column)
             new("Manual Control", typeof(ManualControlScene), "Opt-out lifecycle hooks", "Advanced")
         };
     }
 
-    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        Renderer.ClearColor = Color.FromArgb(15, 20, 35);
+        Renderer.ClearColor = new Color(15, 20, 35);
         
         Logger.LogInformation("=== Brine2D Feature Demos ===");
         Logger.LogInformation("Available demos: {Count}", _demos.Count);
         Logger.LogInformation("Controls:");
         Logger.LogInformation("  Arrow Keys - Navigate");
         Logger.LogInformation("  Enter/Space - Select");
-        Logger.LogInformation("  1-{Max} - Quick select", _demos.Count);
+        Logger.LogInformation("  1-9, 0 - Quick select");
         Logger.LogInformation("  ESC - Exit");
 
         return Task.CompletedTask;
@@ -114,7 +115,6 @@ public class MainMenuScene : Scene
         // Navigation - Left/Right (jump to adjacent column)
         if (_input.IsKeyPressed(Key.Left))
         {
-            // Jump to left column (wrap around)
             var targetIndex = _selectedIndex - GetItemsPerColumn();
             if (targetIndex < 0)
                 targetIndex = _demos.Count + targetIndex;
@@ -122,7 +122,6 @@ public class MainMenuScene : Scene
         }
         if (_input.IsKeyPressed(Key.Right))
         {
-            // Jump to right column (wrap around)
             _selectedIndex = (_selectedIndex + GetItemsPerColumn()) % _demos.Count;
         }
 
@@ -132,7 +131,7 @@ public class MainMenuScene : Scene
             LoadSelectedDemo();
         }
 
-        // Number key shortcuts (1-9)
+        // Number key shortcuts (1-9, 0 for 10th item)
         for (int i = 0; i < Math.Min(_demos.Count, 9); i++)
         {
             var key = Key.D1 + i; // D1 = '1', D2 = '2', etc.
@@ -141,6 +140,13 @@ public class MainMenuScene : Scene
                 _selectedIndex = i;
                 LoadSelectedDemo();
             }
+        }
+        
+        // 0 key for 10th demo
+        if (_demos.Count >= 10 && _input.IsKeyPressed(Key.D0))
+        {
+            _selectedIndex = 9;
+            LoadSelectedDemo();
         }
 
         // Exit
@@ -157,25 +163,34 @@ public class MainMenuScene : Scene
         Logger.LogInformation("Loading demo: {Name}", selected.DisplayName);
         
         // Use fade transition
-        _ = _sceneManager.LoadSceneAsync(
-            selected.SceneType,
-            new FadeTransition(duration: 0.5f, color: Color.Black)
-        );
+        if (selected.DisplayName == "Background Loading")
+        {
+            Logger.LogInformation("Loading demo: {Name}", selected.DisplayName);
+            
+            _ = _sceneManager.LoadSceneAsync<BackgroundLoadingDemoScene, CustomLoadingScreen>();
+        }
+        else
+        {
+            _ = _sceneManager.LoadSceneAsync(
+                selected.SceneType,
+                new FadeTransition(duration: 0.5f, color: Color.Black)
+            );
+        }
     }
 
     protected override void OnRender(GameTime gameTime)
     {
         // Title
-        DrawCenteredText("BRINE2D FEATURE DEMOS", TitleY, Color.FromArgb(100, 200, 255), large: true);
-        DrawCenteredText("v0.6.0-beta", TitleY + 30, Color.FromArgb(150, 150, 150));
+        DrawCenteredText("BRINE2D FEATURE DEMOS", TitleY, new Color(100, 200, 255), large: true);
+        DrawCenteredText("v0.6.0-beta", TitleY + 30, new Color(150, 150, 150));
         
-        DrawCenteredText("↑↓ Navigate  |  ←→ Switch Column  |  ENTER Select  |  1-9 Quick  |  ESC Exit", 
-            TitleY + 65, Color.FromArgb(120, 120, 120));
+        DrawCenteredText("↑↓ Navigate  |  ←→ Switch Column  |  ENTER Select  |  1-0 Quick  |  ESC Exit", 
+            TitleY + 65, new Color(120, 120, 120));
         
         // Draw separator line
-        Renderer.DrawRectangleFilled(50, TitleY + 95, 1180, 2, Color.FromArgb(50, 70, 100));
+        Renderer.DrawRectangleFilled(50, TitleY + 95, 1180, 2, new Color(50, 70, 100));
         
-        // Determine column split (distribute demos evenly)
+        // Determine column split
         var itemsPerColumn = GetItemsPerColumn();
         
         // Draw left column
@@ -186,12 +201,12 @@ public class MainMenuScene : Scene
         
         // Draw column separator
         var separatorX = LeftColumnX + ColumnWidth + (ColumnSpacing / 2);
-        Renderer.DrawRectangleFilled(separatorX, ColumnStartY - 10, 2, 450, Color.FromArgb(50, 70, 100));
+        Renderer.DrawRectangleFilled(separatorX, ColumnStartY - 10, 2, 500, new Color(50, 70, 100));
         
         // Footer info
         var footerY = 660f;
-        DrawCenteredText($"Total Demos: {_demos.Count}  |  Batched Rendering + Frustum Culling + Object Pooling", 
-            footerY, Color.FromArgb(100, 100, 100));
+        DrawCenteredText($"Total Demos: {_demos.Count}  |  SDL3 + Vulkan + Multi-Threading", 
+            footerY, new Color(100, 100, 100));
     }
 
     private void DrawColumn(List<DemoEntry> demos, float columnX, float startY, int indexOffset)
@@ -216,7 +231,7 @@ public class MainMenuScene : Scene
                     $"--- {demo.Category} ---", 
                     columnX + 20, 
                     currentY,
-                    Color.FromArgb(80, 150, 200)
+                    new Color(80, 150, 200)
                 );
                 currentY += LineHeight - 10;
                 lastCategory = demo.Category;
@@ -227,22 +242,23 @@ public class MainMenuScene : Scene
             // Selection background
             if (isSelected)
             {
-                Renderer.DrawRectangleFilled(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(150, 40, 80, 120));
-                Renderer.DrawRectangleOutline(columnX, currentY - 5, ColumnWidth, 48, Color.FromArgb(100, 180, 255), 2f);
+                Renderer.DrawRectangleFilled(columnX, currentY - 5, ColumnWidth, 48, new Color(40, 80, 120, 150));
+                Renderer.DrawRectangleOutline(columnX, currentY - 5, ColumnWidth, 48, new Color(100, 180, 255), 2f);
             }
             
             // Selection arrow
             if (isSelected)
             {
-                Renderer.DrawText(">", columnX - 20, currentY, Color.FromArgb(100, 200, 255));
+                Renderer.DrawText(">", columnX - 20, currentY, new Color(100, 200, 255));
             }
             
             // Demo number and name
-            var nameColor = isSelected ? Color.FromArgb(255, 255, 255) : Color.FromArgb(200, 200, 200);
-            Renderer.DrawText($"{globalIndex + 1}. {demo.DisplayName}", columnX + 20, currentY, nameColor);
+            var nameColor = isSelected ? new Color(255, 255, 255) : new Color(200, 200, 200);
+            var numberStr = globalIndex < 9 ? $"{globalIndex + 1}" : "0";
+            Renderer.DrawText($"{numberStr}. {demo.DisplayName}", columnX + 20, currentY, nameColor);
             
             // Description (smaller text)
-            Renderer.DrawText(demo.Description, columnX + 40, currentY + 22, Color.FromArgb(140, 140, 140));
+            Renderer.DrawText(demo.Description, columnX + 40, currentY + 22, new Color(140, 140, 140));
             
             currentY += LineHeight;
         }
@@ -251,7 +267,7 @@ public class MainMenuScene : Scene
     private int GetItemsPerColumn()
     {
         // Split demos into two roughly equal columns
-        return (_demos.Count + 1) / 2; // Ceiling division
+        return (_demos.Count + 1) / 2;
     }
 
     private void DrawCenteredText(string text, float y, Color color, bool large = false)

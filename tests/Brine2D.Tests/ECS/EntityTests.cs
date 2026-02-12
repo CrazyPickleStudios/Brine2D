@@ -12,7 +12,8 @@ public class EntityTests : TestBase
     {
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var component = entity.AddComponent(new TestComponent());
+        var component = new TestComponent();
+        entity.AddComponent(component);
 
         entity.HasComponent<TestComponent>().Should().BeTrue();
         entity.GetComponent<TestComponent>().Should().Be(component);

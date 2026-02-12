@@ -1,39 +1,46 @@
 namespace Brine2D.Rendering;
 
 /// <summary>
-/// Service for loading and managing textures.
+/// Low-level texture loading interface.
+/// <para>
+/// <strong>For most use cases, use <see cref="IAssetLoader"/> instead!</strong>
+/// </para>
+/// <para>
+/// This interface is for advanced scenarios like:
+/// - Custom texture loading implementations
+/// - Framework/system-level texture management
+/// - Direct texture operations without caching
+/// </para>
 /// </summary>
+/// <remarks>
+/// <strong>Prefer IAssetLoader for scene asset loading</strong> - it provides:
+/// - Automatic caching
+/// - Progress tracking
+/// - Parallel loading
+/// - Thread-safe operations
+/// </remarks>
 public interface ITextureLoader : IDisposable
 {
     /// <summary>
-    /// Loads a texture from a file path.
+    /// Loads a texture from a file path asynchronously.
     /// </summary>
-    /// <param name="path">Path to the image file.</param>
-    /// <param name="scaleMode">Scale mode for the texture (default: Linear).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The loaded texture.</returns>
+    /// <remarks>
+    /// Consider using <see cref="IAssetLoader.LoadTextureAsync"/> instead for automatic caching.
+    /// </remarks>
     Task<ITexture> LoadTextureAsync(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads a texture from a file path synchronously.
     /// </summary>
-    /// <param name="path">Path to the image file.</param>
-    /// <param name="scaleMode">Scale mode for the texture (default: Linear).</param>
-    /// <returns>The loaded texture.</returns>
     ITexture LoadTexture(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear);
 
     /// <summary>
     /// Creates a blank texture with the specified dimensions.
     /// </summary>
-    /// <param name="width">Width in pixels.</param>
-    /// <param name="height">Height in pixels.</param>
-    /// <param name="scaleMode">Scale mode for the texture (default: Linear).</param>
-    /// <returns>The created texture.</returns>
     ITexture CreateTexture(int width, int height, TextureScaleMode scaleMode = TextureScaleMode.Linear);
 
     /// <summary>
     /// Unloads a texture and frees its resources.
     /// </summary>
-    /// <param name="texture">The texture to unload.</param>
     void UnloadTexture(ITexture texture);
 }

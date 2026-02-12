@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using Brine2D.Core;
+using Brine2D.Rendering.Text;
 using Brine2D.Rendering.PostProcessing;
 using Brine2D.Rendering.SDL.PostProcessing;
 using Brine2D.SDL.Common;
@@ -28,6 +29,8 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     private ViewportState _viewport;
 
+    private readonly MarkupParser _markupParser;
+
     private nint _window;
     private nint _device;
     private nint _sampler;
@@ -51,7 +54,7 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private FontAtlas? _defaultFontAtlas;
 
     private Matrix4x4 _projectionMatrix;
-    private Color _clearColor = Color.FromArgb(255, 52, 78, 65);
+    private Color _clearColor = new Color(52, 78, 65, 255);
 
     private readonly Dictionary<BlendMode, nint> _graphicsPipelines = new();
     private BlendMode _currentBlendMode = BlendMode.Alpha;
@@ -62,10 +65,206 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private PostProcessingOptions? _postProcessingOptions;
     private bool _usePostProcessing;
 
+    private byte _currentRenderLayer = 128; // Default: middle layer
+
+    private IRenderTarget? _currentRenderTarget;
+    private Stack<IRenderTarget?> _renderTargetStack = new();
+
+    private Rectangle? _currentScissorRect;
+    private readonly Stack<Rectangle?> _scissorRectStack = new();
+
+    private readonly IMarkupParser _defaultMarkupParser;
+
     public Color ClearColor
     {
         get => _clearColor;
         set => _clearColor = value;
+    }
+
+    public IRenderTarget CreateRenderTarget(int width, int height)
+    {
+        ThrowIfNotInitialized();
+        
+        if (width <= 0 || height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                width <= 0 ? nameof(width) : nameof(height),
+                "Render target dimensions must be positive");
+        }
+        
+        if (width > 16384 || height > 16384)
+        {
+            _logger.LogWarning("Large render target requested: {Width}x{Height} - may fail on some GPUs", 
+                width, height);
+        }
+        
+        var format = SDL3.SDL.GPUTextureFormat.R8G8B8A8Unorm;
+        var renderTarget = new RenderTarget(
+            _device, 
+            width, 
+            height, 
+            format,
+            _loggerFactory.CreateLogger<RenderTarget>());
+        
+        _logger.LogDebug("Created render target: {Width}x{Height}", width, height);
+        return renderTarget;
+    }
+
+    public void SetRenderTarget(IRenderTarget? target)
+    {
+        ThrowIfNotInitialized();
+        
+        // Flush any pending draws before changing render target
+        FlushBatch();
+        
+        _currentRenderTarget = target;
+        _logger.LogDebug("Render target set to: {Target}", 
+            target == null ? "Screen" : $"{target.Width}x{target.Height}");
+    }
+
+    public IRenderTarget? GetRenderTarget()
+    {
+        return _currentRenderTarget;
+    }
+
+    /// <summary>
+    /// Push the current render target onto a stack and set a new one.
+    /// Useful for nested render-to-texture operations.
+    /// </summary>
+    public void PushRenderTarget(IRenderTarget? target)
+    {
+        _renderTargetStack.Push(_currentRenderTarget);
+        SetRenderTarget(target);
+    }
+
+    /// <summary>
+    /// Pop the previous render target from the stack.
+    /// </summary>
+    public void PopRenderTarget()
+    {
+        if (_renderTargetStack.Count == 0)
+        {
+            _logger.LogWarning("PopRenderTarget called with empty stack");
+            return;
+        }
+        
+        var previousTarget = _renderTargetStack.Pop();
+        SetRenderTarget(previousTarget);
+    }
+
+    public void SetRenderLayer(byte layer)
+    {
+        _currentRenderLayer = layer;
+    }
+
+    public byte GetRenderLayer()
+    {
+        return _currentRenderLayer;
+    }
+
+    // ============================================================
+    // TEXTURE DRAWING API (Clean, Non-Ambiguous)
+    // ============================================================
+
+    /// <summary>
+    /// Draw a texture with full control over transform, origin, scale, and flip.
+    /// </summary>
+    /// <param name="texture">The texture to draw.</param>
+    /// <param name="position">Position in world/screen space.</param>
+    /// <param name="sourceRect">Source rectangle (null = entire texture).</param>
+    /// <param name="origin">Rotation/scale origin (0-1 normalized, 0.5,0.5 = center, 0,0 = top-left). Defaults to center.</param>
+    /// <param name="rotation">Rotation angle in radians.</param>
+    /// <param name="scale">Scale multiplier (null = no scaling).</param>
+    /// <param name="color">Tint color (null = white).</param>
+    /// <param name="flip">Sprite flip flags.</param>
+    public void DrawTexture(
+        ITexture texture,
+        Vector2 position,
+        Rectangle? sourceRect = null,
+        Vector2? origin = null,
+        float rotation = 0f,
+        Vector2? scale = null,
+        Color? color = null,
+        SpriteFlip flip = SpriteFlip.None)
+    {
+        ThrowIfNotInitialized();
+
+        if (texture == null || !texture.IsLoaded)
+        {
+            _logger.LogWarning("Attempted to draw invalid texture");
+            return;
+        }
+
+        var textureHandle = GetTextureHandle(texture);  
+
+        // Defaults
+        var actualOrigin = origin ?? new Vector2(0.5f, 0.5f);
+        var actualScale = scale ?? Vector2.One;
+        var actualColor = color ?? Color.White;
+        var srcRect = sourceRect ?? new Rectangle(0, 0, texture.Width, texture.Height);
+
+        // Calculate destination size
+        var destWidth = srcRect.Width * actualScale.X;
+        var destHeight = srcRect.Height * actualScale.Y;
+
+        // Bind texture
+        EnsureTextureBound(textureHandle, texture.ScaleMode);
+
+        // UV coordinates
+        float u1 = srcRect.X / (float)texture.Width;
+        float v1 = srcRect.Y / (float)texture.Height;
+        float u2 = (srcRect.X + srcRect.Width) / (float)texture.Width;
+        float v2 = (srcRect.Y + srcRect.Height) / (float)texture.Height;
+
+        // Apply flip
+        if ((flip & SpriteFlip.Horizontal) != 0) (u1, u2) = (u2, u1);
+        if ((flip & SpriteFlip.Vertical) != 0) (v1, v2) = (v2, v1);
+
+        // Calculate pivot
+        var pivotX = destWidth * actualOrigin.X;
+        var pivotY = destHeight * actualOrigin.Y;
+        var adjustedX = position.X - pivotX;
+        var adjustedY = position.Y - pivotY;
+
+        // Draw
+        if (rotation != 0f)
+            AddQuadRotated(adjustedX, adjustedY, destWidth, destHeight, rotation, actualColor, u1, v1, u2, v2);
+        else
+            AddQuad(adjustedX, adjustedY, destWidth, destHeight, actualColor, u1, v1, u2, v2);
+    }
+
+    /// <summary>
+    /// Draw texture at position (Vector2, top-left anchor).
+    /// </summary>
+    public void DrawTexture(ITexture texture, Vector2 position)
+    {
+        if (texture == null || !texture.IsLoaded)
+            return;
+
+        DrawTexture(texture, position,
+            origin: Vector2.Zero,
+            scale: Vector2.One);
+    }
+
+    /// <summary>
+    /// Draw texture at position (float x, y, top-left anchor).
+    /// </summary>
+    public void DrawTexture(ITexture texture, float x, float y)
+    {
+        DrawTexture(texture, new Vector2(x, y));
+    }
+
+    /// <summary>
+    /// Draw texture at position with explicit width/height (top-left anchor).
+    /// </summary>
+    public void DrawTexture(ITexture texture, float x, float y, float width, float height)
+    {
+        if (texture == null || !texture.IsLoaded)
+            return;
+
+        DrawTexture(texture, new Vector2(x, y),
+            scale: new Vector2(width / texture.Width, height / texture.Height),
+            origin: Vector2.Zero);
     }
 
     private bool _disposed;
@@ -112,6 +311,10 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         _usePostProcessing = _postProcessingOptions?.Enabled == true && _postProcessPipeline != null;
 
         _viewport = new ViewportState(_windowOptions.Width, _windowOptions.Height);
+
+        _markupParser = new MarkupParser(_logger);
+
+        _defaultMarkupParser = new BBCodeParser(_logger);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -124,13 +327,16 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         _logger.LogInformation("Initializing SDL3 GPU renderer");
 
-        if (!SDL3.SDL.Init(SDL3.SDL.InitFlags.Video))
+        _logger.LogInformation("SDL3 GPU Renderer initializing on Thread {ThreadId}", 
+            Thread.CurrentThread.ManagedThreadId);
+        
+        if (!SDL3.SDL.Init(SDL3.SDL.InitFlags.Video | SDL3.SDL.InitFlags.Events))
         {
             var error = SDL3.SDL.GetError();
             _logger.LogError("Failed to initialize SDL3: {Error}", error);
             throw new InvalidOperationException($"Failed to initialize SDL3: {error}");
         }
-
+        
         var windowFlags = SDL3.SDL.WindowFlags.Vulkan;
         if (_windowOptions.Resizable)
             windowFlags |= SDL3.SDL.WindowFlags.Resizable;
@@ -600,7 +806,21 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         // The swapchain will be used in EndFrame after effects are applied
     }
 
-    public void EndFrame()
+    /// <summary>
+    /// Applies post-processing effects to the current frame.
+    /// Only works if post-processing is enabled via options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is called automatically by the framework unless
+    /// <see cref="ISceneLifecycleControl.EnableAutomaticFrameManagement"/> is false.
+    /// </para>
+    /// <para>
+    /// Use this for advanced scenarios where you want to render UI or other
+    /// elements after post-processing effects are applied to the game world.
+    /// </para>
+    /// </remarks>
+    public void ApplyPostProcessing()
     {
         ThrowIfNotInitialized();
 
@@ -615,20 +835,30 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         if (_usePostProcessing && _mainRenderTarget != null && _pingPongTarget != null && _postProcessPipeline != null)
         {
             // Execute pipeline - it returns true if any effects were applied
-            bool effectsApplied = _postProcessPipeline.Execute(this, _mainRenderTarget.Texture, _swapchainTexture, _commandBuffer, _pingPongTarget);
+            bool effectsApplied = _postProcessPipeline.Execute(
+                this, 
+                _mainRenderTarget.TextureHandle, 
+                _swapchainTexture, 
+                _commandBuffer, 
+                _pingPongTarget);
             
             // If no effects were applied, blit manually
             if (!effectsApplied)
             {
-                BlitTextureToSwapchain(_mainRenderTarget.Texture, _swapchainTexture);
+                BlitTextureToSwapchain(_mainRenderTarget.TextureHandle, _swapchainTexture);
             }
         }
-        // Only log once during initialization
-        else if (_mainRenderTarget == null && _usePostProcessing)
-        {
-            _logger.LogDebug("Post-processing disabled or components missing");
-        }
+    }
 
+    public void EndFrame()
+    {
+        ThrowIfNotInitialized();
+
+        if (_swapchainTexture == nint.Zero)
+        {
+            return;
+        }
+        
         if (_commandBuffer != nint.Zero)
         {
             SDL3.SDL.SubmitGPUCommandBuffer(_commandBuffer);
@@ -691,10 +921,25 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         UploadVertexData();
 
-        // Determine render target: use render target if post-processing, otherwise swapchain
-        nint renderTarget = _usePostProcessing && _mainRenderTarget != null
-            ? _mainRenderTarget.Texture
-            : _swapchainTexture;
+        // Determine render target based on current state
+        nint renderTarget;
+        if (_currentRenderTarget != null)
+        {
+            renderTarget = (_currentRenderTarget as RenderTarget)?.TextureHandle ?? nint.Zero;
+            if (renderTarget == nint.Zero)
+            {
+                _logger.LogError("Invalid render target");
+                return;
+            }
+        }
+        else if (_usePostProcessing && _mainRenderTarget != null)
+        {
+            renderTarget = _mainRenderTarget.TextureHandle;
+        }
+        else
+        {
+            renderTarget = _swapchainTexture;
+        }
 
         var colorTargetInfo = new SDL3.SDL.GPUColorTargetInfo
         {
@@ -713,7 +958,6 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         _isFirstFlush = false;
 
         var colorTargets = new[] { colorTargetInfo };
-
         var colorTargetHandle = GCHandle.Alloc(colorTargets, GCHandleType.Pinned);
 
         try
@@ -762,13 +1006,30 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
                 };
                 SDL3.SDL.SetGPUViewport(_renderPass, ref viewport);
 
-                var scissor = new SDL3.SDL.Rect
+                SDL3.SDL.Rect scissor;
+
+                if (_currentScissorRect.HasValue)
                 {
-                    X = 0,
-                    Y = 0,
-                    W = _viewport.Width,
-                    H = _viewport.Height
-                };
+                    var rect = _currentScissorRect.Value;
+                    scissor = new SDL3.SDL.Rect
+                    {
+                        X = (int)rect.X,
+                        Y = (int)rect.Y,
+                        W = (int)rect.Width,
+                        H = (int)rect.Height
+                    };
+                }
+                else
+                {
+                    // No clipping - use full viewport
+                    scissor = new SDL3.SDL.Rect
+                    {
+                        X = 0,
+                        Y = 0,
+                        W = _viewport.Width,
+                        H = _viewport.Height
+                    };
+                }
                 SDL3.SDL.SetGPUScissor(_renderPass, ref scissor);
 
                 var bufferBinding = new SDL3.SDL.GPUBufferBinding
@@ -994,6 +1255,69 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         _currentBlendMode = blendMode;
     }
 
+    // New methods for scissor rectangle control
+
+    public void SetScissorRect(Rectangle? rect)
+    {
+        ThrowIfNotInitialized();
+        
+        // Validate rectangle if provided
+        if (rect.HasValue)
+        {
+            var r = rect.Value;
+            if (r.Width < 0 || r.Height < 0)
+            {
+                throw new ArgumentException(
+                    "Scissor rectangle dimensions cannot be negative", 
+                    nameof(rect));
+            }
+            
+            // Clamp to viewport bounds
+            if (r.X < 0 || r.Y < 0 || 
+                r.X + r.Width > _viewport.Width || 
+                r.Y + r.Height > _viewport.Height)
+            {
+                _logger.LogWarning(
+                    "Scissor rect ({X}, {Y}, {Width}, {Height}) extends beyond viewport ({ViewportWidth}x{ViewportHeight})",
+                    r.X, r.Y, r.Width, r.Height, _viewport.Width, _viewport.Height);
+            }
+        }
+        
+        FlushBatch();
+        
+        _currentScissorRect = rect;
+        
+        _logger.LogDebug("Scissor rect set to: {Rect}", 
+            rect.HasValue ? $"{rect.Value.X}, {rect.Value.Y}, {rect.Value.Width}x{rect.Value.Height}" : "None");
+    }
+
+    public Rectangle? GetScissorRect()
+    {
+        return _currentScissorRect;
+    }
+
+    public void PushScissorRect(Rectangle? rect)
+    {
+        _scissorRectStack.Push(_currentScissorRect);
+        SetScissorRect(rect);
+        
+        _logger.LogDebug("Scissor rect pushed (stack depth: {Depth})", _scissorRectStack.Count);
+    }
+
+    public void PopScissorRect()
+    {
+        if (_scissorRectStack.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot pop scissor rect: stack is empty");
+        }
+        
+        var previousRect = _scissorRectStack.Pop();
+        SetScissorRect(previousRect);
+        
+        _logger.LogDebug("Scissor rect popped (stack depth: {Depth})", _scissorRectStack.Count);
+    }
+
     private static Vector4 ColorToVector4(Color color) =>
         new(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
 
@@ -1087,77 +1411,81 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
     }
 
-    public void DrawTexture(ITexture texture, float x, float y)
-    {
-        if (texture == null || !texture.IsLoaded)
-            return;
-
-        DrawTexture(texture, x, y, texture.Width, texture.Height);
-    }
-
-    public void DrawTexture(ITexture texture, float x, float y, float width, float height,
-        float rotation = 0f, Color? color = null)
-    {
-        ThrowIfNotInitialized();
-
-        if (texture is not SDL3GPUTexture gpuTexture || !texture.IsLoaded)
-        {
-            _logger.LogWarning("Attempted to draw invalid or non-GPU texture");
-            return;
-        }
-
-        EnsureTextureBound(gpuTexture.Handle, texture.ScaleMode);
-
-        var tintColor = color ?? Color.White;
-
-        if (rotation != 0f)
-        {
-            AddQuadRotated(x, y, width, height, rotation, tintColor);
-        }
-        else
-        {
-            AddQuad(x, y, width, height, tintColor);
-        }
-    }
-
-    public void DrawTexture(ITexture texture, float sourceX, float sourceY, float sourceWidth, float sourceHeight,
-                       float destX, float destY, float destWidth, float destHeight,
-                       float rotation = 0f, Color? color = null)
-    {
-        ThrowIfNotInitialized();
-
-        if (texture is not SDL3GPUTexture gpuTexture || !texture.IsLoaded)
-        {
-            _logger.LogWarning("Attempted to draw invalid or non-GPU texture");
-            return;
-        }
-
-        EnsureTextureBound(gpuTexture.Handle, texture.ScaleMode);
-
-        float u1 = sourceX / texture.Width;
-        float v1 = sourceY / texture.Height;
-        float u2 = (sourceX + sourceWidth) / texture.Width;
-        float v2 = (sourceY + sourceHeight) / texture.Height;
-
-        var tintColor = color ?? Color.White;
-
-        if (rotation != 0f)
-        {
-            AddQuadRotated(destX, destY, destWidth, destHeight, rotation, tintColor, u1, v1, u2, v2);
-        }
-        else
-        {
-            AddQuad(destX, destY, destWidth, destHeight, tintColor, u1, v1, u2, v2);
-        }
-    }
+    // ============================================================
+    // TEXT RENDERING
+    // ============================================================
 
     public void DrawText(string text, float x, float y, Color color)
+    {
+        DrawText(text, x, y, new TextRenderOptions
+        {
+            Color = color,
+            Font = _defaultFont
+        });
+    }
+
+    public void DrawText(string text, float x, float y, TextRenderOptions options)
     {
         ThrowIfNotInitialized();
 
         if (string.IsNullOrEmpty(text))
             return;
 
+        // Use custom parser if provided, otherwise use default BBCode parser
+        var parser = options.ParseMarkup 
+            ? (options.MarkupParser ?? _defaultMarkupParser)
+            : new PlainTextParser();
+
+        var runs = parser.Parse(text, options);
+
+        // Render with layout
+        RenderTextRuns(runs, x, y, options);
+    }
+
+    public Vector2 MeasureText(string text, float? fontSize = null)
+    {
+        if (string.IsNullOrEmpty(text) || _defaultFont == null)
+            return Vector2.Zero;
+
+        if (_defaultFont is not SDL3Font sdlFont)
+            return Vector2.Zero;
+
+        // Simple SDL measurement for plain text
+        if (SDL3.TTF.GetStringSize(sdlFont.Handle, text, 0, out int w, out int h))
+        {
+            float scale = fontSize.HasValue ? (fontSize.Value / _defaultFont.Size) : 1.0f;
+            return new Vector2(w * scale, h * scale);
+        }
+
+        return Vector2.Zero;
+    }
+
+    public Vector2 MeasureText(string text, TextRenderOptions options)
+    {
+        if (string.IsNullOrEmpty(text))
+            return Vector2.Zero;
+
+        var runs = options.ParseMarkup
+            ? _markupParser.Parse(text, options)
+            : new[] { new TextRun { Text = text, FontSize = options.FontSize } };
+
+        return MeasureTextRuns(runs, options);
+    }
+
+    // ============================================================
+    // TEXT RENDERING INTERNALS
+    // ============================================================
+
+    private void RenderTextRuns(
+        IReadOnlyList<TextRun> runs,
+        float x,
+        float y,
+        TextRenderOptions options)
+    {
+        if (runs.Count == 0)
+            return;
+
+        // Ensure font atlas is ready
         EnsureFontAtlasGenerated();
 
         if (_defaultFontAtlas == null || _defaultFontAtlas.Texture == null)
@@ -1166,16 +1494,153 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
             return;
         }
 
-        float cursorX = x;
-        float cursorY = y;
+        // Calculate total text bounds for alignment
+        var textSize = MeasureTextRuns(runs, options);
+
+        float startX = x;
+        float startY = y;
+
+        // Apply horizontal alignment
+        if (options.MaxWidth.HasValue)
+        {
+            startX = options.HorizontalAlign switch
+            {
+                TextAlignment.Center => x + (options.MaxWidth.Value - textSize.X) / 2,
+                TextAlignment.Right => x + options.MaxWidth.Value - textSize.X,
+                _ => x
+            };
+        }
+
+        // Apply vertical alignment
+        if (options.MaxHeight.HasValue)
+        {
+            startY = options.VerticalAlign switch
+            {
+                VerticalAlignment.Middle => y + (options.MaxHeight.Value - textSize.Y) / 2,
+                VerticalAlignment.Bottom => y + options.MaxHeight.Value - textSize.Y,
+                _ => y
+            };
+        }
+
+        float cursorX = startX;
+        float cursorY = startY;
+        float lineHeight = _defaultFontAtlas.LineHeight * options.LineSpacing;
+
         var atlasTexture = _defaultFontAtlas.Texture;
+
+        foreach (var run in runs)
+        {
+            if (string.IsNullOrEmpty(run.Text))
+                continue;
+
+            // Handle wrapping
+            if (options.MaxWidth.HasValue)
+            {
+                RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+            }
+            else
+            {
+                RenderRunDirect(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+            }
+        }
+    }
+
+    private void RenderRunDirect(
+        TextRun run,
+        ref float cursorX,
+        ref float cursorY,
+        float startX,
+        float lineHeight,
+        TextRenderOptions options,
+        ITexture atlasTexture)
+    {
+        // Render shadow if enabled
+        if (options.ShadowOffset.HasValue)
+        {
+            float shadowStartX = cursorX;
+            RenderGlyphs(run.Text, cursorX + options.ShadowOffset.Value.X,
+                         cursorY + options.ShadowOffset.Value.Y,
+                         options.ShadowColor, atlasTexture, ref cursorX, ref cursorY, startX, lineHeight, false);
+            cursorX = shadowStartX; // Reset cursor after shadow
+        }
+
+        // Render main text
+        float textStartX = cursorX;
+        float textY = cursorY;
+        RenderGlyphs(run.Text, cursorX, cursorY, run.Color, atlasTexture,
+                     ref cursorX, ref cursorY, startX, lineHeight, true);
+
+        // Render underline
+        if ((run.Style & TextStyle.Underline) != 0)
+        {
+            float underlineY = textY + lineHeight - 2;
+            DrawLine(textStartX, underlineY, cursorX, underlineY, run.Color, 1f);
+        }
+
+        // Render strikethrough
+        if ((run.Style & TextStyle.Strikethrough) != 0)
+        {
+            float strikeY = textY + lineHeight / 2;
+            DrawLine(textStartX, strikeY, cursorX, strikeY, run.Color, 1f);
+        }
+    }
+
+    private void RenderRunWithWrapping(
+        TextRun run,
+        ref float cursorX,
+        ref float cursorY,
+        float startX,
+        float lineHeight,
+        TextRenderOptions options,
+        ITexture atlasTexture)
+    {
+        // Simple word wrapping
+        var words = run.Text.Split(' ');
+
+        foreach (var word in words)
+        {
+            var wordSize = MeasureText(word + " ");
+
+            if (cursorX + wordSize.X > startX + options.MaxWidth!.Value && cursorX > startX)
+            {
+                // Wrap to next line
+                cursorX = startX;
+                cursorY += lineHeight;
+            }
+
+            RenderRunDirect(new TextRun
+            {
+                Text = word + " ",
+                Color = run.Color,
+                Style = run.Style
+            }, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+        }
+    }
+
+    private void RenderGlyphs(
+        string text,
+        float x,
+        float y,
+        Color color,
+        ITexture atlasTexture,
+        ref float cursorX,
+        ref float cursorY,
+        float startX,
+        float lineHeight,
+        bool advanceCursor)
+    {
+        float localCursorX = x;
 
         foreach (char c in text)
         {
             if (c == '\n')
             {
-                cursorX = x;
-                cursorY += _defaultFontAtlas.LineHeight;
+                if (advanceCursor)
+                {
+                    cursorX = startX;
+                    cursorY += lineHeight;
+                }
+                localCursorX = startX;
                 continue;
             }
 
@@ -1190,10 +1655,30 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
             var atlasGpuTexture = (SDL3GPUTexture)atlasTexture;
             EnsureTextureBound(atlasGpuTexture.Handle, atlasTexture.ScaleMode);
 
-            AddQuad(cursorX, cursorY, glyph.Width, glyph.Height, color, u1, v1, u2, v2);
+            AddQuad(localCursorX, y, glyph.Width, glyph.Height, color, u1, v1, u2, v2);
 
-            cursorX += glyph.Advance;
+            localCursorX += glyph.Advance;
         }
+
+        if (advanceCursor)
+        {
+            cursorX = localCursorX;
+        }
+    }
+
+    private Vector2 MeasureTextRuns(IReadOnlyList<TextRun> runs, TextRenderOptions options)
+    {
+        float totalWidth = 0;
+        float totalHeight = _defaultFontAtlas?.LineHeight ?? 16;
+
+        foreach (var run in runs)
+        {
+            var size = MeasureText(run.Text, run.FontSize);
+            totalWidth += size.X;
+            totalHeight = MathF.Max(totalHeight, size.Y);
+        }
+
+        return new Vector2(totalWidth, totalHeight);
     }
 
     public void SetDefaultFont(IFont? font)
@@ -1459,6 +1944,11 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
             SDL3.SDL.WaitForGPUIdle(_device);
         }
 
+        if (_postProcessPipeline is IDisposable disposablePipeline)
+        {
+            disposablePipeline.Dispose();
+        }
+
         _defaultFontAtlas?.Dispose();
         _defaultFontAtlas = null;
 
@@ -1569,5 +2059,18 @@ public class SDL3GPURenderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public void DrawLine(Vector2 start, Vector2 end, Color color, float thickness = 1f)
     {
         DrawLine(start.X, start.Y, end.X, end.Y, color, thickness);
+    }
+
+    private nint GetTextureHandle(ITexture texture)
+    {
+        return texture switch
+        {
+            SDL3GPUTexture gpuTexture => gpuTexture.Handle,
+            RenderTargetTextureView rtView => rtView.Handle,
+            _ => throw new ArgumentException(
+                $"Unsupported texture type: {texture.GetType().Name}. " +
+                $"Only SDL3GPUTexture and RenderTarget textures are supported.",
+                nameof(texture))
+        };
     }
 }

@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Core;
 
@@ -128,7 +127,7 @@ public class CollisionSystem
             if (!shape.IsEnabled)
                 continue;
 
-            if (shape.GetBounds().Contains(point.X, point.Y))
+            if (shape.GetBounds().Contains(point))
                 return shape;
         }
 
@@ -138,7 +137,7 @@ public class CollisionSystem
     /// <summary>
     /// Gets all shapes within a rectangular area.
     /// </summary>
-    public List<CollisionShape> QueryArea(RectangleF area)
+    public List<CollisionShape> QueryArea(Rectangle area)
     {
         var results = new List<CollisionShape>();
 
@@ -147,7 +146,7 @@ public class CollisionSystem
             if (!shape.IsEnabled)
                 continue;
 
-            if (area.IntersectsWith(shape.GetBounds()))
+            if (area.Intersects(shape.GetBounds()))
             {
                 results.Add(shape);
             }

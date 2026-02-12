@@ -1,5 +1,3 @@
-using System.Drawing;
-using Brine2D.Animation;
 using Brine2D.Core;
 
 namespace Brine2D.Rendering.TextureAtlas;
@@ -51,14 +49,14 @@ public sealed class AtlasRegion
         Name = name ?? throw new ArgumentNullException(nameof(name));
         SourceRect = sourceRect;
         AtlasTexture = atlasTexture ?? throw new ArgumentNullException(nameof(atlasTexture));
-        OriginalWidth = originalWidth > 0 ? originalWidth : sourceRect.Width;
-        OriginalHeight = originalHeight > 0 ? originalHeight : sourceRect.Height;
+        OriginalWidth = originalWidth > 0 ? originalWidth : (int)sourceRect.Width;
+        OriginalHeight = originalHeight > 0 ? originalHeight : (int)sourceRect.Height;
 
         // Calculate normalized UV coordinates
-        float u1 = (float)sourceRect.X / atlasTexture.Width;
-        float v1 = (float)sourceRect.Y / atlasTexture.Height;
-        float u2 = (float)(sourceRect.X + sourceRect.Width) / atlasTexture.Width;
-        float v2 = (float)(sourceRect.Y + sourceRect.Height) / atlasTexture.Height;
+        float u1 = sourceRect.X / atlasTexture.Width;
+        float v1 = sourceRect.Y / atlasTexture.Height;
+        float u2 = (sourceRect.X + sourceRect.Width) / atlasTexture.Width;
+        float v2 = (sourceRect.Y + sourceRect.Height) / atlasTexture.Height;
 
         UVCoordinates = new UVRect(u1, v1, u2, v2);
     }

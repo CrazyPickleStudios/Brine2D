@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+﻿using Brine2D.Core;
 using Brine2D.Events;
 using Brine2D.Rendering;
 using Brine2D.SDL.Common;
@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Brine2D.Rendering.Text;
 
 namespace Brine2D.SDL.Rendering;
 
@@ -28,12 +29,20 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private nint _window;
     private nint _renderer;
     private ICamera? _camera;
-    private Color _clearColor = Color.FromArgb(255, 52, 78, 65);
+    private Color _clearColor = new Color(52, 78, 65, 255);
 
     private IFont? _defaultFont;
     private FontAtlas? _defaultFontAtlas;
 
     private bool _disposed;
+
+    private byte _currentRenderLayer = 128; // Default: middle layer
+
+    // Add these fields at the top:
+    private Rectangle? _currentScissorRect;
+    private readonly Stack<Rectangle?> _scissorRectStack = new();
+
+    private readonly IMarkupParser _defaultMarkupParser;
 
     public nint Window => _window;
     public nint Device => _renderer;
@@ -68,6 +77,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         _eventBus = eventBus;
 
         _viewport = new ViewportState(_windowOptions.Width, _windowOptions.Height);
+
+        _defaultMarkupParser = new BBCodeParser(_logger);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -143,6 +154,20 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         // Uses the property automatically
         SDL3.SDL.SetRenderDrawColor(_renderer, _clearColor.R, _clearColor.G, _clearColor.B, _clearColor.A);
         SDL3.SDL.RenderClear(_renderer);
+    }
+
+    /// <summary>
+    /// Applies post-processing effects to the current frame.
+    /// </summary>
+    /// <remarks>
+    /// Post-processing is not supported with the legacy SDL3 renderer.
+    /// Use <see cref="GraphicsBackend.GPU"/> for post-processing effects.
+    /// This method is a no-op for compatibility.
+    /// </remarks>
+    public void ApplyPostProcessing()
+    {
+        // Post-processing not supported in legacy renderer
+        // This is a no-op for API compatibility
     }
 
     public void EndFrame()
@@ -249,163 +274,209 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
     }
 
+    // ============================================================
+    // TEXTURE DRAWING API (Clean, Non-Ambiguous)
+    // ============================================================
+
+    /// <summary>
+    /// Draw a texture with full control over transform, origin, scale, and flip.
+    /// </summary>
+    public void DrawTexture(
+        ITexture texture,
+        Vector2 position,
+        Rectangle? sourceRect = null,
+        Vector2? origin = null,
+        float rotation = 0f,
+        Vector2? scale = null,
+        Color? color = null,
+        SpriteFlip flip = SpriteFlip.None)
+    {
+        ThrowIfNotInitialized();
+
+        if (texture is not SDL3Texture sdlTexture || !texture.IsLoaded)
+        {
+            _logger.LogWarning("Attempted to draw invalid or non-SDL texture");
+            return;
+        }
+
+        // Defaults
+        var actualOrigin = origin ?? new Vector2(0.5f, 0.5f);
+        var actualScale = scale ?? Vector2.One;
+        var actualColor = color ?? Color.White;
+        var srcRect = sourceRect ?? new Rectangle(0, 0, texture.Width, texture.Height);
+
+        // Calculate destination size
+        var destWidth = (int)(srcRect.Width * actualScale.X);
+        var destHeight = (int)(srcRect.Height * actualScale.Y);
+
+        // Calculate pivot
+        var pivotX = destWidth * actualOrigin.X;
+        var pivotY = destHeight * actualOrigin.Y;
+        var adjustedX = position.X - pivotX;
+        var adjustedY = position.Y - pivotY;
+
+        // Apply camera transform if present
+        var screenPos = Camera?.WorldToScreen(new Vector2(adjustedX, adjustedY)) ?? new Vector2(adjustedX, adjustedY);
+
+        // Convert to SDL structures
+        var sdlSrcRect = new SDL3.SDL.FRect
+        {
+            X = srcRect.X,
+            Y = srcRect.Y,
+            W = srcRect.Width,
+            H = srcRect.Height
+        };
+
+        var sdlDestRect = new SDL3.SDL.FRect
+        {
+            X = screenPos.X,
+            Y = screenPos.Y,
+            W = destWidth,
+            H = destHeight
+        };
+
+        // Calculate rotation center (in destination rect space)
+        var center = new SDL3.SDL.FPoint
+        {
+            X = pivotX,
+            Y = pivotY
+        };
+
+        // Convert flip flags
+        var sdlFlip = SDL3.SDL.FlipMode.None;
+        if ((flip & SpriteFlip.Horizontal) != 0)
+            sdlFlip |= SDL3.SDL.FlipMode.Horizontal;
+        if ((flip & SpriteFlip.Vertical) != 0)
+            sdlFlip |= SDL3.SDL.FlipMode.Vertical;
+
+        // Set color modulation
+        SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, actualColor.R, actualColor.G, actualColor.B);
+        SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, actualColor.A);
+
+        // Render
+        SDL3.SDL.RenderTextureRotated(
+            _renderer,
+            sdlTexture.Handle,
+            ref sdlSrcRect,
+            ref sdlDestRect,
+            rotation * (180f / MathF.PI), // Convert radians to degrees
+            ref center,
+            sdlFlip);
+    }
+
+    /// <summary>
+    /// Draw texture at position (Vector2, top-left anchor).
+    /// </summary>
+    public void DrawTexture(ITexture texture, Vector2 position)
+    {
+        if (texture == null || !texture.IsLoaded)
+            return;
+
+        DrawTexture(texture, position, 
+            origin: Vector2.Zero, 
+            scale: Vector2.One);
+    }
+
+    /// <summary>
+    /// Draw texture at position (float x, y, top-left anchor).
+    /// </summary>
     public void DrawTexture(ITexture texture, float x, float y)
     {
-        ThrowIfNotInitialized();
-
-        if (texture is not SDL3Texture sdlTexture)
-            throw new ArgumentException("Texture must be an SDL3Texture", nameof(texture));
-
-        if (!sdlTexture.IsLoaded)
-            throw new InvalidOperationException("Texture is not loaded");
-
-        var position = ApplyCameraTransform(new Vector2(x, y));
-        var size = ApplyCameraScale(new Vector2(texture.Width, texture.Height));
-
-        var destRect = new SDL3.SDL.FRect
-        {
-            X = position.X,
-            Y = position.Y,
-            W = size.X,
-            H = size.Y
-        };
-
-        SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, IntPtr.Zero, ref destRect);
+        DrawTexture(texture, new Vector2(x, y));
     }
 
-    public void DrawTexture(ITexture texture, float x, float y, float width, float height, 
-        float rotation = 0f, Color? color = null)
+    /// <summary>
+    /// Draw texture at position with explicit width/height (top-left anchor).
+    /// </summary>
+    public void DrawTexture(ITexture texture, float x, float y, float width, float height)
     {
-        ThrowIfNotInitialized();
+        if (texture == null || !texture.IsLoaded)
+            return;
 
-        if (texture is not SDL3Texture sdlTexture)
-            throw new ArgumentException("Texture must be an SDL3Texture", nameof(texture));
-
-        if (!sdlTexture.IsLoaded)
-            throw new InvalidOperationException("Texture is not loaded");
-
-        var position = ApplyCameraTransform(new Vector2(x, y));
-        var size = ApplyCameraScale(new Vector2(width, height));
-
-        var destRect = new SDL3.SDL.FRect
-        {
-            X = position.X,
-            Y = position.Y,
-            W = size.X,
-            H = size.Y
-        };
-
-        // Apply color tint if specified
-        if (color.HasValue)
-        {
-            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, color.Value.R, color.Value.G, color.Value.B);
-            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, color.Value.A);
-        }
-
-        // Use SDL's built-in rotation support (much simpler than GPU renderer!)
-        if (rotation != 0f)
-        {
-            // Convert radians to degrees for SDL
-            double angleDegrees = rotation * (180.0 / Math.PI);
-            
-            // Rotate around center
-            var center = new SDL3.SDL.FPoint
-            {
-                X = size.X / 2f,
-                Y = size.Y / 2f
-            };
-
-            SDL3.SDL.RenderTextureRotated(_renderer, sdlTexture.Handle, IntPtr.Zero, ref destRect,
-                angleDegrees, ref center, SDL3.SDL.FlipMode.None);
-        }
-        else
-        {
-            SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, IntPtr.Zero, ref destRect);
-        }
-
-        // Reset color mod if it was changed
-        if (color.HasValue)
-        {
-            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, 255, 255, 255);
-            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, 255);
-        }
+        DrawTexture(texture, new Vector2(x, y),
+            scale: new Vector2(width / texture.Width, height / texture.Height),
+            origin: Vector2.Zero);
     }
 
-    public void DrawTexture(ITexture texture,
-        float sourceX, float sourceY, float sourceWidth, float sourceHeight,
-        float destX, float destY, float destWidth, float destHeight,
-        float rotation = 0f, Color? color = null)
-    {
-        ThrowIfNotInitialized();
+    // Replace the entire TEXT RENDERING and TEXT MEASUREMENT sections with this:
 
-        if (texture is not SDL3Texture sdlTexture)
-            throw new ArgumentException("Texture must be an SDL3Texture", nameof(texture));
+    // ============================================================
+    // TEXT RENDERING
+    // ============================================================
 
-        if (!sdlTexture.IsLoaded)
-            throw new InvalidOperationException("Texture is not loaded");
-
-        var sourceRect = new SDL3.SDL.FRect
-        {
-            X = sourceX,
-            Y = sourceY,
-            W = sourceWidth,
-            H = sourceHeight
-        };
-
-        var position = ApplyCameraTransform(new Vector2(destX, destY));
-        var size = ApplyCameraScale(new Vector2(destWidth, destHeight));
-
-        var destRect = new SDL3.SDL.FRect
-        {
-            X = position.X,
-            Y = position.Y,
-            W = size.X,
-            H = size.Y
-        };
-
-        // Apply color tint if specified
-        if (color.HasValue)
-        {
-            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, color.Value.R, color.Value.G, color.Value.B);
-            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, color.Value.A);
-        }
-
-        // Use SDL's built-in rotation support
-        if (rotation != 0f)
-        {
-            // Convert radians to degrees for SDL
-            double angleDegrees = rotation * (180.0 / Math.PI);
-            
-            // Rotate around center
-            var center = new SDL3.SDL.FPoint
-            {
-                X = size.X / 2f,
-                Y = size.Y / 2f
-            };
-
-            SDL3.SDL.RenderTextureRotated(_renderer, sdlTexture.Handle, ref sourceRect, ref destRect,
-                angleDegrees, ref center, SDL3.SDL.FlipMode.None);
-        }
-        else
-        {
-            SDL3.SDL.RenderTexture(_renderer, sdlTexture.Handle, ref sourceRect, ref destRect);
-        }
-
-        // Reset color mod if it was changed
-        if (color.HasValue)
-        {
-            SDL3.SDL.SetTextureColorMod(sdlTexture.Handle, 255, 255, 255);
-            SDL3.SDL.SetTextureAlphaMod(sdlTexture.Handle, 255);
-        }
-    }
-
+    private readonly MarkupParser _markupParser;
+    
     public void DrawText(string text, float x, float y, Color color)
+    {
+        DrawText(text, x, y, new TextRenderOptions
+        {
+            Color = color,
+            Font = _defaultFont
+        });
+    }
+
+    public void DrawText(string text, float x, float y, TextRenderOptions options)
     {
         ThrowIfNotInitialized();
 
         if (string.IsNullOrEmpty(text))
             return;
 
+        // Use custom parser if provided, otherwise use default BBCode parser
+        var parser = options.ParseMarkup 
+            ? (options.MarkupParser ?? _defaultMarkupParser)
+            : new PlainTextParser();
+
+        var runs = parser.Parse(text, options);
+
+        // Render with layout
+        RenderTextRuns(runs, x, y, options);
+    }
+
+    public Vector2 MeasureText(string text, float? fontSize = null)
+    {
+        if (string.IsNullOrEmpty(text) || _defaultFont == null)
+            return Vector2.Zero;
+
+        if (_defaultFont is not SDL3Font sdlFont)
+            return Vector2.Zero;
+
+        // Simple SDL measurement for plain text
+        if (SDL3.TTF.GetStringSize(sdlFont.Handle, text, 0, out int w, out int h))
+        {
+            float scale = fontSize.HasValue ? (fontSize.Value / _defaultFont.Size) : 1.0f;
+            return new Vector2(w * scale, h * scale);
+        }
+
+        return Vector2.Zero;
+    }
+
+    public Vector2 MeasureText(string text, TextRenderOptions options)
+    {
+        if (string.IsNullOrEmpty(text))
+            return Vector2.Zero;
+
+        var runs = options.ParseMarkup
+            ? _markupParser.Parse(text, options)
+            : new[] { new TextRun { Text = text, FontSize = options.FontSize } };
+
+        return MeasureTextRuns(runs, options);
+    }
+
+    // ============================================================
+    // TEXT RENDERING INTERNALS
+    // ============================================================
+
+    private void RenderTextRuns(
+        IReadOnlyList<TextRun> runs,
+        float x,
+        float y,
+        TextRenderOptions options)
+    {
+        if (runs.Count == 0)
+            return;
+
+        // Ensure font atlas is ready
         EnsureFontAtlasGenerated();
 
         if (_defaultFontAtlas == null || _defaultFontAtlas.Texture == null)
@@ -414,26 +485,156 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             return;
         }
 
-        float cursorX = x;
-        float cursorY = y;
-        var atlasTexture = _defaultFontAtlas.Texture;
+        // Calculate total text bounds for alignment
+        var textSize = MeasureTextRuns(runs, options);
 
-        var sdlTexture = ((SDL3Texture)atlasTexture).Handle;
-        
+        float startX = x;
+        float startY = y;
+
+        // Apply horizontal alignment
+        if (options.MaxWidth.HasValue)
+        {
+            startX = options.HorizontalAlign switch
+            {
+                TextAlignment.Center => x + (options.MaxWidth.Value - textSize.X) / 2,
+                TextAlignment.Right => x + options.MaxWidth.Value - textSize.X,
+                _ => x
+            };
+        }
+
+        // Apply vertical alignment
+        if (options.MaxHeight.HasValue)
+        {
+            startY = options.VerticalAlign switch
+            {
+                VerticalAlignment.Middle => y + (options.MaxHeight.Value - textSize.Y) / 2,
+                VerticalAlignment.Bottom => y + options.MaxHeight.Value - textSize.Y,
+                _ => y
+            };
+        }
+
+        float cursorX = startX;
+        float cursorY = startY;
+        float lineHeight = _defaultFontAtlas.LineHeight * options.LineSpacing;
+
+        var sdlTexture = ((SDL3Texture)_defaultFontAtlas.Texture).Handle;
         SDL3.SDL.SetTextureBlendMode(sdlTexture, SDL3.SDL.BlendMode.Blend);
-        
-        SDL3.SDL.SetTextureColorMod(sdlTexture, 255, 255, 255);
-        SDL3.SDL.SetTextureAlphaMod(sdlTexture, 255);
-        
+
+        foreach (var run in runs)
+        {
+            if (string.IsNullOrEmpty(run.Text))
+                continue;
+
+            // Handle wrapping
+            if (options.MaxWidth.HasValue)
+            {
+                RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lineHeight, options, sdlTexture);
+            }
+            else
+            {
+                RenderRunDirect(run, ref cursorX, ref cursorY, startX, lineHeight, options, sdlTexture);
+            }
+        }
+    }
+
+    private void RenderRunDirect(
+        TextRun run,
+        ref float cursorX,
+        ref float cursorY,
+        float startX,
+        float lineHeight,
+        TextRenderOptions options,
+        nint sdlTexture)
+    {
+        // Render shadow if enabled
+        if (options.ShadowOffset.HasValue)
+        {
+            RenderGlyphs(run.Text, cursorX + options.ShadowOffset.Value.X,
+                         cursorY + options.ShadowOffset.Value.Y,
+                         options.ShadowColor, sdlTexture, ref cursorX, ref cursorY, startX, lineHeight, false);
+            cursorX -= options.ShadowOffset.Value.X; // Reset cursor
+        }
+
+        // Render main text
+        float textStartX = cursorX;
+        float textY = cursorY;
+        RenderGlyphs(run.Text, cursorX, cursorY, run.Color, sdlTexture,
+                     ref cursorX, ref cursorY, startX, lineHeight, true);
+
+        // Render underline
+        if ((run.Style & TextStyle.Underline) != 0)
+        {
+            float underlineY = textY + lineHeight - 2;
+            DrawLine(textStartX, underlineY, cursorX, underlineY, run.Color, 1f);
+        }
+
+        // Render strikethrough
+        if ((run.Style & TextStyle.Strikethrough) != 0)
+        {
+            float strikeY = textY + lineHeight / 2;
+            DrawLine(textStartX, strikeY, cursorX, strikeY, run.Color, 1f);
+        }
+    }
+
+    private void RenderRunWithWrapping(
+        TextRun run,
+        ref float cursorX,
+        ref float cursorY,
+        float startX,
+        float lineHeight,
+        TextRenderOptions options,
+        nint sdlTexture)
+    {
+        // Simple word wrapping
+        var words = run.Text.Split(' ');
+
+        foreach (var word in words)
+        {
+            var wordSize = MeasureText(word + " ");
+
+            if (cursorX + wordSize.X > startX + options.MaxWidth!.Value && cursorX > startX)
+            {
+                // Wrap to next line
+                cursorX = startX;
+                cursorY += lineHeight;
+            }
+
+            RenderRunDirect(new TextRun
+            {
+                Text = word + " ",
+                Color = run.Color,
+                Style = run.Style
+            }, ref cursorX, ref cursorY, startX, lineHeight, options, sdlTexture);
+        }
+    }
+
+    private void RenderGlyphs(
+        string text,
+        float x,
+        float y,
+        Color color,
+        nint sdlTexture,
+        ref float cursorX,
+        ref float cursorY,
+        float startX,
+        float lineHeight,
+        bool advanceCursor)
+    {
         SDL3.SDL.SetTextureColorMod(sdlTexture, color.R, color.G, color.B);
         SDL3.SDL.SetTextureAlphaMod(sdlTexture, color.A);
+
+        float localCursorX = x;
 
         foreach (char c in text)
         {
             if (c == '\n')
             {
-                cursorX = x;
-                cursorY += _defaultFontAtlas.LineHeight;
+                if (advanceCursor)
+                {
+                    cursorX = startX;
+                    cursorY += lineHeight;
+                }
+                localCursorX = startX;
                 continue;
             }
 
@@ -450,20 +651,36 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
             var dstRect = new SDL3.SDL.FRect
             {
-                X = cursorX,
-                Y = cursorY,
+                X = localCursorX,
+                Y = y,
                 W = glyph.Width,
                 H = glyph.Height
             };
 
             SDL3.SDL.RenderTexture(_renderer, sdlTexture, ref srcRect, ref dstRect);
 
-            cursorX += glyph.Advance;
+            localCursorX += glyph.Advance;
         }
 
-        // Reset color mod
-        SDL3.SDL.SetTextureColorMod(sdlTexture, 255, 255, 255);
-        SDL3.SDL.SetTextureAlphaMod(sdlTexture, 255);
+        if (advanceCursor)
+        {
+            cursorX = localCursorX;
+        }
+    }
+
+    private Vector2 MeasureTextRuns(IReadOnlyList<TextRun> runs, TextRenderOptions options)
+    {
+        float totalWidth = 0;
+        float totalHeight = _defaultFontAtlas?.LineHeight ?? 16;
+
+        foreach (var run in runs)
+        {
+            var size = MeasureText(run.Text, run.FontSize);
+            totalWidth += size.X;
+            totalHeight = MathF.Max(totalHeight, size.Y);
+        }
+
+        return new Vector2(totalWidth, totalHeight);
     }
 
     public void SetDefaultFont(IFont? font)
@@ -482,6 +699,20 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         {
             _logger.LogInformation("Default font set to {Font}", _defaultFont.Name);
         }
+    }
+
+    // ============================================================
+    // RENDER LAYERS
+    // ============================================================
+
+    public void SetRenderLayer(byte layer)
+    {
+        _currentRenderLayer = layer;
+    }
+
+    public byte GetRenderLayer()
+    {
+        return _currentRenderLayer;
     }
 
     private void EnsureFontAtlasGenerated()
@@ -683,6 +914,85 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             throw new InvalidOperationException("Renderer is not initialized");
     }
 
+    // Add these methods:
+
+    public void SetScissorRect(Rectangle? rect)
+    {
+        ThrowIfNotInitialized();
+        
+        // Validate rectangle if provided
+        if (rect.HasValue)
+        {
+            var r = rect.Value;
+            if (r.Width < 0 || r.Height < 0)
+            {
+                throw new ArgumentException(
+                    "Scissor rectangle dimensions cannot be negative", 
+                    nameof(rect));
+            }
+            
+            // Clamp to viewport bounds
+            if (r.X < 0 || r.Y < 0 || 
+                r.X + r.Width > _viewport.Width || 
+                r.Y + r.Height > _viewport.Height)
+            {
+                _logger.LogWarning(
+                    "Scissor rect ({X}, {Y}, {Width}, {Height}) extends beyond viewport ({ViewportWidth}x{ViewportHeight})",
+                    r.X, r.Y, r.Width, r.Height, _viewport.Width, _viewport.Height);
+            }
+        }
+        
+        _currentScissorRect = rect;
+        
+        // Apply to SDL renderer immediately (legacy renderer doesn't batch)
+        if (rect.HasValue)
+        {
+            var r = rect.Value;
+            var sdlRect = new SDL3.SDL.Rect
+            {
+                X = (int)r.X,
+                Y = (int)r.Y,
+                W = (int)r.Width,
+                H = (int)r.Height
+            };
+            SDL3.SDL.SetRenderClipRect(_renderer, ref sdlRect);
+        }
+        else
+        {
+            SDL3.SDL.SetRenderClipRect(_renderer, IntPtr.Zero);
+        }
+        
+        _logger.LogDebug("Scissor rect set to: {Rect}", 
+            rect.HasValue ? $"{rect.Value.X}, {rect.Value.Y}, {rect.Value.Width}x{rect.Value.Height}" : "None");
+    }
+
+    public Rectangle? GetScissorRect()
+    {
+        return _currentScissorRect;
+    }
+
+    public void PushScissorRect(Rectangle? rect)
+    {
+        _scissorRectStack.Push(_currentScissorRect);
+        SetScissorRect(rect);
+        
+        _logger.LogDebug("Scissor rect pushed (stack depth: {Depth})", _scissorRectStack.Count);
+    }
+
+    public void PopScissorRect()
+    {
+        if (_scissorRectStack.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot pop scissor rect: stack is empty");
+        }
+        
+        var previousRect = _scissorRectStack.Pop();
+        SetScissorRect(previousRect);
+        
+        _logger.LogDebug("Scissor rect popped (stack depth: {Depth})", _scissorRectStack.Count);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -732,5 +1042,38 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             Width = width;
             Height = height;
         }
+    }
+
+    public IRenderTarget CreateRenderTarget(int width, int height)
+    {
+        throw new NotSupportedException(
+            "Render targets are not supported in the legacy SDL3 renderer. " +
+            "Use GraphicsBackend.GPU for render target support.");
+    }
+
+    public void SetRenderTarget(IRenderTarget? target)
+    {
+        throw new NotSupportedException(
+            "Render targets are not supported in the legacy SDL3 renderer. " +
+            "Use GraphicsBackend.GPU for render target support.");
+    }
+
+    public IRenderTarget? GetRenderTarget()
+    {
+        return null; // Legacy renderer always renders to screen
+    }
+
+    public void PushRenderTarget(IRenderTarget? target)
+    {
+        throw new NotSupportedException(
+            "Render targets are not supported in the legacy SDL3 renderer. " +
+            "Use GraphicsBackend.GPU for render target support.");
+    }
+
+    public void PopRenderTarget()
+    {
+        throw new NotSupportedException(
+            "Render targets are not supported in the legacy SDL3 renderer. " +
+            "Use GraphicsBackend.GPU for render target support.");
     }
 }

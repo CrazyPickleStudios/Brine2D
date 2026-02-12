@@ -1,4 +1,5 @@
 using System.Numerics;
+using Brine2D.Core;
 
 namespace Brine2D.Rendering;
 
@@ -74,6 +75,62 @@ public class Camera2D : ICamera
         var screenPos4 = Vector4.Transform(worldPos4, viewMatrix);
         
         return new Vector2(screenPos4.X, screenPos4.Y);
+    }
+
+    // Add these methods to your Camera2D class:
+
+    public Rectangle GetVisibleBounds()
+    {
+        // Calculate half-extents in world space
+        var halfWidth = ViewportWidth / (2.0f * Zoom);
+        var halfHeight = ViewportHeight / (2.0f * Zoom);
+
+        return new Rectangle(
+            (int)(Position.X - halfWidth),
+            (int)(Position.Y - halfHeight),
+            (int)(halfWidth * 2),
+            (int)(halfHeight * 2)
+        );
+    }
+
+    public bool IsVisible(Vector2 worldPosition)
+    {
+        var bounds = GetVisibleBounds();
+        return bounds.Contains((int)worldPosition.X, (int)worldPosition.Y);
+    }
+
+    public bool IsVisible(Rectangle worldBounds)
+    {
+        var cameraBounds = GetVisibleBounds();
+        return cameraBounds.Intersects(worldBounds);
+    }
+
+    public void ClampToBounds(Rectangle worldBounds)
+    {
+        var visibleBounds = GetVisibleBounds();
+
+        // Calculate how much we can move
+        var halfWidth = visibleBounds.Width / 2f;
+        var halfHeight = visibleBounds.Height / 2f;
+
+        // Clamp position
+        Position = new Vector2(
+            Math.Clamp(Position.X, worldBounds.X + halfWidth, worldBounds.X + worldBounds.Width - halfWidth),
+            Math.Clamp(Position.Y, worldBounds.Y + halfHeight, worldBounds.Y + worldBounds.Height - halfHeight)
+        );
+    }
+
+    public void FollowSmooth(Vector2 targetPosition, float smoothing, float deltaTime)
+    {
+        if (smoothing <= 0)
+        {
+            Position = targetPosition;
+            return;
+        }
+
+        // Exponential smoothing (feels better than linear)
+        var lerpFactor = 1.0f - MathF.Pow(smoothing, deltaTime * 60f); // Normalize to 60fps
+        Position = Vector2.Lerp(Position, targetPosition, lerpFactor);
     }
 
     public Vector2 ScreenToWorld(Vector2 screenPosition)

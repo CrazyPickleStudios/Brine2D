@@ -1,7 +1,5 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Core;
-using Brine2D.Animation;
 using Brine2D.Pooling;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
@@ -291,32 +289,18 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
         var height = sourceRect?.Height ?? texture.Height;
         
         // Scale to particle size (size is radius, so diameter = size * 2)
-        var scale = (size * 2f) / Math.Max(width, height);
-        var renderWidth = width * scale;
-        var renderHeight = height * scale;
+        var scaleFactor = (size * 2f) / Math.Max(width, height);
 
-        // Calculate position (centered on particle)
-        var x = particle.Position.X - renderWidth / 2f;
-        var y = particle.Position.Y - renderHeight / 2f;
-
-        if (sourceRect.HasValue)
-        {
-            var src = sourceRect.Value;
-            renderer.DrawTexture(
-                texture,
-                src.X, src.Y, src.Width, src.Height,
-                x, y, renderWidth, renderHeight,
-                particle.Rotation,  
-                color);             
-        }
-        else
-        {
-            renderer.DrawTexture(
-                texture, 
-                x, y, renderWidth, renderHeight,
-                particle.Rotation,  
-                color);             
-        }
+        // Use the new primary API - it handles origin, rotation, scale automatically
+        renderer.DrawTexture(
+            texture,
+            position: particle.Position,
+            sourceRect: sourceRect,
+            origin: new Vector2(0.5f, 0.5f),     // Center origin for particles
+            rotation: particle.Rotation,
+            scale: new Vector2(scaleFactor, scaleFactor),
+            color: color,
+            flip: SpriteFlip.None);
     }
 
     private void RenderTrail(
@@ -345,11 +329,11 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
             var trailSize = baseSize * (0.5f + t * 0.5f); // 50%-100% of base size
 
             // Create faded color
-            var trailColor = Color.FromArgb(
-                (byte)(baseColor.A * alpha),
+            var trailColor = new Color(
                 baseColor.R,
                 baseColor.G,
-                baseColor.B
+                baseColor.B,
+                (byte)(baseColor.A * alpha)
                 );
 
             // Render trail segment (always as circle for now)
@@ -359,10 +343,10 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
 
     private Color LerpColor(Color start, Color end, float t)
     {
-        return Color.FromArgb(
-            (byte)MathHelper.Lerp(start.A, end.A, t),
+        return new Color(
             (byte)MathHelper.Lerp(start.R, end.R, t),
             (byte)MathHelper.Lerp(start.G, end.G, t),
-            (byte)MathHelper.Lerp(start.B, end.B, t));
+            (byte)MathHelper.Lerp(start.B, end.B, t),
+            (byte)MathHelper.Lerp(start.A, end.A, t));
     }
 }

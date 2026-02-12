@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Core;
 
@@ -24,9 +23,9 @@ public class BoxCollider : CollisionShape
         Offset = offset ?? Vector2.Zero;
     }
 
-    public override RectangleF GetBounds()
+    public override Rectangle GetBounds()
     {
-        return new RectangleF(
+        return new Rectangle(
             Position.X + Offset.X,
             Position.Y + Offset.Y,
             Width,

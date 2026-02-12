@@ -1,5 +1,4 @@
-﻿using System.Drawing;
-using Brine2D.Core;
+﻿using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Rendering;
@@ -48,7 +47,7 @@ public class GameScene : Scene
     protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("GameScene: OnLoad");
-        Renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
+        Renderer.ClearColor = new Color(52, 78, 65, 255); // Dirty brine
 
         // Reset score using our custom service
         _scoreService.ResetScore();

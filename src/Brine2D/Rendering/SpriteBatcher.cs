@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Animation;
 using Brine2D.Core;
@@ -112,36 +111,16 @@ public class SpriteBatcher
     
     private void DrawSprite(IRenderer renderer, SpriteBatchItem item)
     {
-        // Calculate final destination rect
-        var width = item.SourceRect?.Width ?? item.Texture.Width;
-        var height = item.SourceRect?.Height ?? item.Texture.Height;
-        
-        var destWidth = width * item.Scale.X;
-        var destHeight = height * item.Scale.Y;
-        
-        // Apply origin offset (origin is 0-1 range)
-        // For rotation, we want to position based on the pivot point
-        var destX = item.Position.X - (item.Origin.X * destWidth);
-        var destY = item.Position.Y - (item.Origin.Y * destHeight);
-        
-        if (item.SourceRect.HasValue)
-        {
-            var src = item.SourceRect.Value;
-            renderer.DrawTexture(
-                item.Texture,
-                src.X, src.Y, src.Width, src.Height,
-                destX, destY, destWidth, destHeight,
-                rotation: item.Rotation,  
-                color: item.Tint);         
-        }
-        else
-        {
-            renderer.DrawTexture(
-                item.Texture, 
-                destX, destY, destWidth, destHeight,
-                rotation: item.Rotation, 
-                color: item.Tint);         
-        }
+        // Use the new primary API - let the renderer handle all transformations
+        renderer.DrawTexture(
+            item.Texture,
+            position: item.Position,
+            sourceRect: item.SourceRect,
+            origin: item.Origin,
+            rotation: item.Rotation,
+            scale: item.Scale,
+            color: item.Tint,
+            flip: SpriteFlip.None); // SpriteBatcher doesn't support flip yet, add if needed
     }
 }
 

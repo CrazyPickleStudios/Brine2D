@@ -17,10 +17,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -40,10 +42,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Scale = Vector2.One;
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Scale;
         tween.StartScale = new Vector2(1, 1);
         tween.EndScale = new Vector2(2, 2);
@@ -63,10 +67,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Rotation = 0;
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Rotation;
         tween.StartRotation = 0;
         tween.EndRotation = 360;
@@ -85,10 +91,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -113,7 +121,8 @@ public class TweenComponentTests : TestBase
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -137,7 +146,8 @@ public class TweenComponentTests : TestBase
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -162,7 +172,8 @@ public class TweenComponentTests : TestBase
         var entity = world.CreateEntity();
         var transform = entity.AddComponent<TransformComponent>();
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -190,10 +201,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -223,10 +236,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -251,10 +266,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -277,10 +294,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -307,10 +326,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -330,10 +351,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -357,10 +380,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -382,7 +407,8 @@ public class TweenComponentTests : TestBase
         var entity = world.CreateEntity();
         // No transform component added
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);
@@ -399,10 +425,12 @@ public class TweenComponentTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        var transform = entity.GetComponent<TransformComponent>();
         transform.Position = new Vector2(0, 0);
 
-        var tween = entity.AddComponent<TweenComponent>();
+        entity.AddComponent<TweenComponent>();
+        var tween = entity.GetComponent<TweenComponent>();
         tween.Type = TweenType.Position;
         tween.StartPosition = new Vector2(0, 0);
         tween.EndPosition = new Vector2(100, 0);

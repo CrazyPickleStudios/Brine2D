@@ -1,6 +1,4 @@
-using System.Drawing;
 using System.Numerics;
-using Brine2D.Animation;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.Rendering;

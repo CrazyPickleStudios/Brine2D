@@ -19,25 +19,40 @@ public static class ECSServiceCollectionExtensions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Use this to add custom systems to the global pipelines.
-    /// Built-in systems are automatically registered by <c>.UseSystems()</c>.
+    /// This method is additive and can be called multiple times to register systems
+    /// from different configuration locations. Systems are automatically deduplicated
+    /// by type - adding the same system multiple times will only register it once.
     /// </para>
     /// <para>
-    /// Systems are executed in order of their UpdateOrder/RenderOrder properties.
-    /// Systems implementing both IUpdateSystem and IRenderSystem are automatically
-    /// added to both pipelines.
+    /// Built-in systems are automatically registered when calling <c>.UseSystems()</c>.
+    /// Use this method to add ONLY your custom systems.
+    /// </para>
+    /// <para>
+    /// Systems are executed in order of their <see cref="IUpdateSystem.UpdateOrder"/> 
+    /// or <see cref="IRenderSystem.RenderOrder"/> properties, not the order they are added.
+    /// Systems implementing both <see cref="IUpdateSystem"/> and <see cref="IRenderSystem"/> 
+    /// are automatically added to both pipelines.
     /// </para>
     /// </remarks>
     /// <example>
     /// <code>
-    /// // Built-in systems are auto-registered by .UseSystems()
-    /// builder.Services.AddBrine2D().UseSystems().UseSDL();
+    /// // Step 1: Built-in systems are auto-registered by .UseSystems()
+    /// builder.Services
+    ///     .AddBrine2D()
+    ///     .UseSystems()  // Registers SpriteRenderingSystem, ParticleSystem, etc.
+    ///     .UseSDL();
     /// 
-    /// // Add custom systems
+    /// // Step 2: Add ONLY your custom systems
     /// builder.Services.ConfigureSystemPipelines(pipelines =>
     /// {
     ///     pipelines.AddSystem&lt;MyCustomAISystem&gt;();
-    ///     pipelines.AddSystem&lt;MyCustomRenderSystem&gt;();
+    ///     pipelines.AddSystem&lt;MyCustomPhysicsSystem&gt;();
+    /// });
+    /// 
+    /// // Optional: Can be called multiple times (additive)
+    /// builder.Services.ConfigureSystemPipelines(pipelines =>
+    /// {
+    ///     pipelines.AddSystem&lt;MyDebugSystem&gt;();
     /// });
     /// </code>
     /// </example>
@@ -45,7 +60,7 @@ public static class ECSServiceCollectionExtensions
         this IServiceCollection services, 
         Action<SystemPipelineBuilder> configure)
     {
-        // Ensure hosted service is registered (auto-populates pipelines)
+        // Ensure hosted service is registered (idempotent - won't duplicate)
         services.AddHostedService<SystemPipelineHostedService>();
         
         var builder = new SystemPipelineBuilder(services);

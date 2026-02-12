@@ -9,7 +9,7 @@ namespace Brine2D.Hosting;
 /// This builder is returned by <see cref="Brine2DServiceCollectionExtensions.AddBrine2D"/>
 /// and allows chaining backend configuration methods like <c>.UseSDL()</c>.
 /// </remarks>
-public sealed class Brine2DBuilder
+public class Brine2DBuilder
 {
     /// <summary>
     /// Gets the service collection being configured.

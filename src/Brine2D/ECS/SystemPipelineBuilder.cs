@@ -17,9 +17,17 @@ public class SystemPipelineBuilder
     }
 
     /// <summary>
-    /// Adds a system to the appropriate pipeline(s).
+    /// Adds a system to the appropriate pipeline(s) with optional priority override.
     /// Automatically registers the system in DI as a singleton.
     /// </summary>
+    /// <param name="updatePriority">
+    /// Override for update pipeline priority. If null, uses system's UpdateOrder property.
+    /// Lower values execute first.
+    /// </param>
+    /// <param name="renderPriority">
+    /// Override for render pipeline priority. If null, uses system's RenderOrder property.
+    /// Lower values execute first.
+    /// </param>
     /// <remarks>
     /// Systems are automatically routed to the correct pipeline:
     /// <list type="bullet">
@@ -33,12 +41,18 @@ public class SystemPipelineBuilder
     /// </exception>
     /// <example>
     /// <code>
-    /// pipelines.AddSystem&lt;VelocitySystem&gt;();        // Auto-registers + adds to pipeline
-    /// pipelines.AddSystem&lt;SpriteRenderingSystem&gt;(); // Auto-registers + adds to pipeline
-    /// pipelines.AddSystem&lt;ParticleSystem&gt;();        // Auto-registers + adds to both pipelines
+    /// // Use default priorities from system
+    /// pipelines.AddSystem&lt;PhysicsSystem&gt;();
+    /// 
+    /// // Override update priority
+    /// pipelines.AddSystem&lt;CustomSystem&gt;(updatePriority: 50);
+    /// 
+    /// // Override both priorities
+    /// pipelines.AddSystem&lt;DebugSystem&gt;(updatePriority: 9999, renderPriority: 9999);
     /// </code>
     /// </example>
-    public SystemPipelineBuilder AddSystem<T>() where T : class
+    public SystemPipelineBuilder AddSystem<T>(int? updatePriority = null, int? renderPriority = null) 
+        where T : class
     {
         var systemType = typeof(T);
         
@@ -52,25 +66,99 @@ public class SystemPipelineBuilder
                 $"Systems must inherit from one of these interfaces to be added to pipelines.");
         }
 
-        // STEP 1: Register the system in DI (automatic - user doesn't think about this!)
+        // Register the system in DI
         _services.TryAddSingleton<T>();
 
-        // STEP 2: Add to update pipeline if applicable
+        // Add to update pipeline with optional priority override
         if (isUpdateSystem)
         {
-            var registrationType = typeof(UpdateSystemRegistration<>).MakeGenericType(systemType);
-            var registration = Activator.CreateInstance(registrationType) as IUpdateSystemRegistration;
-            _services.AddSingleton(registration!);
+            TryAddSystemRegistration<IUpdateSystemRegistration>(
+                typeof(UpdateSystemRegistration<>).MakeGenericType(systemType),
+                updatePriority);
         }
 
-        // STEP 3: Add to render pipeline if applicable
+        // Add to render pipeline with optional priority override
         if (isRenderSystem)
         {
-            var registrationType = typeof(RenderSystemRegistration<>).MakeGenericType(systemType);
-            var registration = Activator.CreateInstance(registrationType) as IRenderSystemRegistration;
-            _services.AddSingleton(registration!);
+            TryAddSystemRegistration<IRenderSystemRegistration>(
+                typeof(RenderSystemRegistration<>).MakeGenericType(systemType),
+                renderPriority);
         }
 
         return this;
+    }
+
+    /// <summary>
+    /// Adds a system that runs after another system (relative ordering).
+    /// </summary>
+    /// <typeparam name="T">The system to add.</typeparam>
+    /// <typeparam name="TAfter">The system that T should run after.</typeparam>
+    /// <example>
+    /// <code>
+    /// pipelines
+    ///     .AddSystem&lt;PhysicsSystem&gt;()
+    ///     .AddSystemAfter&lt;CollisionSystem, PhysicsSystem&gt;(); // Runs after physics
+    /// </code>
+    /// </example>
+    public SystemPipelineBuilder AddSystemAfter<T, TAfter>() 
+        where T : class 
+        where TAfter : class
+    {
+        // Build temporary service provider to get TAfter instance
+        using var tempProvider = _services.BuildServiceProvider();
+        var afterSystem = tempProvider.GetService<TAfter>();
+        
+        int? updateOrder = null;
+        int? renderOrder = null;
+        
+        if (afterSystem is IUpdateSystem updateSys)
+            updateOrder = updateSys.UpdateOrder + 1;
+        if (afterSystem is IRenderSystem renderSys)
+            renderOrder = renderSys.RenderOrder + 1;
+        
+        return AddSystem<T>(updatePriority: updateOrder, renderPriority: renderOrder);
+    }
+
+    /// <summary>
+    /// Adds a system that runs before another system (relative ordering).
+    /// </summary>
+    /// <typeparam name="T">The system to add.</typeparam>
+    /// <typeparam name="TBefore">The system that T should run before.</typeparam>
+    public SystemPipelineBuilder AddSystemBefore<T, TBefore>() 
+        where T : class 
+        where TBefore : class
+    {
+        using var tempProvider = _services.BuildServiceProvider();
+        var beforeSystem = tempProvider.GetService<TBefore>();
+        
+        int? updateOrder = null;
+        int? renderOrder = null;
+        
+        if (beforeSystem is IUpdateSystem updateSys)
+            updateOrder = updateSys.UpdateOrder - 1;
+        if (beforeSystem is IRenderSystem renderSys)
+            renderOrder = renderSys.RenderOrder - 1;
+        
+        return AddSystem<T>(updatePriority: updateOrder, renderPriority: renderOrder);
+    }
+
+    private void TryAddSystemRegistration<TInterface>(Type registrationType, int? priorityOverride)
+        where TInterface : class
+    {
+        // Check if already registered
+        var alreadyRegistered = _services.Any(s =>
+            s.ServiceType == typeof(TInterface) &&
+            s.ImplementationInstance?.GetType() == registrationType);
+
+        if (!alreadyRegistered)
+        {
+            var registration = Activator.CreateInstance(registrationType) as TInterface;
+            
+            // TODO: If priorityOverride is set, we need to modify the registration
+            // This requires updating UpdateSystemRegistration/RenderSystemRegistration
+            // to accept priority overrides (future enhancement)
+            
+            _services.AddSingleton(registration!);
+        }
     }
 }

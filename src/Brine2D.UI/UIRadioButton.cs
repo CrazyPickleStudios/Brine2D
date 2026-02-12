@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Core;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -51,17 +51,17 @@ public class UIRadioButton : IUIComponent
     /// <summary>
     /// Unchecked button color.
     /// </summary>
-    public Color UncheckedColor { get; set; } = Color.FromArgb(60, 60, 60);
+    public Color UncheckedColor { get; set; } = new Color(60, 60, 60);
 
     /// <summary>
     /// Checked button color.
     /// </summary>
-    public Color CheckedColor { get; set; } = Color.FromArgb(100, 150, 255);
+    public Color CheckedColor { get; set; } = new Color(100, 150, 255);
 
     /// <summary>
     /// Hover button color.
     /// </summary>
-    public Color HoverColor { get; set; } = Color.FromArgb(80, 80, 80);
+    public Color HoverColor { get; set; } = new Color(80, 80, 80);
 
     /// <summary>
     /// Inner dot color when checked.
@@ -71,7 +71,7 @@ public class UIRadioButton : IUIComponent
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = Color.FromArgb(150, 150, 150);
+    public Color BorderColor { get; set; } = new Color(150, 150, 150);
 
     /// <summary>
     /// Label text color.
@@ -126,7 +126,7 @@ public class UIRadioButton : IUIComponent
         renderer.DrawCircleFilled(centerX, centerY, radius, buttonColor);
 
         // Draw border (outer circle)
-        var borderColor = Enabled ? BorderColor : Color.FromArgb(100, 100, 100);
+        var borderColor = Enabled ? BorderColor : new Color(100, 100, 100);
         float borderThickness = 2f;
         // Draw border as slightly larger circle (simplified, not perfect)
         renderer.DrawCircleFilled(centerX, centerY, radius + borderThickness / 2, borderColor);
@@ -144,7 +144,7 @@ public class UIRadioButton : IUIComponent
         {
             var labelX = Position.X + ButtonSize + LabelSpacing;
             var labelY = Position.Y + (ButtonSize / 2) - 8;
-            var labelColor = Enabled ? LabelColor : Color.FromArgb(100, 100, 100);
+            var labelColor = Enabled ? LabelColor : new Color(100, 100, 100);
             renderer.DrawText(Label, labelX, labelY, labelColor);
         }
     }

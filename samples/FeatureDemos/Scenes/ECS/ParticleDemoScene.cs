@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
@@ -58,7 +57,7 @@ public class ParticleDemoScene : DemoSceneBase
         _atlasBuilder = atlasBuilder;
     }
 
-    protected override async Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Enhanced Particle Demo Scene ===");
         Logger.LogInformation("NEW: Texture support, rotation, and trails!");
@@ -70,7 +69,7 @@ public class ParticleDemoScene : DemoSceneBase
         Logger.LogInformation("");
 
         // Set clear color for this scene
-        Renderer.ClearColor = Color.FromArgb(15, 15, 25);
+        Renderer.ClearColor = new Color(15, 15, 25);
 
         // Try to load particle textures
         await LoadParticleAssetsAsync(cancellationToken);
@@ -290,10 +289,13 @@ public class ParticleDemoScene : DemoSceneBase
     {
         var entity = World.CreateEntity($"{effect}Emitter");
         
-        var transform = entity.AddComponent<TransformComponent>();
-        transform.Position = position;
+        entity.AddComponent<TransformComponent>();
+        entity.AddComponent<ParticleEmitterComponent>();
         
-        var emitter = entity.AddComponent<ParticleEmitterComponent>();
+        var transform = entity.GetComponent<TransformComponent>()!;
+        var emitter = entity.GetComponent<ParticleEmitterComponent>()!;
+        
+        transform.Position = position;
         emitter.IsEmitting = _continuousEmission;
         
         switch (effect)
@@ -341,8 +343,8 @@ public class ParticleDemoScene : DemoSceneBase
         emitter.EmissionRate = 50f;
         emitter.MaxParticles = 200;
         emitter.ParticleLifetime = 1.5f;
-        emitter.StartColor = Color.FromArgb(255, 200, 50);
-        emitter.EndColor = Color.FromArgb(0, 255, 50, 0);
+        emitter.StartColor = new Color(255, 200, 50);
+        emitter.EndColor = new Color(255, 50, 0, 0);
         emitter.StartSize = 6f;
         emitter.EndSize = 2f;
         emitter.InitialVelocity = new Vector2(0, -80);
@@ -360,8 +362,8 @@ public class ParticleDemoScene : DemoSceneBase
         emitter.MaxParticles = 100;
         emitter.ParticleLifetime = 0.8f;
         emitter.LifetimeVariation = 0.3f;
-        emitter.StartColor = Color.FromArgb(255, 255, 200);
-        emitter.EndColor = Color.FromArgb(0, 255, 100, 0);
+        emitter.StartColor = new Color(255, 255, 200);
+        emitter.EndColor = new Color(255, 100, 0, 0);
         emitter.StartSize = 8f;
         emitter.EndSize = 0f;
         emitter.InitialVelocity = new Vector2(100, 0);
@@ -378,8 +380,8 @@ public class ParticleDemoScene : DemoSceneBase
         emitter.EmissionRate = 20f;
         emitter.MaxParticles = 100;
         emitter.ParticleLifetime = 3f;
-        emitter.StartColor = Color.FromArgb(200, 100, 100, 100);
-        emitter.EndColor = Color.FromArgb(0, 50, 50, 50);
+        emitter.StartColor = new Color(100, 100, 100, 200);
+        emitter.EndColor = new Color(50, 50, 50, 0);
         emitter.StartSize = 4f;
         emitter.EndSize = 12f;
         emitter.InitialVelocity = new Vector2(0, -30);
@@ -395,8 +397,8 @@ public class ParticleDemoScene : DemoSceneBase
         emitter.EmissionRate = 30f;
         emitter.MaxParticles = 150;
         emitter.ParticleLifetime = 2f;
-        emitter.StartColor = Color.FromArgb(255, 255, 100);
-        emitter.EndColor = Color.FromArgb(0, 100, 200, 255);
+        emitter.StartColor = new Color(255, 255, 100);
+        emitter.EndColor = new Color(100, 200, 255, 0);
         emitter.StartSize = 3f;
         emitter.EndSize = 1f;
         emitter.InitialVelocity = new Vector2(0, -50);
@@ -413,8 +415,8 @@ public class ParticleDemoScene : DemoSceneBase
         emitter.EmissionRate = 100f;
         emitter.MaxParticles = 200;
         emitter.ParticleLifetime = 1f;
-        emitter.StartColor = Color.FromArgb(100, 255, 255);
-        emitter.EndColor = Color.FromArgb(0, 100, 100, 255);
+        emitter.StartColor = new Color(100, 255, 255);
+        emitter.EndColor = new Color(100, 100, 255, 0);
         emitter.StartSize = 4f;
         emitter.EndSize = 2f;
         emitter.InitialVelocity = new Vector2(150, 0);
@@ -461,8 +463,8 @@ public class ParticleDemoScene : DemoSceneBase
         emitter.EmissionRate = 60f;
         emitter.MaxParticles = 150;
         emitter.ParticleLifetime = 2f;
-        emitter.StartColor = Color.FromArgb(255, 100, 255);
-        emitter.EndColor = Color.FromArgb(0, 100, 100, 255);
+        emitter.StartColor = new Color(255, 100, 255);
+        emitter.EndColor = new Color(100, 100, 255, 0);
         emitter.StartSize = 5f;
         emitter.EndSize = 2f;
         emitter.InitialVelocity = new Vector2(0, -100);
@@ -488,11 +490,18 @@ public class ParticleDemoScene : DemoSceneBase
         
         var entity = World.CreateEntity("Burst");
         
-        // Add components first, configure after (original pattern)
-        var transform = entity.AddComponent<TransformComponent>();
+        entity.AddComponent<TransformComponent>();
+        entity.AddComponent<ParticleEmitterComponent>();
+        entity.AddComponent<LifetimeComponent>();
+        
+        var transform = entity.GetComponent<TransformComponent>()!;
+        var emitter = entity.GetComponent<ParticleEmitterComponent>()!;
+        var lifetime = entity.GetComponent<LifetimeComponent>()!;
+        
+        // Configure transform
         transform.Position = position;
         
-        var emitter = entity.AddComponent<ParticleEmitterComponent>();
+        // Configure emitter
         emitter.IsEmitting = true;
         
         // Configure based on effect type
@@ -503,17 +512,17 @@ public class ParticleDemoScene : DemoSceneBase
                 ConfigureFire(emitter);
                 emitter.EmissionRate = 200f; // Burst rate
                 break;
-        
+    
             case EffectType.Explosion:
                 ConfigureExplosion(emitter);
                 emitter.EmissionRate = 500f; // Burst rate
                 break;
-        
+    
             case EffectType.Smoke:
                 ConfigureSmoke(emitter);
                 emitter.EmissionRate = 100f; // Burst rate
                 break;
-        
+    
             case EffectType.Sparkles:
             case EffectType.RotatingSparkles:
                 ConfigureSparkles(emitter);
@@ -524,7 +533,7 @@ public class ParticleDemoScene : DemoSceneBase
                     emitter.RotationSpeed = 3f;
                 }
                 break;
-        
+    
             case EffectType.Trail:
             case EffectType.MagicTrail:
                 ConfigureTrailEffect(emitter);
@@ -546,8 +555,7 @@ public class ParticleDemoScene : DemoSceneBase
             }
         }
         
-        // Add lifetime component for auto-cleanup (original pattern)
-        var lifetime = entity.AddComponent<LifetimeComponent>();
+        // Configure lifetime for auto-cleanup
         lifetime.Lifetime = 0.5f;
         lifetime.AutoDestroy = true;
     }

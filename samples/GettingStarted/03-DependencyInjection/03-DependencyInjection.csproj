@@ -13,9 +13,8 @@
     <ProjectReference Include="..\..\..\src\Brine2D\Brine2D.csproj" />
   </ItemGroup>
 
-	<!-- Copy gamesettings.json to output directory -->
 	<ItemGroup>
-		<None Update="appsettings.json">
+		<None Update="gamesettings.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>

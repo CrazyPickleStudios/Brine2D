@@ -42,8 +42,16 @@ public class EntityPrefab
     {
         _componentConfigurators.Add(entity =>
         {
-            var component = entity.AddComponent<T>();
-            configure?.Invoke(component);
+            entity.AddComponent<T>(); 
+
+            if (configure != null)
+            {
+                var component = entity.GetComponent<T>();
+                if (component != null)
+                {
+                    configure(component);
+                }
+            }
         });
         return this;
     }

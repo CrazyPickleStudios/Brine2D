@@ -15,26 +15,6 @@ public interface IEntityWorld
     IReadOnlyList<Entity> Entities { get; }
 
     /// <summary>
-    /// Event fired when an entity is created.
-    /// </summary>
-    event Action<Entity>? OnEntityCreated;
-
-    /// <summary>
-    /// Event fired when an entity is destroyed.
-    /// </summary>
-    event Action<Entity>? OnEntityDestroyed;
-
-    /// <summary>
-    /// Event fired when a component is added to any entity.
-    /// </summary>
-    event Action<Entity, Component>? OnComponentAdded;
-
-    /// <summary>
-    /// Event fired when a component is removed from any entity.
-    /// </summary>
-    event Action<Entity, Component>? OnComponentRemoved;
-
-    /// <summary>
     /// Creates a new entity in the world.
     /// </summary>
     Entity CreateEntity(string name = "");
@@ -62,17 +42,29 @@ public interface IEntityWorld
     /// <summary>
     /// Gets all entities with a specific tag.
     /// </summary>
-    IReadOnlyList<Entity> GetEntitiesByTag(string tag);
+    /// <remarks>
+    /// Returns a lazy enumerable for efficient iteration without allocation.
+    /// Call .ToList() if you need to store results or iterate multiple times.
+    /// </remarks>
+    IEnumerable<Entity> GetEntitiesByTag(string tag);
 
     /// <summary>
     /// Gets all entities with a specific component type.
     /// </summary>
-    IReadOnlyList<Entity> GetEntitiesWithComponent<T>() where T : Component;
+    /// <remarks>
+    /// Returns a lazy enumerable for efficient iteration without allocation.
+    /// Call .ToList() if you need to store results or iterate multiple times.
+    /// </remarks>
+    IEnumerable<Entity> GetEntitiesWithComponent<T>() where T : Component; 
 
     /// <summary>
     /// Gets all entities that have both specified component types.
     /// </summary>
-    IReadOnlyList<Entity> GetEntitiesWithComponents<T1, T2>()
+    /// <remarks>
+    /// Returns a lazy enumerable for efficient iteration without allocation.
+    /// Call .ToList() if you need to store results or iterate multiple times.
+    /// </remarks>
+    IEnumerable<Entity> GetEntitiesWithComponents<T1, T2>() 
         where T1 : Component 
         where T2 : Component;
 
@@ -107,21 +99,6 @@ public interface IEntityWorld
     T GetRequiredService<T>() where T : class;
 
     /// <summary>
-    /// Notifies the world that a component was added to an entity.
-    /// </summary>
-    void NotifyComponentAdded(Entity entity, Component component);
-
-    /// <summary>
-    /// Notifies the world that a component was removed from an entity.
-    /// </summary>
-    void NotifyComponentRemoved(Entity entity, Component component);
-
-    /// <summary>
-    /// Notifies the world that an entity was destroyed.
-    /// </summary>
-    void NotifyEntityDestroyed(Entity entity);
-
-    /// <summary>
     /// Creates a fluent query builder for searching entities.
     /// </summary>
     /// <example>
@@ -136,21 +113,15 @@ public interface IEntityWorld
     EntityQuery Query();
 
     /// <summary>
-    /// Creates a cached query for better performance when querying repeatedly.
+    /// Creates a cached query builder for better performance when querying repeatedly.
     /// </summary>
-    CachedEntityQuery<T1> CreateCachedQuery<T1>() where T1 : Component;
+    CachedEntityQueryBuilder<T1> CreateCachedQuery<T1>() where T1 : Component;
 
-    /// <summary>
-    /// Creates a cached query for better performance when querying repeatedly.
-    /// </summary>
-    CachedEntityQuery<T1, T2> CreateCachedQuery<T1, T2>()
+    CachedEntityQueryBuilder<T1, T2> CreateCachedQuery<T1, T2>()
         where T1 : Component
         where T2 : Component;
 
-    /// <summary>
-    /// Creates a cached query for better performance when querying repeatedly.
-    /// </summary>
-    CachedEntityQuery<T1, T2, T3> CreateCachedQuery<T1, T2, T3>()
+    CachedEntityQueryBuilder<T1, T2, T3> CreateCachedQuery<T1, T2, T3>()
         where T1 : Component
         where T2 : Component
         where T3 : Component;
@@ -158,5 +129,5 @@ public interface IEntityWorld
     /// <summary>
     /// Forces immediate processing of all deferred operations.
     /// </summary>
-    void FlushDeferredOperations();
+    void Flush();
 }

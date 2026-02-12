@@ -54,8 +54,16 @@ public class TransformComponent : Component
             if (parentTransform == null)
                 return _localPosition; // Parent has no transform
             
-            // TODO: Account for parent rotation/scale for full transform matrix
-            return parentTransform.Position + _localPosition;
+            // Apply parent's full transform to local position
+            var parentPos = parentTransform.Position;
+            var parentRot = parentTransform.Rotation;
+            var parentScale = parentTransform.Scale;
+            
+            // Rotate and scale the local position offset
+            var rotatedLocal = Vector2.Transform(_localPosition, Matrix3x2.CreateRotation(parentRot));
+            var scaledLocal = rotatedLocal * parentScale;
+            
+            return parentPos + scaledLocal;
         }
         set
         {
@@ -73,14 +81,24 @@ public class TransformComponent : Component
                 else
                 {
                     // Convert world position to local space
-                    _localPosition = value - parentTransform.Position;
+                    var parentPos = parentTransform.Position;
+                    var parentRot = parentTransform.Rotation;
+                    var parentScale = parentTransform.Scale;
+                    
+                    var offset = value - parentPos;
+                    
+                    // Inverse transform: unscale, then unrotate
+                    var unscaledOffset = offset / parentScale;
+                    var unrotatedOffset = Vector2.Transform(unscaledOffset, Matrix3x2.CreateRotation(-parentRot));
+                    
+                    _localPosition = unrotatedOffset;
                 }
             }
         }
     }
     
     /// <summary>
-    /// Gets the world rotation (computed from parent hierarchy).
+    /// Gets or sets the world rotation (computed from parent hierarchy).
     /// </summary>
     public float Rotation
     {
@@ -117,7 +135,7 @@ public class TransformComponent : Component
     }
     
     /// <summary>
-    /// Gets the world scale (computed from parent hierarchy).
+    /// Gets or sets the world scale (computed from parent hierarchy).
     /// </summary>
     public Vector2 Scale
     {
@@ -167,5 +185,20 @@ public class TransformComponent : Component
     public void Rotate(float angleRadians)
     {
         _localRotation += angleRadians;
+    }
+    
+    /// <summary>
+    /// Gets the full transformation matrix for this transform.
+    /// Combines position, rotation, and scale with parent transforms.
+    /// </summary>
+    /// <remarks>
+    /// Use this for rendering or when you need the complete transform matrix.
+    /// The matrix is computed from world position, rotation, and scale.
+    /// </remarks>
+    public Matrix3x2 GetTransformMatrix()
+    {
+        return Matrix3x2.CreateScale(Scale) *
+               Matrix3x2.CreateRotation(Rotation) *
+               Matrix3x2.CreateTranslation(Position);
     }
 }

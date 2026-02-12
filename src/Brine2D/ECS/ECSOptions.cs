@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Brine2D.ECS;
 
 /// <summary>
@@ -23,7 +25,8 @@ public class ECSOptions
     /// to avoid resizing during gameplay. If you expect more entities,
     /// increase this value to reduce memory allocations during runtime.
     /// </remarks>
-    public int InitialEntityCapacity { get; set; } = 1024;
+    [Range(16, int.MaxValue, ErrorMessage = "InitialEntityCapacity must be at least 16.")]
+    public int InitialEntityCapacity { get; set; } = 1000;
     
     /// <summary>
     /// Gets or sets whether query results should be cached for performance.
@@ -63,6 +66,7 @@ public class ECSOptions
     /// This setting is only used when <see cref="EnableMultiThreading"/> is true.
     /// </para>
     /// </remarks>
+    [Range(1, 64, ErrorMessage = "WorkerThreadCount must be between 1 and 64.")]
     public int? WorkerThreadCount { get; set; } = null;
     
     /// <summary>
@@ -85,5 +89,6 @@ public class ECSOptions
     /// (better for lightweight components with high iteration overhead).
     /// </para>
     /// </remarks>
+    [Range(1, int.MaxValue, ErrorMessage = "ParallelEntityThreshold must be at least 1.")]
     public int ParallelEntityThreshold { get; set; } = 100;
 }

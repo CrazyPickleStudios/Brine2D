@@ -135,7 +135,7 @@
 			Command="&quot;$(DxcExePath)&quot; -T ps_6_0 -E main &quot;$(PostProcessShaderDir)\blur_fragment.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\blur_fragment.dxil&quot;"
 			Condition="Exists('$(PostProcessShaderDir)\blur_fragment.hlsl')" />
 
-		<Message Text="✓ All shaders compiled successfully" Importance="high" />
+		<Message Text="All shaders compiled successfully" Importance="high" />
 	</Target>
 
 	<!-- Force the compiled shaders to be included as embedded resources -->

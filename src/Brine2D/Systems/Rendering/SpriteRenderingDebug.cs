@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Core;
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 

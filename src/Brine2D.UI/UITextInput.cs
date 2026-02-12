@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Core;
 using System.Numerics;
 using System.Text;
 using Brine2D.Input;
@@ -55,27 +55,27 @@ public class UITextInput : IUIComponent
     /// <summary>
     /// Placeholder text color.
     /// </summary>
-    public Color PlaceholderColor { get; set; } = Color.FromArgb(150, 150, 150);
+    public Color PlaceholderColor { get; set; } = new Color(150, 150, 150);
 
     /// <summary>
     /// Background color when unfocused.
     /// </summary>
-    public Color BackgroundColor { get; set; } = Color.FromArgb(40, 40, 40);
+    public Color BackgroundColor { get; set; } = new Color(40, 40, 40);
 
     /// <summary>
     /// Background color when focused.
     /// </summary>
-    public Color FocusedBackgroundColor { get; set; } = Color.FromArgb(50, 50, 50);
+    public Color FocusedBackgroundColor { get; set; } = new Color(50, 50, 50);
 
     /// <summary>
     /// Border color.
     /// </summary>
-    public Color BorderColor { get; set; } = Color.FromArgb(100, 100, 100);
+    public Color BorderColor { get; set; } = new Color(100, 100, 100);
 
     /// <summary>
     /// Focused border color.
     /// </summary>
-    public Color FocusedBorderColor { get; set; } = Color.FromArgb(120, 180, 255);
+    public Color FocusedBorderColor { get; set; } = new Color(120, 180, 255);
 
     /// <summary>
     /// Event fired when text changes.

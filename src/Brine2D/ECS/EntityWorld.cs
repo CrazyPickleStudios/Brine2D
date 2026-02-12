@@ -4,6 +4,7 @@ using Brine2D.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Reflection;
 
 namespace Brine2D.ECS;
 
@@ -12,16 +13,23 @@ namespace Brine2D.ECS;
 /// Uses deferred operations pattern - structural changes (create/destroy) are queued
 /// during frame execution and applied at frame boundaries.
 /// 
-/// Performance: Optimized for 1,000-5,000 entities (typical 2D game workload).
+/// Performance: Optimized for 1,000-10,000+ entities using hot list architecture.
 /// Philosophy: "Good enough" performance with simple mental model (ASP.NET-style).
 /// </summary>
 public class EntityWorld : IEntityWorld
 {
-    private readonly List<Entity> _entities = new();
+    // Main entity list (deferred)
+    private readonly DeferredList<Entity> _entities = new();
     
-    // Deferred operation queues (modifications are queued, not applied immediately)
-    private readonly List<Entity> _entitiesToCreate = new();
-    private readonly List<Entity> _entitiesToDestroy = new();
+    // Hot lists - only entities/components that override lifecycle methods (deferred)
+    private readonly DeferredList<Entity> _updatableEntities = new();
+    private readonly DeferredList<Component> _updatableComponents = new();
+    private readonly DeferredList<Entity> _renderableEntities = new();
+    private readonly DeferredList<Component> _renderableComponents = new();
+    
+    // Deferred operation queue for complex registrations
+    private readonly DeferredOperationQueue<(Entity entity, Component component)> _deferredComponentRegistrations;
+    private readonly DeferredOperationQueue<(Entity entity, Component component)> _deferredComponentUnregistrations;
     
     private readonly IServiceProvider _serviceProvider;
     private readonly ILoggerFactory? _loggerFactory;
@@ -31,12 +39,9 @@ public class EntityWorld : IEntityWorld
     // Flag to control when structural changes are deferred
     private bool _isProcessing = false;
 
-    public IReadOnlyList<Entity> Entities => _entities.AsReadOnly();
+    private readonly List<ICachedQuery> _cachedQueries = new();
 
-    public event Action<Entity>? OnEntityCreated;
-    public event Action<Entity>? OnEntityDestroyed;
-    public event Action<Entity, Component>? OnComponentAdded;
-    public event Action<Entity, Component>? OnComponentRemoved;
+    public IReadOnlyList<Entity> Entities => _entities.AsReadOnly();
 
     public EntityWorld(
         IServiceProvider serviceProvider,
@@ -47,6 +52,10 @@ public class EntityWorld : IEntityWorld
         _loggerFactory = loggerFactory;
         _logger = loggerFactory?.CreateLogger<EntityWorld>();
         _options = options?.Value ?? new ECSOptions();
+        
+        // Initialize deferred operation queues for complex operations
+        _deferredComponentRegistrations = new(tuple => RegisterComponentToHotLists(tuple.entity, tuple.component));
+        _deferredComponentUnregistrations = new(tuple => UnregisterComponentFromHotLists(tuple.entity, tuple.component));
     }
 
     public Entity CreateEntity(string name = "")
@@ -58,17 +67,9 @@ public class EntityWorld : IEntityWorld
             World = this
         };
 
-        if (_isProcessing)
-        {
-            // Defer creation - will be applied at next frame boundary
-            _entitiesToCreate.Add(entity);
-            _logger?.LogDebug("Deferred entity creation: {Name} ({Id})", entity.Name, entity.Id);
-        }
-        else
-        {
-            // Safe to create immediately
-            CreateEntityImmediate(entity);
-        }
+        // Queue entity for creation
+        _entities.Add(entity);
+        _logger?.LogDebug("Queued entity creation: {Name} ({Id})", entity.Name, entity.Id);
 
         return entity;
     }
@@ -81,88 +82,81 @@ public class EntityWorld : IEntityWorld
             World = this
         };
 
-        if (_isProcessing)
-        {
-            // Defer creation - will be applied at next frame boundary
-            _entitiesToCreate.Add(entity);
-            _logger?.LogDebug("Deferred entity creation: {Name} ({Id})", entity.Name, entity.Id);
-        }
-        else
-        {
-            // Safe to create immediately
-            CreateEntityImmediate(entity);
-        }
+        // Queue entity for creation
+        _entities.Add(entity);
+        _logger?.LogDebug("Queued entity creation: {Name} ({Id})", entity.Name, entity.Id);
 
         return entity;
     }
 
-    private void CreateEntityImmediate(Entity entity)
-    {
-        _entities.Add(entity);
-        entity.OnInitialize();
-        OnEntityCreated?.Invoke(entity);
-        _logger?.LogDebug("Created entity: {Name} ({Id})", entity.Name, entity.Id);
-    }
-
     public void DestroyEntity(Entity entity)
     {
-        if (_isProcessing)
+        // Avoid double-queuing for destruction
+        if (!_entities.IsQueuedForRemoval(entity))
         {
-            // Defer destruction - will be applied at next frame boundary
-            if (!_entitiesToDestroy.Contains(entity))
-            {
-                _entitiesToDestroy.Add(entity);
-                entity.IsActive = false; // Deactivate immediately so queries/updates skip it
-                _logger?.LogDebug("Deferred entity destruction: {Name} ({Id})", entity.Name, entity.Id);
-            }
-        }
-        else
-        {
-            // Safe to destroy immediately
-            DestroyEntityImmediate(entity);
-        }
-    }
-
-    private void DestroyEntityImmediate(Entity entity)
-    {
-        if (_entities.Remove(entity))
-        {
-            entity.OnDestroy();
-            OnEntityDestroyed?.Invoke(entity);
-            _logger?.LogDebug("Destroyed entity: {Name} ({Id})", entity.Name, entity.Id);
+            _entities.Remove(entity);
+            entity.IsActive = false; // Deactivate immediately so queries skip it
+            _logger?.LogDebug("Queued entity destruction: {Name} ({Id})", entity.Name, entity.Id);
         }
     }
 
     public Entity? GetEntityById(Guid id)
     {
-        return _entities.FirstOrDefault(e => e.Id == id);
+        foreach (var entity in _entities)
+        {
+            if (entity.Id == id)
+                return entity;
+        }
+        return null;
     }
 
     public Entity? GetEntityByName(string name)
     {
-        return _entities.FirstOrDefault(e => e.Name == name);
+        foreach (var entity in _entities)
+        {
+            if (entity.Name == name)
+                return entity;
+        }
+        return null;
     }
 
-    public IReadOnlyList<Entity> GetEntitiesByTag(string tag)
+    public IEnumerable<Entity> GetEntitiesByTag(string tag)
     {
-        return _entities.Where(e => e.IsActive && e.Tags.Contains(tag)).ToList();
+        foreach (var entity in _entities)
+        {
+            if (entity.IsActive && entity.Tags.Contains(tag))
+                yield return entity;
+        }
     }
 
-    public IReadOnlyList<Entity> GetEntitiesWithComponent<T>() where T : Component
+    public IEnumerable<Entity> GetEntitiesWithComponent<T>() where T : Component
     {
-        return _entities.Where(e => e.IsActive && e.HasComponent<T>()).ToList();
+        foreach (var entity in _entities)
+        {
+            if (entity.IsActive && entity.HasComponent<T>())
+                yield return entity;
+        }
     }
 
-    public IReadOnlyList<Entity> GetEntitiesWithComponents<T1, T2>()
+    public IEnumerable<Entity> GetEntitiesWithComponents<T1, T2>()
         where T1 : Component
         where T2 : Component
     {
-        return _entities.Where(e => e.IsActive && e.HasComponent<T1>() && e.HasComponent<T2>()).ToList();
+        foreach (var entity in _entities)
+        {
+            if (entity.IsActive && entity.HasComponent<T1>() && entity.HasComponent<T2>())
+                yield return entity;
+        }
     }
 
     public Entity? FindEntity(Func<Entity, bool> predicate)
     {
-        return _entities.FirstOrDefault(predicate);
+        foreach (var entity in _entities)
+        {
+            if (predicate(entity))
+                return entity;
+        }
+        return null;
     }
 
     public void Update(GameTime gameTime)
@@ -174,12 +168,18 @@ public class EntityWorld : IEntityWorld
             // Apply deferred operations from previous frame
             ProcessDeferredOperations();
 
-            // Update all active entities
-            // Safe to iterate directly - no structural changes during this loop
-            foreach (var entity in _entities)
+            // Update only entities that override OnUpdate (hot list optimization)
+            foreach (var entity in _updatableEntities)
             {
-                if (!entity.IsActive) continue; // Skip deferred-destroy entities
+                if (!entity.IsActive) continue;
                 entity.OnUpdate(gameTime);
+            }
+            
+            // Update only components that override OnUpdate (hot list optimization)
+            foreach (var component in _updatableComponents)
+            {
+                if (!component.IsEnabled || component.Entity?.IsActive != true) continue;
+                component.OnUpdate(gameTime);
             }
         }
         finally
@@ -193,11 +193,18 @@ public class EntityWorld : IEntityWorld
 
     public void Render(IRenderer renderer)
     {
-        // Direct iteration - render doesn't modify collections
-        foreach (var entity in _entities)
+        // Render only entities that override OnRender (hot list optimization)
+        foreach (var entity in _renderableEntities)
         {
             if (!entity.IsActive) continue;
             entity.OnRender(renderer);
+        }
+        
+        // Render only components that override OnRender (hot list optimization)
+        foreach (var component in _renderableComponents)
+        {
+            if (!component.IsEnabled || component.Entity?.IsActive != true) continue;
+            component.OnRender(renderer);
         }
     }
 
@@ -208,54 +215,207 @@ public class EntityWorld : IEntityWorld
         // Queue all entities for destruction
         foreach (var entity in _entities)
         {
-            if (!_entitiesToDestroy.Contains(entity))
-            {
-                _entitiesToDestroy.Add(entity);
-                entity.IsActive = false;
-            }
+            _entities.Remove(entity);
+            entity.IsActive = false;
         }
 
-        _logger?.LogInformation("World cleared: {Count} entities queued for destruction", _entitiesToDestroy.Count);
+        _logger?.LogInformation("World cleared: entities queued for destruction");
 
+        // Force immediate processing
         var wasProcessing = _isProcessing;
-        _isProcessing = false; // Allow processing
+        _isProcessing = false;
         
         try
         {
-            ProcessDeferredOperations(); // Process all destructions NOW
+            ProcessDeferredOperations();
         }
         finally
         {
-            _isProcessing = wasProcessing; // Restore flag
+            _isProcessing = wasProcessing;
         }
     }
 
     /// <summary>
-    /// Processes all deferred operations (creations and destructions).
-    /// Uses reverse iteration to avoid expensive array shifts.
-    /// Loops until all queues are completely drained (handles cascading operations).
+    /// Internal notification when a component is added.
+    /// </summary>
+    internal void NotifyComponentAdded(Entity entity, Component component)
+    {
+        // Invalidate all cached queries
+        InvalidateAllCachedQueries();
+        
+        if (_isProcessing)
+        {
+            // Defer registration
+            _deferredComponentRegistrations.Enqueue((entity, component));
+        }
+        else
+        {
+            RegisterComponentToHotLists(entity, component);
+        }
+    }
+
+    /// <summary>
+    /// Internal notification when a component is removed.
+    /// </summary>
+    internal void NotifyComponentRemoved(Entity entity, Component component)
+    {
+        // Invalidate all cached queries
+        InvalidateAllCachedQueries();
+        
+        if (_isProcessing)
+        {
+            // Defer unregistration
+            _deferredComponentUnregistrations.Enqueue((entity, component));
+        }
+        else
+        {
+            UnregisterComponentFromHotLists(entity, component);
+        }
+    }
+
+    /// <summary>
+    /// Registers entity to hot lists if it overrides lifecycle methods.
+    /// </summary>
+    private void RegisterEntityToHotLists(Entity entity)
+    {
+        var entityType = entity.GetType();
+
+        // Only use reflection if entity is derived (optimization)
+        if (entityType != typeof(Entity))
+        {
+            // Check OnUpdate override
+            var updateMethod = entityType.GetMethod(
+                nameof(Entity.OnUpdate),
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+
+            if (updateMethod != null)
+            {
+                _updatableEntities.Add(entity);
+            }
+
+            // Check OnRender override
+            var renderMethod = entityType.GetMethod(
+                nameof(Entity.OnRender),
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+
+            if (renderMethod != null)
+            {
+                _renderableEntities.Add(entity);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Removes entity from hot lists.
+    /// </summary>
+    private void UnregisterEntityFromHotLists(Entity entity)
+    {
+        _updatableEntities.Remove(entity);
+        _renderableEntities.Remove(entity);
+    }
+
+    /// <summary>
+    /// Registers component to hot lists if it overrides lifecycle methods.
+    /// </summary>
+    private void RegisterComponentToHotLists(Entity entity, Component component)
+    {
+        var componentType = component.GetType();
+
+        // Only use reflection if component is derived (optimization)
+        if (componentType != typeof(Component))
+        {
+            // Check OnUpdate override
+            var updateMethod = componentType.GetMethod(
+                nameof(Component.OnUpdate),
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+
+            if (updateMethod != null)
+            {
+                _updatableComponents.Add(component);
+            }
+
+            // Check OnRender override
+            var renderMethod = componentType.GetMethod(
+                nameof(Component.OnRender),
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+
+            if (renderMethod != null)
+            {
+                _renderableComponents.Add(component);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Removes component from hot lists.
+    /// </summary>
+    private void UnregisterComponentFromHotLists(Entity entity, Component component)
+    {
+        _updatableComponents.Remove(component);
+        _renderableComponents.Remove(component);
+    }
+
+    /// <summary>
+    /// Processes all deferred operations (creations, destructions, registrations).
+    /// Loops until all queues are empty to handle cascading operations.
     /// </summary>
     private void ProcessDeferredOperations()
     {
-        // Keep processing until ALL queues are empty (handles cascading operations)
-        while (_entitiesToCreate.Count > 0 || _entitiesToDestroy.Count > 0)
+        // Keep processing until ALL lists/queues are drained (handles cascading)
+        while (_entities.HasPendingChanges || 
+               _updatableEntities.HasPendingChanges ||
+               _updatableComponents.HasPendingChanges ||
+               _renderableEntities.HasPendingChanges ||
+               _renderableComponents.HasPendingChanges ||
+               _deferredComponentRegistrations.HasPending ||
+               _deferredComponentUnregistrations.HasPending)
         {
-            // Process creations (forward iteration is fine - small list typically)
-            while (_entitiesToCreate.Count > 0)
-            {
-                var entity = _entitiesToCreate[0];
-                _entitiesToCreate.RemoveAt(0);
-                CreateEntityImmediate(entity);
-            }
-
-            while (_entitiesToDestroy.Count > 0)
-            {
-                var entity = _entitiesToDestroy[^1]; // Get last item
-                _entitiesToDestroy.RemoveAt(_entitiesToDestroy.Count - 1); // Remove from end (O(1))
-                DestroyEntityImmediate(entity);
-                // Any cascading destructions get added to the END, processed in next iteration
-            }
+            // Process entity additions first (triggers OnInitialize which may add components)
+            ProcessEntityAdditions();
+            
+            // Process component registrations
+            _deferredComponentRegistrations.ProcessAll();
+            
+            // Process component unregistrations
+            _deferredComponentUnregistrations.ProcessAll();
+            
+            // Process all hot list changes
+            _updatableEntities.ProcessChanges();
+            _updatableComponents.ProcessChanges();
+            _renderableEntities.ProcessChanges();
+            _renderableComponents.ProcessChanges();
+            
+            // Process entity removals last (triggers OnDestroy which may remove more entities)
+            ProcessEntityRemovals();
         }
+    }
+
+    /// <summary>
+    /// Processes pending entity additions.
+    /// </summary>
+    private void ProcessEntityAdditions()
+    {
+        _entities.ProcessAdds(entity =>
+        {
+            RegisterEntityToHotLists(entity);
+            entity.OnInitialize();
+            _logger?.LogDebug("Created entity: {Name} ({Id})", entity.Name, entity.Id);
+            InvalidateAllCachedQueries();
+        });
+    }
+
+    /// <summary>
+    /// Processes pending entity removals.
+    /// </summary>
+    private void ProcessEntityRemovals()
+    {
+        _entities.ProcessRemovals(entity =>
+        {
+            UnregisterEntityFromHotLists(entity);
+            entity.OnDestroy();
+            _logger?.LogDebug("Destroyed entity: {Name} ({Id})", entity.Name, entity.Id);
+            InvalidateAllCachedQueries();
+        });
     }
 
     public T? GetService<T>() where T : class
@@ -275,56 +435,41 @@ public class EntityWorld : IEntityWorld
         return service;
     }
 
-    void IEntityWorld.NotifyComponentAdded(Entity entity, Component component)
-    {
-        OnComponentAdded?.Invoke(entity, component);
-    }
-
-    void IEntityWorld.NotifyComponentRemoved(Entity entity, Component component)
-    {
-        OnComponentRemoved?.Invoke(entity, component);
-    }
-
-    void IEntityWorld.NotifyEntityDestroyed(Entity entity)
-    {
-        OnEntityDestroyed?.Invoke(entity);
-    }
-
     public EntityQuery Query()
     {
         return new EntityQuery(this, _options);
     }
 
-    public CachedEntityQuery<T1> CreateCachedQuery<T1>() where T1 : Component
+    public CachedEntityQueryBuilder<T1> CreateCachedQuery<T1>() where T1 : Component
     {
-        return new CachedEntityQuery<T1>(this);
+        return new CachedEntityQueryBuilder<T1>(this);
     }
 
-    public CachedEntityQuery<T1, T2> CreateCachedQuery<T1, T2>()
+    public CachedEntityQueryBuilder<T1, T2> CreateCachedQuery<T1, T2>()
         where T1 : Component
         where T2 : Component
     {
-        return new CachedEntityQuery<T1, T2>(this);
+        return new CachedEntityQueryBuilder<T1, T2>(this);
     }
 
-    public CachedEntityQuery<T1, T2, T3> CreateCachedQuery<T1, T2, T3>()
+    public CachedEntityQueryBuilder<T1, T2, T3> CreateCachedQuery<T1, T2, T3>()
         where T1 : Component
         where T2 : Component
         where T3 : Component
     {
-        return new CachedEntityQuery<T1, T2, T3>(this);
+        return new CachedEntityQueryBuilder<T1, T2, T3>(this);
     }
 
     /// <summary>
-    /// Forces immediate processing of all deferred operations.
-    /// Useful for advanced scenarios where you need entities available immediately.
-    /// In most cases, deferred operations process automatically at frame boundaries.
+    /// Immediately processes all pending structural changes.
+    /// Use this for testing or when you need changes to be visible immediately.
+    /// During normal gameplay, changes are automatically processed at frame boundaries via Update().
     /// </summary>
-    public void FlushDeferredOperations()
+    public void Flush()
     {
         var wasProcessing = _isProcessing;
-        _isProcessing = false; // Temporarily allow processing
-
+        _isProcessing = false;
+        
         try
         {
             ProcessDeferredOperations();
@@ -332,6 +477,19 @@ public class EntityWorld : IEntityWorld
         finally
         {
             _isProcessing = wasProcessing;
+        }
+    }
+
+    internal void RegisterCachedQuery(ICachedQuery query)
+    {
+        _cachedQueries.Add(query);
+    }
+
+    private void InvalidateAllCachedQueries()
+    {
+        foreach (var query in _cachedQueries)
+        {
+            query.Invalidate();
         }
     }
 }

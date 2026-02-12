@@ -15,15 +15,16 @@ public static class EngineServiceCollectionExtensions
     /// <summary>
     /// Adds core Brine2D engine services to the service collection.
     /// </summary>
-    public static IServiceCollection AddBrineEngine(this IServiceCollection services)
+    internal static IServiceCollection AddBrineEngine(this IServiceCollection services)
     {
         if (services == null) throw new ArgumentNullException(nameof(services));
 
         // Register core engine services
-        services.TryAddSingleton<IGameEngine, GameEngine>();
+        services.TryAddSingleton<GameEngine>();
         
-        services.TryAddSingleton<IGameLoop>(sp => new GameLoop(
+        services.TryAddSingleton<GameLoop>(sp => new GameLoop(
             sp.GetRequiredService<ILogger<GameLoop>>(),
+            sp.GetRequiredService<ILoggerFactory>(),
             sp.GetRequiredService<IGameContext>(),
             sp.GetRequiredService<ISceneManager>(),
             sp.GetRequiredService<IInputContext>(),
@@ -57,7 +58,7 @@ public static class EngineServiceCollectionExtensions
     /// </code>
     /// </example>
     public static IServiceCollection AddScene<TScene>(this IServiceCollection services)
-        where TScene : class, IScene
+        where TScene : Scene
     {
         services.TryAddTransient<TScene>();
         return services;

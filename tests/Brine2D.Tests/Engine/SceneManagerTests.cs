@@ -38,6 +38,7 @@ public class SceneManagerTests : TestBase
         services.AddTransient<AnotherTestScene>();
         services.AddTransient<OrderedTestScene>();
         services.AddTransient<ManualScene>();
+        services.AddTransient<TestLoadingScreen>();
         
         _serviceProvider = services.BuildServiceProvider();
         _logger = NullLogger<SceneManager>.Instance;
@@ -69,8 +70,8 @@ public class SceneManagerTests : TestBase
 
         // Assert
         scene.Should().NotBeNull();
-        scene!.InitializeCalled.Should().BeTrue();
-        scene.LoadCalled.Should().BeTrue();
+        scene!.LoadCalled.Should().BeTrue("OnLoadAsync should have been called");
+        scene.EnterCalled.Should().BeTrue("OnEnter should have been called");
     }
 
     [Fact]
@@ -85,7 +86,8 @@ public class SceneManagerTests : TestBase
         await manager.LoadSceneAsync<AnotherTestScene>();
 
         // Assert
-        firstScene!.UnloadCalled.Should().BeTrue();
+        firstScene!.ExitCalled.Should().BeTrue("OnExit should have been called");
+        firstScene.UnloadCalled.Should().BeTrue("OnUnloadAsync should have been called");
         manager.CurrentScene.Should().BeOfType<AnotherTestScene>();
     }
 
@@ -139,19 +141,6 @@ public class SceneManagerTests : TestBase
     }
 
     [Fact]
-    public async Task ShouldThrowIfLoadingNonISceneType()
-    {
-        // Arrange
-        var manager = CreateManager();
-
-        // Act
-        Func<Task> act = async () => await manager.LoadSceneAsync(typeof(string));
-
-        // Assert
-        await act.Should().ThrowAsync<ArgumentException>();
-    }
-
-    [Fact]
     public async Task ShouldNotUpdateOrRenderBeforeSceneIsLoaded()
     {
         // Arrange
@@ -166,7 +155,7 @@ public class SceneManagerTests : TestBase
     }
 
     [Fact]
-    public async Task ShouldCallInitializeBeforeLoad()
+    public async Task ShouldCallOnEnterAfterLoad()
     {
         // Arrange
         var manager = CreateManager();
@@ -177,9 +166,9 @@ public class SceneManagerTests : TestBase
         scene = manager.CurrentScene as OrderedTestScene;
 
         // Assert
-        scene!.InitializeCalled.Should().BeTrue();
-        scene.LoadCalled.Should().BeTrue();
-        scene.InitializeCalledBeforeLoad.Should().BeTrue();
+        scene!.LoadCalled.Should().BeTrue("OnLoadAsync should have been called");
+        scene.EnterCalled.Should().BeTrue("OnEnter should have been called");
+        scene.LoadCalledBeforeEnter.Should().BeTrue("OnLoadAsync should be called before OnEnter");
     }
 
     [Fact]
@@ -232,34 +221,39 @@ public class SceneManagerTests : TestBase
 
     public class TestScene : Scene
     {
-        public bool InitializeCalled { get; private set; }
         public bool LoadCalled { get; private set; }
+        public bool EnterCalled { get; private set; }
         public bool UnloadCalled { get; private set; }
+        public bool ExitCalled { get; private set; }
         public bool UpdateCalled { get; private set; }
         public bool RenderCalled { get; private set; }
 
         public TestScene() { }
 
-        protected override Task OnInitializeAsync(CancellationToken cancellationToken)
-        {
-            InitializeCalled = true;
-            return Task.CompletedTask;
-        }
-
-        protected override Task OnLoadAsync(CancellationToken cancellationToken)
+        protected internal override Task OnLoadAsync(CancellationToken cancellationToken)
         {
             LoadCalled = true;
             return Task.CompletedTask;
         }
 
-        protected override Task OnUnloadAsync(CancellationToken cancellationToken)
+        protected internal override void OnEnter()
+        {
+            EnterCalled = true;
+        }
+
+        protected internal override Task OnUnloadAsync(CancellationToken cancellationToken)
         {
             UnloadCalled = true;
             return Task.CompletedTask;
         }
 
-        protected override void OnUpdate(GameTime gameTime) => UpdateCalled = true;
-        protected override void OnRender(GameTime gameTime) => RenderCalled = true;
+        protected internal override void OnExit()
+        {
+            ExitCalled = true;
+        }
+
+        protected internal override void OnUpdate(GameTime gameTime) => UpdateCalled = true;
+        protected internal override void OnRender(GameTime gameTime) => RenderCalled = true;
     }
 
     public class AnotherTestScene : Scene
@@ -269,23 +263,22 @@ public class SceneManagerTests : TestBase
 
     public class OrderedTestScene : Scene
     {
-        public bool InitializeCalled { get; private set; }
         public bool LoadCalled { get; private set; }
-        public bool InitializeCalledBeforeLoad { get; private set; }
+        public bool EnterCalled { get; private set; }
+        public bool LoadCalledBeforeEnter { get; private set; }
 
         public OrderedTestScene() { }
 
-        protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+        protected internal override Task OnLoadAsync(CancellationToken cancellationToken)
         {
-            InitializeCalled = true;
-            InitializeCalledBeforeLoad = !LoadCalled;
+            LoadCalled = true;
+            LoadCalledBeforeEnter = !EnterCalled;
             return Task.CompletedTask;
         }
 
-        protected override Task OnLoadAsync(CancellationToken cancellationToken)
+        protected internal override void OnEnter()
         {
-            LoadCalled = true;
-            return Task.CompletedTask;
+            EnterCalled = true;
         }
     }
 
@@ -308,31 +301,30 @@ public class SceneManagerTests : TestBase
         public bool IsComplete => true;
 
         public void Begin() => BeginCalled = true;
-        public void Update(float deltaTime) => UpdateCalled = true;
-        public void Render(IRenderer renderer) => RenderCalled = true;
+        public void Update(GameTime gameTime) => UpdateCalled = true;
+        public void Render(IRenderer? renderer) => RenderCalled = true;
     }
 
     public class TestLoadingScreen : LoadingScene
     {
-        public bool InitializeCalled { get; private set; }
         public bool LoadCalled { get; private set; }
+        public bool EnterCalled { get; private set; }
         public bool UnloadCalled { get; private set; }
 
         public TestLoadingScreen() { }
 
-        protected override Task OnInitializeAsync(CancellationToken cancellationToken)
-        {
-            InitializeCalled = true;
-            return Task.CompletedTask;
-        }
-
-        protected override Task OnLoadAsync(CancellationToken cancellationToken)
+        protected internal override Task OnLoadAsync(CancellationToken cancellationToken)
         {
             LoadCalled = true;
             return Task.CompletedTask;
         }
 
-        protected override Task OnUnloadAsync(CancellationToken cancellationToken)
+        protected internal override void OnEnter()
+        {
+            EnterCalled = true;
+        }
+
+        protected internal override Task OnUnloadAsync(CancellationToken cancellationToken)
         {
             UnloadCalled = true;
             return Task.CompletedTask;

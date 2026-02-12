@@ -314,7 +314,7 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
         FullScreenQuad.RenderWithShaderAndUniforms(
             commandBuffer,
             sourceTexture,
-            _intermediateTarget.Texture,
+            _intermediateTarget.TextureHandle,
             _pipeline,
             _sampler,
             hParams,
@@ -332,7 +332,7 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
 
         FullScreenQuad.RenderWithShaderAndUniforms(
             commandBuffer,
-            _intermediateTarget.Texture,
+            _intermediateTarget.TextureHandle,
             targetTexture,
             _pipeline,
             _sampler,

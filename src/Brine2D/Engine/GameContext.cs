@@ -7,7 +7,8 @@ namespace Brine2D.Engine;
 /// <summary>
 /// Default implementation of game context.
 /// </summary>
-public class GameContext : IGameContext
+/// /// TODO: Think about getting rid of this.
+internal sealed class GameContext : IGameContext
 {
     private readonly ILogger<GameContext> _logger;
     private readonly IHostApplicationLifetime _lifetime;

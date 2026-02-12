@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Core;
 using Brine2D.Rendering;
 
 namespace Brine2D.Engine.Transitions;
@@ -32,9 +32,9 @@ public class FadeTransition : ISceneTransition
         _elapsed = 0f;
     }
     
-    public void Update(float deltaTime)
+    public void Update(GameTime gameTime)
     {
-        _elapsed += deltaTime;
+        _elapsed += (float)gameTime.DeltaTime;
     }
     
     public void Render(IRenderer? renderer)
@@ -42,26 +42,25 @@ public class FadeTransition : ISceneTransition
         if (renderer == null || IsComplete) return;
         
         // Calculate alpha based on progress
-        // 0.0 -> 0.5: Fade out (alpha 0 -> 255)
-        // 0.5 -> 1.0: Fade in (alpha 255 -> 0)
+        // 0.0 -> 0.5: Stay opaque (alpha 255) while scene loads
+        // 0.5 -> 1.0: Fade in (alpha 255 -> 0) to reveal new scene
         float normalizedProgress = Progress;
         byte alpha;
         
         if (normalizedProgress < 0.5f)
         {
-            // Fade out (first half)
-            alpha = (byte)(normalizedProgress * 2f * 255f);
+            // Stay fully opaque during first half (scene loading)
+            alpha = 255;
         }
         else
         {
-            // Fade in (second half)
+            // Fade in during second half (reveal new scene)
             alpha = (byte)((1f - (normalizedProgress - 0.5f) * 2f) * 255f);
         }
         
         // Draw fullscreen overlay
-        var fadeColor = Color.FromArgb(alpha, _color.R, _color.G, _color.B);
+        var fadeColor = new Color(_color.R, _color.G, _color.B, alpha);
         
-        // Get viewport size from camera or use defaults
         var viewportWidth = renderer.Camera?.ViewportWidth ?? 1280;
         var viewportHeight = renderer.Camera?.ViewportHeight ?? 720;
         

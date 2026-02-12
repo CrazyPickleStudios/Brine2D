@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Assets;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
@@ -23,7 +23,7 @@ namespace FeatureDemos.Scenes.Performance;
 /// </summary>
 public class SpriteBenchmarkScene : DemoSceneBase
 {
-    private readonly ITextureLoader _textureLoader;
+    private readonly IAssetLoader _assetLoader;
     private readonly DebugRenderer? _debugRenderer;
     private readonly ICamera? _camera;
     private ITexture? _sharedTexture;
@@ -33,7 +33,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
     private System.Diagnostics.Stopwatch _cpuWorkStopwatch = new();
 
     public SpriteBenchmarkScene(
-        ITextureLoader textureLoader,
+        IAssetLoader assetLoader,
         IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
@@ -42,12 +42,12 @@ public class SpriteBenchmarkScene : DemoSceneBase
         ICamera? camera)
         : base(input, sceneManager, gameContext, perfOverlay)
     {
-        _textureLoader = textureLoader;
+        _assetLoader = assetLoader;
         _debugRenderer = debugRenderer;
         _camera = camera;
     }
 
-    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Sprite Rendering Benchmark ===");
         Logger.LogInformation("Controls:");
@@ -63,25 +63,25 @@ public class SpriteBenchmarkScene : DemoSceneBase
         Logger.LogInformation("  F1 - Toggle overlay");
         Logger.LogInformation("  ESC - Return to menu");
         
-        Renderer.ClearColor = Color.FromArgb(20, 20, 30);
+        Renderer.ClearColor = new Color(20, 20, 30);
         
-        // Setup camera for culling
+        // Setup camera
         if (_camera != null)
         {
-            _camera.Position = new Vector2(640, 360); // Center of 1280x720
+            _camera.Position = new Vector2(640, 360);
             _camera.Zoom = 1.0f;
             Renderer.Camera = _camera;
             Logger.LogInformation("Camera initialized for frustum culling");
         }
         
-        // Show performance overlay by default with detailed stats
+        // Show performance overlay
         if (PerfOverlay != null)
         {
             PerfOverlay.IsVisible = true;
             PerfOverlay.ShowDetailedStats = true;
         }
 
-        // Disable debug rendering for cleaner benchmark
+        // Disable debug rendering
         if (_debugRenderer != null)
         {
             _debugRenderer.ShowEntityNames = false;
@@ -91,31 +91,23 @@ public class SpriteBenchmarkScene : DemoSceneBase
             Logger.LogInformation("Debug rendering disabled for benchmark");
         }
 
-        // Spawn initial sprites
-        SpawnSprites(_spriteCount);
-
-        return Task.CompletedTask;
-    }
-    
-    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
-    {
         try
         {
             Logger.LogInformation("Loading shared sprite texture...");
-            _sharedTexture = await _textureLoader.LoadTextureAsync(
-                "assets/images/logo.png", 
-                TextureScaleMode.Nearest, 
-                cancellationToken);
-            
-            Logger.LogInformation("Texture loaded: {Width}x{Height}", 
-                _sharedTexture.Width, _sharedTexture.Height);
-            
+            _sharedTexture = await _assetLoader.LoadTextureAsync(
+                "assets/images/logo.png",
+                TextureScaleMode.Nearest,
+                cancellationToken: cancellationToken);
+            Logger.LogInformation("Texture loaded: {Width}x{Height}", _sharedTexture.Width, _sharedTexture.Height);
             ApplyTextureToAllSprites();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to load texture! Sprites will not render.");
+            Logger.LogError(ex, "Failed to load texture!");
         }
+
+        // Spawn sprites
+        SpawnSprites(_spriteCount);
     }
     
     private void ApplyTextureToAllSprites()
@@ -270,48 +262,13 @@ public class SpriteBenchmarkScene : DemoSceneBase
                 var speed = velocity.Velocity.Length();
                 var intensity = (byte)(100 + (speed / 10f) * 155);
                 
-                sprite.Tint = Color.FromArgb(
+                sprite.Tint = new Color(
                     intensity,
                     (byte)(255 - intensity / 2),
                     (byte)(200 - intensity / 3));
             });
     }
-
-    /// <summary>
-    /// Heavy CPU workload to test multi-threading.
-    /// Simulates expensive per-entity logic (e.g., pathfinding, complex AI).
-    /// </summary>
-    private void HeavyCPUWorkload(GameTime gameTime)
-    {
-        _cpuWorkStopwatch.Restart();
-        
-        var deltaTime = (float)gameTime.DeltaTime;
-        
-        World!.Query()
-            .With<TransformComponent>()
-            .With<VelocityComponent>()
-            .ForEach((Entity entity, TransformComponent transform, VelocityComponent velocity) =>
-            {
-                // Heavy workload
-                var result = 0.0;
-                for (int i = 0; i < 1000; i++)
-                {
-                    result += Math.Sin(transform.Position.X + i) * Math.Cos(transform.Position.Y + i);
-                }
-                
-                transform.Position += velocity.Velocity * deltaTime * (float)result * 0.0001f;
-                
-                if (transform.Position.X < -2000 || transform.Position.X > 3280)
-                    velocity.Velocity = new Vector2(-velocity.Velocity.X, velocity.Velocity.Y);
-                
-                if (transform.Position.Y < -2000 || transform.Position.Y > 2720)
-                    velocity.Velocity = new Vector2(velocity.Velocity.X, -velocity.Velocity.Y);
-            });
-        
-        _cpuWorkStopwatch.Stop();
-        Logger.LogInformation("CPU Work Time: {Time:F2}ms", _cpuWorkStopwatch.Elapsed.TotalMilliseconds);
-    }
-
+    
     protected override void OnRender(GameTime gameTime)
     {
         if (_showCullingVisualization && _camera != null)
@@ -329,16 +286,16 @@ public class SpriteBenchmarkScene : DemoSceneBase
         if (_camera != null)
         {
             Renderer.DrawText($"Camera: ({_camera.Position.X:F0}, {_camera.Position.Y:F0}) Zoom: {_camera.Zoom:F2}x", 
-                10, instructionY, Color.FromArgb(100, 200, 255));
+                10, instructionY, new Color(100, 200, 255));
             instructionY += 25;
         }
         
         // Show animation status
         Renderer.DrawText($"Animation: {(_enableAnimation ? "ON" : "OFF")} (SPACE)", 
-            10, instructionY, _enableAnimation ? Color.FromArgb(0, 255, 100) : Color.Gray);
+            10, instructionY, _enableAnimation ? new Color(0, 255, 100) : Color.Gray);
         instructionY += 25;
         
-        Renderer.DrawText("Controls:", 10, instructionY, Color.FromArgb(255, 255, 100));
+        Renderer.DrawText("Controls:", 10, instructionY, new Color(255, 255, 100));
         instructionY += 20;
         
         Renderer.DrawText("UP/DOWN: +/- 100 sprites", 10, instructionY, Color.Gray);
@@ -357,7 +314,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         Renderer.DrawText("SPACE: Toggle Animation", 10, instructionY, Color.Gray);
         instructionY += 20;
         
-        Renderer.DrawText("F4: System Profiling", 10, instructionY, Color.FromArgb(255, 200, 0));
+        Renderer.DrawText("F4: System Profiling", 10, instructionY, new Color(255, 200, 0));
         instructionY += 20;
         
         Renderer.DrawText("R: Reset", 10, instructionY, Color.Gray);
@@ -376,49 +333,54 @@ public class SpriteBenchmarkScene : DemoSceneBase
         var height = halfHeight * 2;
         
         Renderer.DrawRectangleOutline(left, top, width, height,
-            Color.FromArgb(150, 0, 255, 0), 4f);
+            new Color(0, 255, 0, 150), 4f);
         
         Renderer.DrawText("Frustum (everything inside is rendered)", 
-            left + 10, top + 10, Color.FromArgb(0, 255, 0));
+            left + 10, top + 10, new Color(0, 255, 0));
     }
     
     private void SpawnSprites(int count)
     {
-        if (World == null) return;
-        
         var random = new Random();
         
         for (int i = 0; i < count; i++)
         {
-            var sprite = World.CreateEntity($"BenchSprite_{_spriteCount + i}");
+            var entity = World.CreateEntity($"Sprite_{i}");
             
-            // Add transform - spawn in large area
-            var transform = sprite.AddComponent<TransformComponent>();
+            entity.AddComponent<TransformComponent>();
+            entity.AddComponent<SpriteComponent>();
+            entity.AddComponent<VelocityComponent>();
+            
+            var transform = entity.GetComponent<TransformComponent>()!;
+            var sprite = entity.GetComponent<SpriteComponent>()!;
+            var velocity = entity.GetComponent<VelocityComponent>()!;
+            
+            // Configure transform
             transform.Position = new Vector2(
                 random.Next(-2000, 3280),
                 random.Next(-2000, 2720));
             transform.Scale = new Vector2(
-                0.5f + (float)random.NextDouble() * 1.0f, 
-                0.5f + (float)random.NextDouble() * 1.0f);
+                0.5f + (float)random.NextDouble() * 0.5f,
+                0.5f + (float)random.NextDouble() * 0.5f);
+            transform.Rotation = (float)(random.NextDouble() * Math.PI * 2);
             
-            var velocity = sprite.AddComponent<VelocityComponent>();
-            velocity.Velocity = new Vector2(
-                (float)(random.NextDouble() - 0.5) * 200f,
-                (float)(random.NextDouble() - 0.5) * 200f);
-            
-            // Add sprite component with random color tint
-            var spriteComp = sprite.AddComponent<SpriteComponent>();
-            spriteComp.Tint = Color.FromArgb(
-                (byte)random.Next(100, 255),
-                (byte)random.Next(100, 255),
-                (byte)random.Next(100, 255));
-            spriteComp.Layer = random.Next(0, 3);
-            
+            // Configure sprite
             if (_sharedTexture != null)
             {
-                spriteComp.Texture = _sharedTexture;
+                sprite.Texture = _sharedTexture;
             }
+            sprite.Tint = new Color(
+                (byte)random.Next(150, 255),
+                (byte)random.Next(150, 255),
+                (byte)random.Next(150, 255));
+            
+            // Configure velocity
+            velocity.Velocity = new Vector2(
+                (float)(random.NextDouble() - 0.5) * 200,
+                (float)(random.NextDouble() - 0.5) * 200);
         }
+        
+        Logger.LogInformation("Spawned {Count} sprites", count);
     }
     
     private void RemoveSprites(int count)
@@ -451,10 +413,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
 
     protected override void ConfigureSystems(ISystemConfigurator systems)
     {
-        // Add benchmark system ONLY for this scene
-        systems.AddUpdateSystem<BenchmarkSystem>();
-        
-        // Optional: Disable VelocitySystem since BenchmarkSystem replaces it
-        // systems.DisableSystem<VelocitySystem>();
+        // TEMPORARILY DISABLE to test
+        // systems.AddUpdateSystem<BenchmarkSystem>();
     }
 }

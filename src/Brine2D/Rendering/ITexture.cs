@@ -1,3 +1,5 @@
+using Brine2D.Core;
+
 namespace Brine2D.Rendering;
 
 /// <summary>
@@ -28,5 +30,11 @@ public interface ITexture : IDisposable
     /// <summary>
     /// Gets or sets the texture scale mode (linear or nearest neighbor).
     /// </summary>
-    TextureScaleMode ScaleMode { get; set; }
+    TextureScaleMode ScaleMode { get; }
+    
+    /// <summary>
+    /// Gets the bounding rectangle of the texture (0, 0, Width, Height).
+    /// Convenience property for texture operations.
+    /// </summary>
+    Rectangle Bounds => new(0, 0, Width, Height);
 }

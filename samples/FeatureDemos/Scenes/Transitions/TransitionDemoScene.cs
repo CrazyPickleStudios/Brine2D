@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Engine.Transitions;
@@ -26,7 +25,7 @@ public class TransitionDemoScene : DemoSceneBase
         : base(input, sceneManager, gameContext)
     {
         // Each instance gets a random color for visual distinction
-        _sceneColor = Color.FromArgb(
+        _sceneColor = new Color(
             (byte)Random.Shared.Next(100, 255),
             (byte)Random.Shared.Next(100, 255),
             (byte)Random.Shared.Next(100, 255)
@@ -35,7 +34,7 @@ public class TransitionDemoScene : DemoSceneBase
         _sceneName = $"Scene {Random.Shared.Next(1, 100)}";
     }
 
-    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Transition Demo Scene ===");
         Logger.LogInformation("Controls:");
@@ -69,7 +68,7 @@ public class TransitionDemoScene : DemoSceneBase
         {
             Logger.LogInformation("Loading Scene B with slow fade...");
             _ = SceneManager.LoadSceneAsync<SceneB>(
-                new FadeTransition(duration: 2f, color: Color.FromArgb(50, 0, 100))
+                new FadeTransition(duration: 2f, color: new Color(50, 0, 100))
             );
         }
 
@@ -93,7 +92,7 @@ public class TransitionDemoScene : DemoSceneBase
         Renderer.DrawText("Press 1 - Fast Fade (0.5s)", 10, 120, Color.Yellow);
         Renderer.DrawText("Press 2 - Slow Fade (2s)", 10, 150, Color.Yellow);
         Renderer.DrawText("Press 3 - With Loading Screen", 10, 180, Color.Yellow);
-        Renderer.DrawText("Press ESC - Return to Menu", 10, 210, Color.FromArgb(150, 150, 150));
+        Renderer.DrawText("Press ESC - Return to Menu", 10, 210, new Color(150, 150, 150));
         
         // Draw visual indicator
         DrawColorBox();

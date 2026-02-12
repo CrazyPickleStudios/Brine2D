@@ -55,7 +55,8 @@ public class AnimatorComponent : Component
         _sprite = Entity?.GetComponent<SpriteComponent>();
         if (_sprite == null)
         {
-            _sprite = Entity?.AddComponent<SpriteComponent>();
+            Entity?.AddComponent<SpriteComponent>(); 
+            _sprite = Entity?.GetComponent<SpriteComponent>();
         }
     }
 

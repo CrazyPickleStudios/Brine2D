@@ -1,4 +1,5 @@
 using Brine2D.Rendering;
+using Brine2D.Core;
 
 namespace Brine2D.Engine;
 
@@ -32,7 +33,7 @@ public interface ISceneTransition
     /// Updates the transition.
     /// </summary>
     /// <param name="deltaTime">Time since last update in seconds.</param>
-    void Update(float deltaTime);
+    void Update(GameTime gameTime);
     
     /// <summary>
     /// Renders the transition effect.

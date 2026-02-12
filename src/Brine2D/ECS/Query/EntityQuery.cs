@@ -3,7 +3,6 @@ using Brine2D.Core;
 using Brine2D.Animation;
 using Brine2D.ECS.Components;
 using System.Buffers;
-using System.Drawing;
 
 namespace Brine2D.ECS.Query;
 
@@ -295,8 +294,18 @@ public class EntityQuery
     }
 
     /// <summary>
-    /// Only returns active entities (default behavior).
+    /// Includes only active entities (default behavior).
+    /// This is the default, so you only need to call this to be explicit.
     /// </summary>
+    /// <example>
+    /// <code>
+    /// // Explicit active-only (same as default)
+    /// var activeEnemies = World.Query()
+    ///     .WithTag("Enemy")
+    ///     .OnlyActive()
+    ///     .Execute();
+    /// </code>
+    /// </example>
     public EntityQuery OnlyActive()
     {
         _onlyActive = true;
@@ -304,15 +313,22 @@ public class EntityQuery
     }
 
     /// <summary>
-    /// Includes inactive entities in the results.
+    /// Includes both active and inactive entities.
+    /// Use this when you need to query disabled entities (e.g., for debugging or re-enabling).
     /// </summary>
     /// <example>
     /// <code>
-    /// // Get all enemies including inactive/disabled ones
-    /// var allEnemies = world.Query()
-    ///     .With&lt;EnemyComponent&gt;()
+    /// // Get all entities including disabled ones
+    /// var allEnemies = World.Query()
+    ///     .WithTag("Enemy")
     ///     .IncludeInactive()
     ///     .Execute();
+    /// 
+    /// // Re-enable all disabled enemies
+    /// foreach (var enemy in allEnemies.Where(e => !e.IsActive))
+    /// {
+    ///     enemy.IsActive = true;
+    /// }
     /// </code>
     /// </example>
     public EntityQuery IncludeInactive()
@@ -396,9 +412,9 @@ public class EntityQuery
         // while the caller iterates the results
         var snapshot = _world.Entities.ToList();
         
-        // Filter the snapshot
+        // Filter the snapshot (defensive: filter out null entities during scene transitions)
         IEnumerable<Entity> results = snapshot
-            .Where(entity => entity.IsActive) // Skip deferred-destroy entities
+            .Where(entity => entity != null && entity.IsActive)
             .Where(entity =>
             {
                 // Check active status (redundant but explicit)

@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.Engine;
@@ -51,21 +50,21 @@ public class CustomLoadingScreen : LoadingScene
         var barY = centerY + 50;
         
         // Background (dark blue)
-        Renderer.DrawRectangleFilled(barX, barY, barWidth, barHeight, Color.FromArgb(20, 30, 60));
+        Renderer.DrawRectangleFilled(barX, barY, barWidth, barHeight, new Color(20, 30, 60));
         
         // Filled portion (bright blue)
         Renderer.DrawRectangleFilled(
             barX, barY, 
             barWidth * LoadingProgress, 
             barHeight,
-            Color.FromArgb(50, 150, 255)
+            new Color(50, 150, 255)
         );
         
         // Border (white)
         Renderer.DrawRectangleOutline(barX, barY, barWidth, barHeight, Color.White, 3f);
         
         // Status text
-        Renderer.DrawText(LoadingMessage, centerX - 60, barY + 50, Color.FromArgb(200, 200, 200));
+        Renderer.DrawText(LoadingMessage, centerX - 60, barY + 50, new Color(200, 200, 200));
         
         // Percentage
         var percentText = $"{(int)(LoadingProgress * 100)}%";
@@ -85,7 +84,7 @@ public class CustomLoadingScreen : LoadingScene
             
             // Fade alpha based on position
             var alpha = (byte)(255 - i * 30);
-            var color = Color.FromArgb(alpha, 100, 200, 255);
+            var color = new Color(100, 200, 255, alpha);
             
             Renderer.DrawCircleFilled(x, y, 5f, color);
         }

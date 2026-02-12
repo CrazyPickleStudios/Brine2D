@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Core;
 using System.Numerics;
 using Brine2D.Rendering;
 
@@ -23,17 +23,17 @@ public class UIButton : IUIComponent
     /// <summary>
     /// Normal state color.
     /// </summary>
-    public Color NormalColor { get; set; } = Color.FromArgb(255, 70, 70, 70);
+    public Color NormalColor { get; set; } = new Color(70, 70, 70, 255);
 
     /// <summary>
     /// Hover state color.
     /// </summary>
-    public Color HoverColor { get; set; } = Color.FromArgb(255, 90, 90, 90);
+    public Color HoverColor { get; set; } = new Color(90, 90, 90, 255);
 
     /// <summary>
     /// Pressed state color.
     /// </summary>
-    public Color PressedColor { get; set; } = Color.FromArgb(255, 50, 50, 50);
+    public Color PressedColor { get; set; } = new Color(50, 50, 50, 255);
 
     /// <summary>
     /// Text color.
@@ -73,7 +73,7 @@ public class UIButton : IUIComponent
         renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, currentColor);
 
         // Draw border
-        var borderColor = Enabled ? Color.FromArgb(150, 150, 150) : Color.FromArgb(100, 100, 100);
+        var borderColor = Enabled ? new Color(150, 150, 150) : new Color(100, 100, 100);
         renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, 2, borderColor); // Top
         renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - 2, Size.X, 2, borderColor); // Bottom
         renderer.DrawRectangleFilled(Position.X, Position.Y, 2, Size.Y, borderColor); // Left
@@ -82,7 +82,7 @@ public class UIButton : IUIComponent
         // Draw text (centered)
         var textX = Position.X + (Size.X / 2) - (Text.Length * 4); // Rough centering
         var textY = Position.Y + (Size.Y / 2) - 8;
-        renderer.DrawText(Text, textX, textY, Enabled ? TextColor : Color.FromArgb(100, 100, 100));
+        renderer.DrawText(Text, textX, textY, Enabled ? TextColor : new Color(100, 100, 100));
     }
 
     public bool Contains(Vector2 screenPosition)

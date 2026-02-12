@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Animation;
 using Brine2D.Core;
@@ -103,22 +102,25 @@ public class UIImage : IUIComponent
             renderPos.Y += (Size.Y - renderSize.Y) / 2;
         }
 
-        if (SourceRect.HasValue)
-        {
-            // Draw with source rectangle (9 params)
-            var src = SourceRect.Value;
-            renderer.DrawTexture(
-                Texture,
-                src.X, src.Y, src.Width, src.Height,
-                renderPos.X, renderPos.Y, renderSize.X, renderSize.Y);
-        }
-        else
-        {
-            // Draw scaled texture (5 params)
-            renderer.DrawTexture(
-                Texture,
-                renderPos.X, renderPos.Y, renderSize.X, renderSize.Y);
-        }
+        // Calculate scale from desired render size
+        var sourceSize = SourceRect.HasValue 
+            ? new Vector2(SourceRect.Value.Width, SourceRect.Value.Height)
+            : new Vector2(Texture.Width, Texture.Height);
+
+        var scale = new Vector2(
+            renderSize.X / sourceSize.X,
+            renderSize.Y / sourceSize.Y);
+
+        // Use new primary API - handles both with/without sourceRect
+        renderer.DrawTexture(
+            Texture,
+            position: renderPos,
+            sourceRect: SourceRect,
+            origin: Vector2.Zero,        // Top-left anchor (we already calculated position)
+            rotation: 0f,                // TODO: Convert Rotation from degrees if needed
+            scale: scale,
+            color: null,                 // TODO: Could add Alpha/tint support here
+            flip: SpriteFlip.None);
     }
 
     public bool Contains(Vector2 screenPosition)

@@ -1,5 +1,4 @@
-using System.Drawing;
-using Brine2D.Pooling;
+using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.Rendering;
 using Brine2D.Rendering.TextureAtlas;
@@ -46,7 +45,7 @@ public class ParticleEmitterComponent : Component
     /// <summary>
     /// End color of particles (lerps over lifetime).
     /// </summary>
-    public Color EndColor { get; set; } = Color.FromArgb(0, 255, 255, 255); // Fade to transparent
+    public Color EndColor { get; set; } = new Color(255, 255, 255, 0); // Fade to transparent
 
     /// <summary>
     /// Start size of particles.

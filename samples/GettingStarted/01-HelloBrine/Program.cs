@@ -1,5 +1,4 @@
-﻿using System.Drawing;
-using Brine2D.Core;
+﻿using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Input;

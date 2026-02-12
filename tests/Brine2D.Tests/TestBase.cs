@@ -16,18 +16,24 @@ public abstract class TestBase
         var services = new ServiceCollection();
         services.AddLogging();
         
-        if (configure != null)
+        // Configure ECS options with defaults
+        services.Configure<ECSOptions>(options =>
         {
-            services.Configure(configure);
-        }
+            configure?.Invoke(options);
+        });
         
         var serviceProvider = services.BuildServiceProvider();
         
-        return new EntityWorld(
+        var world = new EntityWorld(
             serviceProvider,
             serviceProvider.GetService<ILoggerFactory>(),
             serviceProvider.GetService<IOptions<ECSOptions>>()
         );
+        
+        // Ensure the world is initialized (if it has an initialization method)
+        // world.Initialize(); // Uncomment if EntityWorld has this
+        
+        return world;
     }
     
     protected IServiceProvider CreateTestServiceProvider(Action<IServiceCollection>? configureServices = null)

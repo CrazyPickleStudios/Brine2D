@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Core;
 
 namespace Brine2D.Animation;

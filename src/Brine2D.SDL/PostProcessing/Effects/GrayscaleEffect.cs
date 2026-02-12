@@ -283,9 +283,10 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
 
     public void Apply(IRenderer renderer, nint sourceTexture, nint targetTexture, nint commandBuffer)
     {
-        if (!Enabled) 
+        if (sourceTexture == nint.Zero || targetTexture == nint.Zero || commandBuffer == nint.Zero)
         {
-            return; // Remove the log here too
+            _logger?.LogWarning("Invalid handles passed to {EffectName} - skipping", Name);
+            return;
         }
 
         EnsureInitialized();

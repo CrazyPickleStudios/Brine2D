@@ -1,4 +1,5 @@
 ﻿using System;
+using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.Rendering.SDL.PostProcessing;
@@ -7,19 +8,31 @@ namespace Brine2D.Rendering.SDL.PostProcessing;
 /// Represents an off-screen render target for post-processing effects.
 /// Wraps an SDL3 GPU texture with ColorTarget usage.
 /// </summary>
-public sealed class RenderTarget : IDisposable
+public sealed class RenderTarget : IRenderTarget
 {
     private readonly ILogger<RenderTarget>? _logger;
     private nint _device;
     private nint _texture;
+    private RenderTargetTextureView? _textureView;
     private bool _disposed;
 
-    public nint Texture => _texture;
+    internal nint TextureHandle => _texture;
     public int Width { get; }
     public int Height { get; }
     public SDL3.SDL.GPUTextureFormat Format { get; }
+    
+    /// <summary>
+    /// The texture as ITexture for rendering operations.
+    /// This is a lightweight view - the RenderTarget owns the actual GPU resource.
+    /// </summary>
+    public ITexture Texture => _textureView ??= new RenderTargetTextureView(
+        $"RenderTarget_{Width}x{Height}",
+        _texture,
+        Width,
+        Height,
+        TextureScaleMode.Linear);
 
-    internal RenderTarget(nint device, int width, int height, SDL3.SDL.GPUTextureFormat format, ILogger<RenderTarget>? logger = null)
+    public RenderTarget(nint device, int width, int height, SDL3.SDL.GPUTextureFormat format, ILogger<RenderTarget>? logger = null)
     {
         if (device == nint.Zero)
             throw new ArgumentException("Device handle cannot be zero", nameof(device));
@@ -65,6 +78,9 @@ public sealed class RenderTarget : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+
+        // Texture view doesn't own anything, no need to dispose
+        _textureView = null;
 
         if (_texture != nint.Zero && _device != nint.Zero)
         {

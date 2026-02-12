@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Core;
 
@@ -27,5 +26,5 @@ public abstract class CollisionShape
     /// <summary>
     /// Gets the axis-aligned bounding box for broad-phase detection.
     /// </summary>
-    public abstract RectangleF GetBounds();
+    public abstract Rectangle GetBounds();
 }

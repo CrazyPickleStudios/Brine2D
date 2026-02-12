@@ -1,6 +1,6 @@
 using Brine2D.Rendering;
 using System.Diagnostics;
-using System.Drawing;
+using Brine2D.Core;
 
 namespace Brine2D.Performance;
 
@@ -162,7 +162,7 @@ public class PerformanceOverlay
         var currentY = y;
         
         // Draw semi-transparent background
-        renderer.DrawRectangleFilled(x - 5, y - 5, bgWidth, bgHeight, Color.FromArgb(180, 0, 0, 0));
+        renderer.DrawRectangleFilled(x - 5, y - 5, bgWidth, bgHeight, new Color(0, 0, 0, 180));
         
         // FPS Stats
         var fpsColor = GetFpsColor(_displayedFPS);
@@ -175,12 +175,12 @@ public class PerformanceOverlay
         if (_showDetailedStats)
         {
             renderer.DrawText($"Min/Max/Avg: {_displayedMinFPS:F0} / {_displayedMaxFPS:F0} / {_displayedAvgFPS:F1}", 
-                x, currentY, Color.FromArgb(180, 180, 180));
+                x, currentY, new Color(180, 180, 180));
             currentY += lineHeight;
             
             currentY += 5;
             
-            renderer.DrawText("=== Rendering ===", x, currentY, Color.FromArgb(255, 255, 100));
+            renderer.DrawText("=== Rendering ===", x, currentY, new Color(255, 255, 100));
             currentY += lineHeight;
             
             renderer.DrawText($"Draw Calls: {_displayedDrawCalls}", x, currentY, Color.White);
@@ -199,7 +199,7 @@ public class PerformanceOverlay
             
             currentY += 5;
             
-            renderer.DrawText("=== Memory ===", x, currentY, Color.FromArgb(255, 255, 100));
+            renderer.DrawText("=== Memory ===", x, currentY, new Color(255, 255, 100));
             currentY += lineHeight;
             
             renderer.DrawText($"Total: {_displayedMemoryMB:F2} MB", x, currentY, Color.White);
@@ -213,8 +213,8 @@ public class PerformanceOverlay
         
         // Instructions - split into two lines
         var instructionY = currentY + 10;
-        renderer.DrawText("F1: Visibility | F3: Details", x, instructionY, Color.FromArgb(150, 150, 150));
-        renderer.DrawText("F4: System Profiling", x, instructionY + 15, Color.FromArgb(150, 150, 150));
+        renderer.DrawText("F1: Visibility | F3: Details", x, instructionY, new Color(150, 150, 150));
+        renderer.DrawText("F4: System Profiling", x, instructionY + 15, new Color(150, 150, 150));
     }
     
     /// <summary>
@@ -272,12 +272,12 @@ public class PerformanceOverlay
                 break;
         }
         
-        renderer.DrawRectangleFilled(graphX, graphY, graphWidth, graphHeight, Color.FromArgb(180, 0, 0, 0));
+        renderer.DrawRectangleFilled(graphX, graphY, graphWidth, graphHeight, new Color(0, 0, 0, 180));
         
         // Draw 60 FPS line (16.67ms)
         var targetLineY = graphY + graphHeight - (16.67f / 50f * graphHeight);
         renderer.DrawLine(graphX, targetLineY, graphX + graphWidth, targetLineY,
-            Color.FromArgb(100, 0, 255, 0), 1f);
+            new Color(0, 0, 255, 100), 1f);
         
         // Draw frame time history (updates every frame for smooth animation)
         var history = _monitor.FrameTimeHistory.ToArray();
@@ -294,7 +294,7 @@ public class PerformanceOverlay
                 var y1 = graphY + graphHeight - (float)(Math.Min(history[i], 50) / 50.0 * graphHeight);
                 var y2 = graphY + graphHeight - (float)(Math.Min(history[i + 1], 50) / 50.0 * graphHeight);
                 
-                var color = history[i + 1] > 16.67 ? Color.FromArgb(255, 100, 100) : Color.FromArgb(100, 255, 100);
+                var color = history[i + 1] > 16.67 ? new Color(255, 100, 100) : new Color(100, 255, 100);
                 renderer.DrawLine(x1, y1, x2, y2, color, 2f);
             }
         }
@@ -336,27 +336,27 @@ public class PerformanceOverlay
         var lineHeight = 18;
 
         // Background
-        renderer.DrawRectangleFilled(x - 5, y - 5, panelWidth, panelHeight, Color.FromArgb(200, 0, 0, 0));
+        renderer.DrawRectangleFilled(x - 5, y - 5, panelWidth, panelHeight, new Color(0, 0, 0, 200));
 
         // Title
-        renderer.DrawText("=== SYSTEM PROFILING ===", x, y, Color.FromArgb(255, 255, 100));
+        renderer.DrawText("=== SYSTEM PROFILING ===", x, y, new Color(255, 255, 100));
         y += lineHeight + 5;
 
         // Use cached/throttled system data
         if (_displayedSystems.Count == 0)
         {
-            renderer.DrawText("No profiling data yet...", x, y, Color.FromArgb(180, 180, 180));
+            renderer.DrawText("No profiling data yet...", x, y, new Color(180, 180, 180));
         }
         else
         {
             // Header
-            renderer.DrawText("System", x, y, Color.FromArgb(200, 200, 200));
-            renderer.DrawText("Current", x + 250, y, Color.FromArgb(200, 200, 200));
-            renderer.DrawText("Avg", x + 320, y, Color.FromArgb(200, 200, 200));
+            renderer.DrawText("System", x, y, new Color(200, 200, 200));
+            renderer.DrawText("Current", x + 250, y, new Color(200, 200, 200));
+            renderer.DrawText("Avg", x + 320, y, new Color(200, 200, 200));
             y += lineHeight;
 
             // Draw separator
-            renderer.DrawLine(x, y, x + panelWidth - 10, y, Color.FromArgb(100, 100, 100), 1f);
+            renderer.DrawLine(x, y, x + panelWidth - 10, y, new Color(100, 100, 100), 1f);
             y += 5;
 
             // Display cached systems
@@ -370,7 +370,7 @@ public class PerformanceOverlay
 
                 renderer.DrawText(displayName, x, y, Color.White);
                 renderer.DrawText($"{timing.CurrentMs:F2}ms", x + 250, y, color);
-                renderer.DrawText($"{timing.AverageMs:F2}ms", x + 320, y, Color.FromArgb(180, 180, 180));
+                renderer.DrawText($"{timing.AverageMs:F2}ms", x + 320, y, new Color(180, 180, 180));
 
                 y += lineHeight;
 
@@ -380,13 +380,13 @@ public class PerformanceOverlay
             y += 10;
 
             // Total frame time
-            renderer.DrawText($"Total Measured: {_displayedTotalFrameTime:F2}ms", x, y, Color.FromArgb(255, 255, 100));
+            renderer.DrawText($"Total Measured: {_displayedTotalFrameTime:F2}ms", x, y, new Color(255, 255, 100));
         }
 
         // Instructions - split into two lines
         var instructionY = screenHeight - 70;
-        renderer.DrawText("F4: Toggle Profiling", x, instructionY, Color.FromArgb(150, 150, 150));
-        renderer.DrawText("F3: Toggle Details", x, instructionY + 15, Color.FromArgb(150, 150, 150));
+        renderer.DrawText("F4: Toggle Profiling", x, instructionY, new Color(150, 150, 150));
+        renderer.DrawText("F3: Toggle Details", x, instructionY + 15, new Color(150, 150, 150));
     }
     
     /// <summary>
@@ -426,31 +426,31 @@ public class PerformanceOverlay
     
     private Color GetFpsColor(double fps)
     {
-        if (fps >= 60) return Color.FromArgb(0, 255, 0);
-        if (fps >= 30) return Color.FromArgb(255, 255, 0);
-        return Color.FromArgb(255, 100, 100);
+        if (fps >= 60) return new Color(0, 255, 0);
+        if (fps >= 30) return new Color(255, 255, 0);
+        return new Color(255, 100, 100);
     }
     
     private Color GetBatchEfficiencyColor(float efficiency)
     {
-        if (efficiency >= 10) return Color.FromArgb(0, 255, 0);
-        if (efficiency >= 5) return Color.FromArgb(255, 255, 0);
-        return Color.FromArgb(255, 150, 0);
+        if (efficiency >= 10) return new Color(0, 255, 0);
+        if (efficiency >= 5) return new Color(255, 255, 0);
+        return new Color(255, 150, 0);
     }
     
     private Color GetGCColor(int gen2Collections)
     {
-        if (gen2Collections > 10) return Color.FromArgb(255, 100, 100);
+        if (gen2Collections > 10) return new Color(255, 100, 100);
         return Color.White;
     }
 
     private Color GetSystemTimingColor(double ms)
     {
-        if (ms < 1.0) return Color.FromArgb(0, 255, 0);
-        if (ms < 2.0) return Color.FromArgb(150, 255, 0);
-        if (ms < 5.0) return Color.FromArgb(255, 255, 0);
-        if (ms < 8.0) return Color.FromArgb(255, 150, 0);
-        return Color.FromArgb(255, 100, 100);
+        if (ms < 1.0) return new Color(0, 255, 0);
+        if (ms < 2.0) return new Color(150, 255, 0);
+        if (ms < 5.0) return new Color(255, 255, 0);
+        if (ms < 8.0) return new Color(255, 150, 0);
+        return new Color(255, 100, 100);
     }
 }
 

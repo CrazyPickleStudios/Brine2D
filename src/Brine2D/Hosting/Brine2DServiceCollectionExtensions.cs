@@ -1,3 +1,4 @@
+using Brine2D.Assets;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Systems;
@@ -16,6 +17,7 @@ using Brine2D.Systems.Audio;
 using Brine2D.Systems.Input;
 using Brine2D.Systems.Physics;
 using Brine2D.Systems.Rendering;
+using Brine2D.Threading;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.ObjectPool;
 
@@ -84,13 +86,17 @@ public static class Brine2DServiceCollectionExtensions
             services.Configure(configure);
         }
         
-        // Bind options from configuration (appsettings.json, etc.)
+        // Bind options from configuration (gamesettings.json, etc.) with validation
         services.AddOptions<Brine2DOptions>()
-            .BindConfiguration(Brine2DOptions.SectionName);
-        
-        // Configure ECS options (core engine)
+            .BindConfiguration(Brine2DOptions.SectionName)
+            .ValidateDataAnnotations()     
+            .ValidateOnStart();            
+    
+        // Configure ECS options (core engine) with validation
         services.AddOptions<ECSOptions>()
             .BindConfiguration($"{Brine2DOptions.SectionName}:{ECSOptions.SectionName}")
+            .ValidateDataAnnotations()      
+            .ValidateOnStart()             
             .Configure<IOptions<Brine2DOptions>>((ecsOpts, brineOpts) =>
             {
                 if (configure != null)
@@ -120,7 +126,12 @@ public static class Brine2DServiceCollectionExtensions
         // Register public event bus
         services.TryAddSingleton<EventBus>(sp => 
             new EventBus(sp.GetService<ILogger<EventBus>>()));
-    
+
+        // Main thread dispatcher (required for GPU operations)
+        services.TryAddSingleton<IMainThreadDispatcher, MainThreadDispatcher>();
+        
+        services.TryAddSingleton<IAssetLoader, AssetLoader>();
+        
         // Register object pooling (required by ParticleSystem)
         services.AddObjectPooling(); 
     }
@@ -130,10 +141,11 @@ public static class Brine2DServiceCollectionExtensions
     /// </summary>
     private static void AddBrineEngine(IServiceCollection services)
     {
-        services.TryAddSingleton<IGameEngine, GameEngine>();
+        services.TryAddSingleton<GameEngine>();
         
-        services.TryAddSingleton<IGameLoop>(sp => new GameLoop(
+        services.TryAddSingleton<GameLoop>(sp => new GameLoop(
             sp.GetRequiredService<ILogger<GameLoop>>(),
+            sp.GetRequiredService<ILoggerFactory>(),
             sp.GetRequiredService<IGameContext>(),
             sp.GetRequiredService<ISceneManager>(),
             sp.GetRequiredService<IInputContext>(),
@@ -197,7 +209,7 @@ public static class Brine2DServiceCollectionExtensions
     /// // Data-oriented approach with built-in systems
     /// builder.Services
     ///     .AddBrine2D()
-    ///     .UseSystems()  // ← Auto-adds ALL built-in systems + camera setup!
+    ///     .UseSystems()  // Auto-adds ALL built-in systems + camera setup!
     ///     .UseSDL();
     ///     
     /// // Add custom systems
@@ -209,7 +221,7 @@ public static class Brine2DServiceCollectionExtensions
     /// // Object-oriented approach (no systems)
     /// builder.Services
     ///     .AddBrine2D()
-    ///     .UseSDL(); // ← No systems needed
+    ///     .UseSDL(); // No systems needed
     /// </code>
     /// </example>
     public static Brine2DBuilder UseSystems(this Brine2DBuilder builder)
@@ -219,27 +231,31 @@ public static class Brine2DServiceCollectionExtensions
 
         var services = builder.Services;
 
-        // Camera infrastructure (inline from RenderingSystemsExtensions)
+        // Camera infrastructure
         services.TryAddSingleton<ICameraManager, CameraManager>();
-        services.TryAddSingleton<ICamera>(sp =>
+
+        services.TryAddScoped<ICamera>(sp =>
         {
-            var cameraManager = sp.GetRequiredService<ICameraManager>();
             var renderer = sp.GetService<IRenderer>();
             
             if (renderer != null)
             {
-                // Create camera matching renderer viewport
-                var mainCamera = new Camera2D(renderer.Width, renderer.Height);
-                cameraManager.RegisterCamera("main", mainCamera);
-                cameraManager.MainCamera = mainCamera;
-                return mainCamera;
+                // Fresh camera per scene matching renderer viewport
+                var camera = new Camera2D(renderer.Width, renderer.Height);
+                
+                // Register with camera manager (optional, for multi-camera support)
+                var cameraManager = sp.GetService<ICameraManager>();
+                if (cameraManager != null)
+                {
+                    cameraManager.RegisterCamera("main", camera);
+                    cameraManager.MainCamera = camera;
+                }
+                
+                return camera;
             }
             
             // Headless fallback - default camera
-            var fallbackCamera = new Camera2D(1280, 720);
-            cameraManager.RegisterCamera("main", fallbackCamera);
-            cameraManager.MainCamera = fallbackCamera;
-            return fallbackCamera;
+            return new Camera2D(1280, 720);
         });
 
         // Register lifecycle hook for update pipeline execution

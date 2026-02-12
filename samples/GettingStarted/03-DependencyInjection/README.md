@@ -210,7 +210,7 @@ _logger.LogInformation(
 | `IOptions<T>` pattern | `IOptions<T>` pattern | ✅ Identical |
 | `ILogger<T>` | `ILogger<T>` | ✅ Identical |
 | Constructor injection | Constructor injection | ✅ Identical |
-| `appsettings.json` | `gamesettings.json` | ✅ Same concept |
+| `gamesettings.json` | `gamesettings.json` | ✅ Same concept |
 
 **If you know ASP.NET DI, you already know Brine2D DI!**
 

@@ -1,5 +1,4 @@
-﻿using System.Drawing;
-using Brine2D.Core;
+﻿using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Input;
 using Brine2D.Performance;
@@ -57,7 +56,7 @@ public class TextureAtlasDemoScene : DemoSceneBase
         _spriteBatcher = new SpriteBatcher();
     }
 
-    protected override async Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Texture Atlas Demo Scene ===");
         Logger.LogInformation("Controls:");
@@ -69,7 +68,7 @@ public class TextureAtlasDemoScene : DemoSceneBase
         Logger.LogInformation("  ESC - Return to menu");
         Logger.LogInformation("");
 
-        Renderer.ClearColor = Color.FromArgb(20, 20, 30);
+        Renderer.ClearColor = new Color(20, 20, 30);
 
         // Build a test atlas
         await BuildTestAtlasAsync(cancellationToken);
@@ -141,8 +140,7 @@ public class TextureAtlasDemoScene : DemoSceneBase
                     random.Next(-100, 100),
                     random.Next(-100, 100)),
                 Scale = 0.5f + (float)random.NextDouble() * 0.5f,
-                Tint = Color.FromArgb(
-                    255,
+                Tint = new Color(
                     (byte)random.Next(200, 255),
                     (byte)random.Next(200, 255),
                     (byte)random.Next(200, 255)),

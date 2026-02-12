@@ -56,8 +56,8 @@ public static class SDL3ServiceCollectionExtensions
     /// // Data-oriented systems (advanced)
     /// builder.Services
     ///     .AddBrine2D(options => { /* ... */ })
-    ///     .UseSystems()  // ← Core systems
-    ///     .UseSDL();     // ← SDL backend
+    ///     .UseSystems()  // Core systems
+    ///     .UseSDL();     // SDL backend
     /// </code>
     /// </example>
     public static Brine2DBuilder UseSDL(this Brine2DBuilder builder)
@@ -83,69 +83,78 @@ public static class SDL3ServiceCollectionExtensions
     }
     
     #region Options Configuration
-    
-    private static void ConfigureWindowOptions(IServiceCollection services)
-    {
-        services.AddOptions<WindowOptions>()
-            .BindConfiguration($"{Brine2DOptions.SectionName}:{WindowOptions.SectionName}")
-            .Configure<IOptions<Brine2DOptions>>((windowOpts, brineOpts) =>
-            {
-                var window = brineOpts.Value.Window;
-                windowOpts.Title = window.Title;
-                windowOpts.Width = window.Width;
-                windowOpts.Height = window.Height;
-                windowOpts.Fullscreen = window.Fullscreen;
-                windowOpts.Resizable = window.Resizable;
-                windowOpts.Maximized = window.Maximized;
-                windowOpts.Borderless = window.Borderless;
-            });
-    }
-    
-    private static void ConfigureRenderingOptions(IServiceCollection services)
-    {
-        services.AddOptions<RenderingOptions>()
-            .BindConfiguration($"{Brine2DOptions.SectionName}:{RenderingOptions.SectionName}")
-            .Configure<IOptions<Brine2DOptions>>((renderOpts, brineOpts) =>
-            {
-                var render = brineOpts.Value.Rendering;
-                renderOpts.Backend = render.Backend;
-                renderOpts.VSync = render.VSync;
-                renderOpts.PreferredGPUDriver = render.PreferredGPUDriver;
-                renderOpts.TargetFPS = render.TargetFPS;
-                renderOpts.ClearColor = render.ClearColor;
-            });
-    }
-    
-    private static void ConfigureAudioOptions(IServiceCollection services)
-    {
-        services.AddOptions<AudioOptions>()
-            .BindConfiguration($"{Brine2DOptions.SectionName}:{AudioOptions.SectionName}")
-            .Configure<IOptions<Brine2DOptions>>((audioOpts, brineOpts) =>
-            {
-                var audio = brineOpts.Value.Audio;
-                audioOpts.MaxTracks = audio.MaxTracks;
-                audioOpts.MasterVolume = audio.MasterVolume;
-                audioOpts.MusicVolume = audio.MusicVolume;
-                audioOpts.SoundVolume = audio.SoundVolume;
-                audioOpts.Enabled = audio.Enabled;
-            });
-    }
-    
-    private static void ConfigureInputOptions(IServiceCollection services)
-    {
-        services.AddOptions<InputOptions>()
-            .BindConfiguration($"{Brine2DOptions.SectionName}:{InputOptions.SectionName}")
-            .Configure<IOptions<Brine2DOptions>>((inputOpts, brineOpts) =>
-            {
-                var input = brineOpts.Value.Input;
-                inputOpts.EnableGamepad = input.EnableGamepad;
-                inputOpts.MaxGamepads = input.MaxGamepads;
-                inputOpts.EnableRumble = input.EnableRumble;
-                inputOpts.GamepadDeadZone = input.GamepadDeadZone;
-            });
-    }
-    
-    #endregion
+
+private static void ConfigureWindowOptions(IServiceCollection services)
+{
+    // Chain PostConfigure on the OptionsBuilder
+    services.AddOptions<WindowOptions>()
+        .BindConfiguration($"{Brine2DOptions.SectionName}:{WindowOptions.SectionName}")
+        .ValidateDataAnnotations()
+        .ValidateOnStart()
+        .PostConfigure<IOptions<Brine2DOptions>>((windowOpts, brineOpts) =>
+        {
+            var window = brineOpts.Value.Window;
+            windowOpts.Title = window.Title;
+            windowOpts.Width = window.Width;
+            windowOpts.Height = window.Height;
+            windowOpts.Fullscreen = window.Fullscreen;
+            windowOpts.Resizable = window.Resizable;
+            windowOpts.Maximized = window.Maximized;
+            windowOpts.Borderless = window.Borderless;
+        });
+}
+
+private static void ConfigureRenderingOptions(IServiceCollection services)
+{
+    services.AddOptions<RenderingOptions>()
+        .BindConfiguration($"{Brine2DOptions.SectionName}:{RenderingOptions.SectionName}")
+        .ValidateDataAnnotations()
+        .ValidateOnStart()
+        .PostConfigure<IOptions<Brine2DOptions>>((renderOpts, brineOpts) =>
+        {
+            var render = brineOpts.Value.Rendering;
+            renderOpts.Backend = render.Backend;
+            renderOpts.VSync = render.VSync;
+            renderOpts.PreferredGPUDriver = render.PreferredGPUDriver;
+            renderOpts.TargetFPS = render.TargetFPS;
+            renderOpts.ClearColor = render.ClearColor;
+        });
+}
+
+private static void ConfigureAudioOptions(IServiceCollection services)
+{
+    services.AddOptions<AudioOptions>()
+        .BindConfiguration($"{Brine2DOptions.SectionName}:{AudioOptions.SectionName}")
+        .ValidateDataAnnotations()
+        .ValidateOnStart()
+        .PostConfigure<IOptions<Brine2DOptions>>((audioOpts, brineOpts) =>
+        {
+            var audio = brineOpts.Value.Audio;
+            audioOpts.MaxTracks = audio.MaxTracks;
+            audioOpts.MasterVolume = audio.MasterVolume;
+            audioOpts.MusicVolume = audio.MusicVolume;
+            audioOpts.SoundVolume = audio.SoundVolume;
+            audioOpts.Enabled = audio.Enabled;
+        });
+}
+
+private static void ConfigureInputOptions(IServiceCollection services)
+{
+    services.AddOptions<InputOptions>()
+        .BindConfiguration($"{Brine2DOptions.SectionName}:{InputOptions.SectionName}")
+        .ValidateDataAnnotations()
+        .ValidateOnStart()
+        .PostConfigure<IOptions<Brine2DOptions>>((inputOpts, brineOpts) =>
+        {
+            var input = brineOpts.Value.Input;
+            inputOpts.EnableGamepad = input.EnableGamepad;
+            inputOpts.MaxGamepads = input.MaxGamepads;
+            inputOpts.EnableRumble = input.EnableRumble;
+            inputOpts.GamepadDeadZone = input.GamepadDeadZone;
+        });
+}
+
+#endregion
     
     #region SDL Backend Service Registration
     

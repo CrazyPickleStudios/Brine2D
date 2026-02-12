@@ -14,6 +14,11 @@ public readonly struct GameTime
     ///     Gets the elapsed time since the last frame.
     /// </summary>
     public TimeSpan ElapsedTime { get; init; }
+    
+    /// <summary>
+    ///     Gets the total number of frames rendered since the game started.
+    /// </summary>
+    public ulong FrameCount { get; init; }
 
     /// <summary>
     ///     Gets the elapsed time as seconds (convenience property).
@@ -25,9 +30,10 @@ public readonly struct GameTime
     /// </summary>
     public double TotalSeconds => TotalTime.TotalSeconds;
 
-    public GameTime(TimeSpan totalTime, TimeSpan elapsedTime)
+    public GameTime(TimeSpan totalTime, TimeSpan elapsedTime, ulong frameCount = 0)
     {
         TotalTime = totalTime;
         ElapsedTime = elapsedTime;
+        FrameCount = frameCount;
     }
 }

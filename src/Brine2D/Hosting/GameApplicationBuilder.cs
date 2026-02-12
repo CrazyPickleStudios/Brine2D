@@ -2,9 +2,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using Brine2D.Engine;
 
 namespace Brine2D.Hosting
@@ -17,20 +14,29 @@ namespace Brine2D.Hosting
     {
         private readonly HostApplicationBuilder _hostBuilder;
 
-        internal GameApplicationBuilder(string[] args)
+        internal GameApplicationBuilder(
+            string[] args, 
+            HostApplicationBuilderSettings? settings = null,
+            bool isSlim = false)
         {
-            _hostBuilder = Host.CreateApplicationBuilder(args);
+            _hostBuilder = settings != null 
+                ? Host.CreateApplicationBuilder(settings)
+                : Host.CreateApplicationBuilder(args);
 
-            // Configure default settings - use ASP.NET conventions
-            Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-            Configuration.AddJsonFile($"appsettings.{System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: true);
-
-            // Add core engine services
+            // Add core engine services (always needed)
             Services.AddBrineEngine();
 
-            // Add default logging
-            Logging.AddConsole();
-            Logging.SetMinimumLevel(LogLevel.Information);
+            // Only add defaults if NOT slim
+            if (!isSlim)
+            {
+                // Configure default settings - use ASP.NET conventions
+                Configuration.AddJsonFile("gamesettings.json", optional: true, reloadOnChange: true);
+                Configuration.AddJsonFile($"gamesettings.{System.Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: true);
+
+                // Add default logging
+                Logging.AddConsole();
+                Logging.SetMinimumLevel(LogLevel.Information);
+            }
         }
 
         /// <summary>
@@ -56,10 +62,60 @@ namespace Brine2D.Hosting
         /// <summary>
         /// Builds the game application.
         /// </summary>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when required services are not registered.
+        /// </exception>
         public GameApplication Build()
         {
+            ValidateConfiguration();
+            
             var host = _hostBuilder.Build();
             return new GameApplication(host);
+        }
+
+        /// <summary>
+        /// Validates that all required services are registered.
+        /// </summary>
+        private void ValidateConfiguration()
+        {
+            using var serviceProvider = Services.BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateScopes = false,
+                ValidateOnBuild = false
+            });
+
+            var errors = new List<string>();
+
+            // Check for core engine services
+            if (serviceProvider.GetService<GameEngine>() == null)
+            {
+                errors.Add("IGameEngine is not registered. Did you forget to call AddBrine2D()?");
+            }
+
+            if (serviceProvider.GetService<GameLoop>() == null)
+            {
+                errors.Add("IGameLoop is not registered. Did you forget to call AddBrine2D()?");
+            }
+
+            if (serviceProvider.GetService<ISceneManager>() == null)
+            {
+                errors.Add("ISceneManager is not registered. Did you forget to call AddBrine2D()?");
+            }
+
+            if (serviceProvider.GetService<IGameContext>() == null)
+            {
+                errors.Add("IGameContext is not registered. Did you forget to call AddBrine2D()?");
+            }
+
+            // Note: We don't check for IRenderer, IInputService, etc. because
+            // headless mode is valid (no SDL backend)
+
+            if (errors.Any())
+            {
+                throw new InvalidOperationException(
+                    $"Game application configuration is invalid:{System.Environment.NewLine}" +
+                    $"{string.Join(System.Environment.NewLine, errors.Select(e => $"  - {e}"))}");
+            }
         }
     }
 }

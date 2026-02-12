@@ -1,4 +1,4 @@
-using System.Drawing;
+using Brine2D.Core;
 using Brine2D.Core;
 using Brine2D.Collision;
 using Brine2D.Input;
@@ -27,11 +27,11 @@ public class CollisionDemoScene : DemoSceneBase
     private Vector2 _playerPosition = new Vector2(400, 300);
     private readonly BoxCollider _playerCollider;
     private const float PlayerSpeed = 250f;
-    private readonly Color PlayerColor = Color.FromArgb(100, 200, 255);
+    private readonly Color PlayerColor = new Color(100, 200, 255);
     
     // Static obstacles (walls)
     private readonly List<BoxCollider> _walls = new();
-    private readonly Color WallColor = Color.FromArgb(100, 100, 100);
+    private readonly Color WallColor = new Color(100, 100, 100);
     
     // Dynamic bouncing ball
     private Vector2 _ballPosition = new Vector2(800, 200);
@@ -39,18 +39,18 @@ public class CollisionDemoScene : DemoSceneBase
     private readonly CircleCollider _ballCollider;
     private const float BallRadius = 20f;
     private const float Gravity = 600f;
-    private readonly Color BallColor = Color.FromArgb(255, 100, 100);
+    private readonly Color BallColor = new Color(255, 100, 100);
     
     // Collectibles (triggers)
     private readonly List<(CircleCollider collider, Vector2 position)> _coins = new();
     private int _coinsCollected = 0;
-    private readonly Color CoinColor = Color.FromArgb(255, 215, 0);
+    private readonly Color CoinColor = new Color(255, 215, 0);
     
     // Pushable box
     private Vector2 _boxPosition = new Vector2(600, 400);
     private Vector2 _boxVelocity = Vector2.Zero;
     private readonly BoxCollider _boxCollider;
-    private readonly Color BoxColor = Color.FromArgb(139, 69, 19);
+    private readonly Color BoxColor = new Color(139, 69, 19);
     
     // Debug options
     private bool _showColliders = true;
@@ -83,7 +83,7 @@ public class CollisionDemoScene : DemoSceneBase
         };
     }
 
-    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Collision Detection Demo ===");
         Logger.LogInformation("Controls:");
@@ -94,7 +94,7 @@ public class CollisionDemoScene : DemoSceneBase
         Logger.LogInformation("  SPACE - Reset scene");
         Logger.LogInformation("  ESC - Return to menu");
         
-        Renderer.ClearColor = Color.FromArgb(20, 25, 35);
+        Renderer.ClearColor = new Color(20, 25, 35);
         
         SetupScene();
 
@@ -295,7 +295,7 @@ public class CollisionDemoScene : DemoSceneBase
             {
                 var wallBounds = wall.GetBounds();
                 var ballBounds = _ballCollider.GetBounds();
-                var ballRect = new RectangleF(ballBounds.X, ballBounds.Y, ballBounds.Width, ballBounds.Height);
+                var ballRect = new Rectangle(ballBounds.X, ballBounds.Y, ballBounds.Width, ballBounds.Height);
                 var penetration = wallBounds.GetPenetration(ballRect);
                 
                 if (penetration != Vector2.Zero)

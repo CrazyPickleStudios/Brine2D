@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Core;
 
@@ -22,10 +21,10 @@ public class CircleCollider : CollisionShape
         Offset = offset ?? Vector2.Zero;
     }
 
-    public override RectangleF GetBounds()
+    public override Rectangle GetBounds()
     {
         var actualPos = Position + Offset;
-        return new RectangleF(
+        return new Rectangle(
             actualPos.X - Radius,
             actualPos.Y - Radius,
             Radius * 2,

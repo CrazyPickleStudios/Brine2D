@@ -1,18 +1,9 @@
 ﻿using Brine2D.Collision;
-using Brine2D.ECS;
-using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Performance;
 using Brine2D.Rendering;
 using Brine2D.Rendering.SDL;
 using Brine2D.SDL;
-using Brine2D.Systems.AI;
-using Brine2D.Systems.Audio;
-using Brine2D.Systems.Collision;
-using Brine2D.Systems.Input;
-using Brine2D.Systems.Performance;
-using Brine2D.Systems.Physics;
-using Brine2D.Systems.Rendering;
 using Brine2D.Tilemap;
 using Brine2D.UI;
 using FeatureDemos.Scenes;
@@ -29,100 +20,47 @@ using Microsoft.Extensions.DependencyInjection;
 // Create the game application builder
 var builder = GameApplication.CreateBuilder(args);
 
-// Configure and register Brine2D with SDL backend
+// Configure Brine2D with SDL backend
 builder.Services
     .AddBrine2D(options =>
     {
         options.Window.Title = "Brine2D - Feature Demos";
         options.Window.Width = 1280;
         options.Window.Height = 720;
-        options.Rendering.Backend = GraphicsBackend.GPU;
-        options.Rendering.PreferredGPUDriver = "vulkan";
-        options.Rendering.VSync = true;
-        options.ECS.EnableMultiThreading = true;
-        options.ECS.ParallelEntityThreshold = 100;
-        options.ECS.WorkerThreadCount = null;
+        options.ECS.EnableMultiThreading = false;
     })
-    .UseSystems() // Auto-adds ALL built-in systems to pipelines!
+    .UseGPURenderer(gpu => gpu          
+        .WithVSync(true)
+        .WithTargetFPS(0)               
+        .WithDriver("vulkan"))
+    .UseSystems()                       
     .UseSDL();
 
-// Optional: ONLY needed for CUSTOM systems
-builder.Services.ConfigureSystemPipelines(pipelines =>
-{
-    pipelines.AddSystem<AISystem>(); // Custom AI system
-    pipelines.AddSystem<BenchmarkSystem>(); // Custom benchmark system
-});
+builder.AddScenes(scenes => scenes
+    .Add<MainMenuScene>()
+    .Add<QueryDemoScene>()
+    .Add<ParticleDemoScene>()
+    .Add<CollisionDemoScene>()
+    .Add<TransitionDemoScene>()
+    .Add<SceneA>()
+    .Add<SceneB>()
+    .Add<SceneC>()
+    .Add<UIDemoScene>()
+    .Add<ManualControlScene>()
+    .Add<SpriteBenchmarkScene>()
+    .Add<TextureAtlasDemoScene>()
+    .Add<SpatialAudioDemoScene>()
+    .Add<BackgroundLoadingDemoScene>()
+    .Add<ScissorRectDemoScene>());  
 
-// Post-processing (optional)
+// Other services
 builder.Services.AddPostProcessing(options => { options.Enabled = true; });
-
-// Texture atlasing (optional)
-builder.Services.AddTextureAtlasing(options =>
-{
-    options.MaxAtlasWidth = 2048;
-    options.MaxAtlasHeight = 2048;
-    options.Padding = 2;
-    options.UsePowerOfTwo = true;
-    options.DefaultScaleMode = TextureScaleMode.Nearest;
-});
-
-// Optional: Configure global system pipelines if needed
-// (Systems are already registered by .UseSystems(), but you can customize order)
-builder.Services.ConfigureSystemPipelines(pipelines =>
-{
-    // Rendering systems
-    pipelines.AddSystem<SpriteRenderingSystem>();
-    pipelines.AddSystem<ParticleSystem>();
-    pipelines.AddSystem<CameraSystem>();
-    pipelines.AddSystem<DebugRenderer>();
-
-    // Physics systems
-    pipelines.AddSystem<VelocitySystem>();
-    pipelines.AddSystem<CollisionDetectionSystem>();
-
-    // Input systems
-    pipelines.AddSystem<PlayerControllerSystem>();
-
-    // AI systems
-    pipelines.AddSystem<AISystem>();
-
-    // Audio systems
-    pipelines.AddSystem<AudioSystem>();
-});
-
-// Other optional services
+builder.Services.AddTextureAtlasing();
 builder.Services.AddTilemapServices();
-builder.Services.AddTilemapRenderer();
 builder.Services.AddCollisionSystem();
 builder.Services.AddUICanvas();
-
-// Register demo scenes
-builder.Services.AddScene<QueryDemoScene>();
-builder.Services.AddScene<ParticleDemoScene>();
-builder.Services.AddScene<CollisionDemoScene>();
-builder.Services.AddScene<TransitionDemoScene>();
-builder.Services.AddScene<SceneA>();
-builder.Services.AddScene<SceneB>();
-builder.Services.AddScene<SceneC>();
-builder.Services.AddScene<UIDemoScene>();
-builder.Services.AddScene<ManualControlScene>();
-builder.Services.AddScene<SpriteBenchmarkScene>();
-builder.Services.AddScene<TextureAtlasDemoScene>();
-builder.Services.AddScene<SpatialAudioDemoScene>();
-builder.Services.AddScene<MainMenuScene>();
-
-// Custom loading screen
-builder.Services.AddTransient<CustomLoadingScreen>();
-
-// Performance monitoring (optional)
 builder.Services.AddPerformanceMonitoring();
-builder.Services.AddPerformanceOverlay();
-builder.Services.AddSingleton<ISceneLifecycleHook, RenderingStatsCollector>();
 
-// Post-processing effects (optional)
-builder.Services.AddGrayscaleEffect();
-builder.Services.AddBlurEffect(1280, 720, 3.0f);
-
-// Build and run
 var game = builder.Build();
+
 await game.RunAsync<MainMenuScene>();

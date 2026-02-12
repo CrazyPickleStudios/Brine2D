@@ -9,7 +9,7 @@ namespace Brine2D.Engine;
 /// <summary>
 /// Default implementation of the game engine.
 /// </summary>
-public class GameEngine : IGameEngine
+internal sealed class GameEngine
 {
     private readonly ILogger<GameEngine> _logger;
     private readonly IServiceProvider _serviceProvider;

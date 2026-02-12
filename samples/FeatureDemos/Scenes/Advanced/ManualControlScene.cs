@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS;
@@ -39,13 +38,13 @@ public class ManualControlScene : DemoSceneBase
         _renderPipeline = renderPipeline;
     }
 
-    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Manual Control Scene (Power User Mode) ===");
         Logger.LogInformation("Lifecycle hooks: DISABLED (manual control)");
         Logger.LogInformation("Frame management: DISABLED (manual control)");
         
-        Renderer.ClearColor = Color.FromArgb(20, 20, 40);
+        Renderer.ClearColor = new Color(20, 20, 40);
 
         return Task.CompletedTask;
     }

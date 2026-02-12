@@ -19,6 +19,8 @@ public class QueryTests : TestBase
 
         var entity2 = world.CreateEntity();
         entity2.AddComponent(new SpriteComponent());
+        
+        world.Flush();
 
         // Act
         var results = world.Query().With<TransformComponent>().Execute();
@@ -41,6 +43,8 @@ public class QueryTests : TestBase
 
         var farAway = world.CreateEntity();
         farAway.AddComponent(new TransformComponent { Position = new Vector2(100, 0) });
+        
+        world.Flush();
 
         // Act
         var results = world.Query().With<TransformComponent>()
@@ -68,6 +72,8 @@ public class QueryTests : TestBase
 
         var entity3 = world.CreateEntity();
         entity3.AddComponent(new SpriteComponent());
+        
+        world.Flush();
 
         // Act
         var results = world.Query().With<TransformComponent>().With<SpriteComponent>().Execute();
@@ -87,8 +93,10 @@ public class QueryTests : TestBase
 
         var entity2 = world.CreateEntity();
         entity2.AddComponent(new TransformComponent());
+        
+        world.Flush();
 
-        var cachedQuery = world.CreateCachedQuery<TransformComponent>();
+        var cachedQuery = world.CreateCachedQuery<TransformComponent>().Build();
         var results = cachedQuery.Execute();
 
         // Assert
@@ -98,6 +106,8 @@ public class QueryTests : TestBase
 
         // Remove one entity and check cache updates
         world.DestroyEntity(entity1);
+        world.Flush();
+        
         var updatedResults = cachedQuery.Execute();
 
         // Assert

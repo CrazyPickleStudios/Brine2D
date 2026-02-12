@@ -1,5 +1,4 @@
-﻿using System.Drawing;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Text;
 using Brine2D.Core;
 using Brine2D.Engine;
@@ -44,7 +43,7 @@ public class GameScene : Scene
     protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("GameScene: OnLoad");
-        Renderer.ClearColor = Color.FromArgb(255, 52, 78, 65); // Dirty brine
+        Renderer.ClearColor = new Color(52, 78, 65, 255); // Dirty brine
 
         // Reset state
         _playerPosition = new Vector2(400, 300);

@@ -8,7 +8,6 @@ using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Numerics;
 using System.Text;
 using Brine2D.Engine;
@@ -57,7 +56,7 @@ public class QueryDemoScene : DemoSceneBase
         _gameContext = gameContext;
     }
 
-    protected override Task OnInitializeAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Query Demo Scene ===");
         Logger.LogInformation("Controls:");
@@ -68,13 +67,14 @@ public class QueryDemoScene : DemoSceneBase
         Logger.LogInformation("");
         Logger.LogInformation("Current Demo: {Demo}", _currentDemo);
 
-        Renderer.ClearColor = Color.FromArgb(20, 20, 30);
+        Renderer.ClearColor = new Color(20, 20, 30);
 
         // Create player
         _player = World.CreateEntity("Player");
-        _player.Tags.Add("Player");
-        
-        var playerTransform = _player.AddComponent<TransformComponent>();
+        _player.AddTag("Player");
+
+        _player.AddComponent<TransformComponent>();
+        var playerTransform = _player.GetComponent<TransformComponent>()!;
         playerTransform.Position = new Vector2(640, 360);
 
         // Create demo entities with various properties
@@ -85,20 +85,24 @@ public class QueryDemoScene : DemoSceneBase
         {
             var entity = World.CreateEntity($"Entity_{i}");
             
-            var transform = entity.AddComponent<TransformComponent>();
+            // Add components, then configure
+            entity.AddComponent<TransformComponent>();
+            entity.AddComponent<HealthDemoComponent>();
+            
+            var transform = entity.GetComponent<TransformComponent>()!;
+            var healthComp = entity.GetComponent<HealthDemoComponent>()!;
+            
             transform.Position = new Vector2(
                 random.Next(100, 1180),
                 random.Next(100, 620));
-
-            // Add a simple "health" component for filtering demos
-            var healthComp = entity.AddComponent<HealthDemoComponent>();
+            
             healthComp.Health = random.Next(10, 100);
 
-            // Add random tags
-            if (i % 3 == 0) entity.Tags.Add("Enemy");
-            if (i % 5 == 0) entity.Tags.Add("Boss");
-            if (i % 7 == 0) entity.Tags.Add("Elite");
-            if (i % 2 == 0) entity.Tags.Add("Active");
+            // Add random tags (using new fluent API)
+            if (i % 3 == 0) entity.AddTag("Enemy");
+            if (i % 5 == 0) entity.AddTag("Boss");
+            if (i % 7 == 0) entity.AddTag("Elite");
+            if (i % 2 == 0) entity.AddTag("Active");
 
             _entities.Add(entity);
         }
@@ -167,7 +171,7 @@ public class QueryDemoScene : DemoSceneBase
                     transform.Position.X, 
                     transform.Position.Y, 
                     8,
-                    Color.FromArgb(100, 100, 100));
+                    new Color(100, 100, 100));
             }
         }
 

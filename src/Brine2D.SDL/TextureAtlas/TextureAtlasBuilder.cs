@@ -1,4 +1,3 @@
-using System.Drawing;
 using Brine2D.Animation;
 using Brine2D.Rendering;
 using Brine2D.Rendering.TextureAtlas;
