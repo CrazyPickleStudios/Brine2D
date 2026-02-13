@@ -414,7 +414,7 @@ public class EntityQuery
         
         // Filter the snapshot (defensive: filter out null entities during scene transitions)
         IEnumerable<Entity> results = snapshot
-            .Where(entity => entity != null && entity.IsActive)
+            .Where(entity => entity != null)
             .Where(entity =>
             {
                 // Check active status (redundant but explicit)
