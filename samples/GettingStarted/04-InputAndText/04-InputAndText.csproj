@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Brine2D.SDL\Brine2D.SDL.csproj" />
     <ProjectReference Include="..\..\..\src\Brine2D\Brine2D.csproj" />
   </ItemGroup>
 

@@ -16,17 +16,155 @@
 		<RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Include="Fonts\roboto.ttf">
+	    <LogicalName>Brine2D.SDL.Fonts.Roboto.ttf</LogicalName>
+	  </EmbeddedResource>
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
 		<PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.1" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
 		<PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.2" />
+		<PackageReference Include="SDL3-CS" Version="3.5.0-preview.20260112-122507" />
+		<PackageReference Include="SDL3-CS.Native" Version="3.5.0-preview.20260112-123234" />
+		<PackageReference Include="SDL3-CS.Native.Image" Version="3.3.2-preview.20260112-124645" />
+		<PackageReference Include="SDL3-CS.Native.Mixer" Version="3.1.0-preview.20260112-124039" />
+		<PackageReference Include="SDL3-CS.Native.Shadercross" Version="3.0.0-preview.20260112-125103" />
+		<PackageReference Include="SDL3-CS.Native.TTF" Version="3.3.0-preview.20260112-124039" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
+
+	<!-- ============================================ -->
+	<!-- Shader Compilation Target                    -->
+	<!-- ============================================ -->
+	<Target Name="CompileShaders" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT'">
+		<PropertyGroup>
+			<DxcExePath>$(NuGetPackageRoot)microsoft.direct3d.dxc\1.8.2505.32\build\native\bin\x64\dxc.exe</DxcExePath>
+			<ShaderSourceDir>$(ProjectDir)Shaders</ShaderSourceDir>
+			<PostProcessShaderDir>$(ProjectDir)Shaders\PostProcessing</PostProcessShaderDir>
+		</PropertyGroup>
+
+		<Message Text="=== Brine2D Shader Compilation ===" Importance="high" />
+
+		<Error Condition="!Exists('$(DxcExePath)')" Text="DXC compiler not found. Ensure Microsoft.Direct3D.DXC NuGet package is restored." />
+
+		<!-- ============================================ -->
+		<!-- Default Rendering Shaders                    -->
+		<!-- ============================================ -->
+		<Message Text="Compiling default rendering shaders..." Importance="high" />
+
+		<!-- Compile vertex shader to SPIRV (for Vulkan) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T vs_6_0 -E main &quot;$(ShaderSourceDir)\vertex.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\default_vertex.spv&quot;" Condition="Exists('$(ShaderSourceDir)\vertex.hlsl')" />
+
+		<!-- Compile vertex shader to DXIL (for D3D12) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -T vs_6_0 -E main &quot;$(ShaderSourceDir)\vertex.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\default_vertex.dxil&quot;" Condition="Exists('$(ShaderSourceDir)\vertex.hlsl')" />
+
+		<!-- Compile fragment shader to SPIRV (for Vulkan) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T ps_6_0 -E main &quot;$(ShaderSourceDir)\fragment.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\default_fragment.spv&quot;" Condition="Exists('$(ShaderSourceDir)\fragment.hlsl')" />
+
+		<!-- Compile fragment shader to DXIL (for D3D12) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -T ps_6_0 -E main &quot;$(ShaderSourceDir)\fragment.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\default_fragment.dxil&quot;" Condition="Exists('$(ShaderSourceDir)\fragment.hlsl')" />
+
+		<!-- ============================================ -->
+		<!-- Post-Processing Shaders: Grayscale          -->
+		<!-- ============================================ -->
+		<Message Text="Compiling post-processing shaders (grayscale)..." Importance="high" />
+
+		<!-- Compile grayscale vertex shader to SPIRV -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T vs_6_0 -E main &quot;$(PostProcessShaderDir)\grayscale_vertex.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\grayscale_vertex.spv&quot;" Condition="Exists('$(PostProcessShaderDir)\grayscale_vertex.hlsl')" />
+
+		<!-- Compile grayscale vertex shader to DXIL -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -T vs_6_0 -E main &quot;$(PostProcessShaderDir)\grayscale_vertex.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\grayscale_vertex.dxil&quot;" Condition="Exists('$(PostProcessShaderDir)\grayscale_vertex.hlsl')" />
+
+		<!-- Compile grayscale fragment shader to SPIRV -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T ps_6_0 -E main &quot;$(PostProcessShaderDir)\grayscale_fragment.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\grayscale_fragment.spv&quot;" Condition="Exists('$(PostProcessShaderDir)\grayscale_fragment.hlsl')" />
+
+		<!-- Compile grayscale fragment shader to DXIL -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -T ps_6_0 -E main &quot;$(PostProcessShaderDir)\grayscale_fragment.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\grayscale_fragment.dxil&quot;" Condition="Exists('$(PostProcessShaderDir)\grayscale_fragment.hlsl')" />
+
+		<!-- ============================================ -->
+		<!-- Post-Processing Shaders: Blur                -->
+		<!-- ============================================ -->
+		<Message Text="Compiling post-processing shaders (blur with uniforms)..." Importance="high" />
+
+		<!-- Compile blur vertex shader -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T vs_6_0 -E main &quot;$(PostProcessShaderDir)\blur_vertex.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\blur_vertex.spv&quot;" Condition="Exists('$(PostProcessShaderDir)\blur_vertex.hlsl')" />
+		<Exec Command="&quot;$(DxcExePath)&quot; -T vs_6_0 -E main &quot;$(PostProcessShaderDir)\blur_vertex.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\blur_vertex.dxil&quot;" Condition="Exists('$(PostProcessShaderDir)\blur_vertex.hlsl')" />
+
+		<!-- Compile blur fragment shader (with space3 uniforms) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T ps_6_0 -E main &quot;$(PostProcessShaderDir)\blur_fragment.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\blur_fragment.spv&quot;" Condition="Exists('$(PostProcessShaderDir)\blur_fragment.hlsl')" />
+		<Exec Command="&quot;$(DxcExePath)&quot; -T ps_6_0 -E main &quot;$(PostProcessShaderDir)\blur_fragment.hlsl&quot; -Fo &quot;$(PostProcessShaderDir)\blur_fragment.dxil&quot;" Condition="Exists('$(PostProcessShaderDir)\blur_fragment.hlsl')" />
+
+		<Message Text="All shaders compiled successfully" Importance="high" />
+	</Target>
+
+	<!-- Force the compiled shaders to be included as embedded resources -->
+	<Target Name="IncludeCompiledShaders" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths">
+		<ItemGroup>
+			<!-- Default rendering shaders -->
+			<EmbeddedResource Include="$(ProjectDir)Shaders\default_vertex.spv" Condition="Exists('$(ProjectDir)Shaders\default_vertex.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.default_vertex.spv</LogicalName>
+				<Link>Shaders\default_vertex.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\default_fragment.spv" Condition="Exists('$(ProjectDir)Shaders\default_fragment.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.default_fragment.spv</LogicalName>
+				<Link>Shaders\default_fragment.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\default_vertex.dxil" Condition="Exists('$(ProjectDir)Shaders\default_vertex.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.default_vertex.dxil</LogicalName>
+				<Link>Shaders\default_vertex.dxil</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\default_fragment.dxil" Condition="Exists('$(ProjectDir)Shaders\default_fragment.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.default_fragment.dxil</LogicalName>
+				<Link>Shaders\default_fragment.dxil</Link>
+			</EmbeddedResource>
+
+			<!-- Post-processing shaders: Grayscale -->
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\grayscale_vertex.spv" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\grayscale_vertex.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.grayscale_vertex.spv</LogicalName>
+				<Link>Shaders\PostProcessing\grayscale_vertex.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\grayscale_fragment.spv" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\grayscale_fragment.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.grayscale_fragment.spv</LogicalName>
+				<Link>Shaders\PostProcessing\grayscale_fragment.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\grayscale_vertex.dxil" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\grayscale_vertex.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.grayscale_vertex.dxil</LogicalName>
+				<Link>Shaders\PostProcessing\grayscale_vertex.dxil</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\grayscale_fragment.dxil" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\grayscale_fragment.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.grayscale_fragment.dxil</LogicalName>
+				<Link>Shaders\PostProcessing\grayscale_fragment.dxil</Link>
+			</EmbeddedResource>
+
+			<!-- Post-processing shaders: Blur (with uniforms) -->
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\blur_vertex.spv" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\blur_vertex.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.blur_vertex.spv</LogicalName>
+				<Link>Shaders\PostProcessing\blur_vertex.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\blur_vertex.dxil" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\blur_vertex.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.blur_vertex.dxil</LogicalName>
+				<Link>Shaders\PostProcessing\blur_vertex.dxil</Link>
+			</EmbeddedResource>
+
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\blur_fragment.spv" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\blur_fragment.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.blur_fragment.spv</LogicalName>
+				<Link>Shaders\PostProcessing\blur_fragment.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\blur_fragment.dxil" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\blur_fragment.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.blur_fragment.dxil</LogicalName>
+				<Link>Shaders\PostProcessing\blur_fragment.dxil</Link>
+			</EmbeddedResource>
+		</ItemGroup>
+		<Message Text="Added compiled shaders as embedded resources (default + grayscale + blur)" Importance="high" />
+	</Target>
 
 </Project>

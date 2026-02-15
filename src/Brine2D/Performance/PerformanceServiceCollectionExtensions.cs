@@ -11,6 +11,7 @@ public static class PerformanceServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddPerformanceMonitoring(this IServiceCollection services)
     {
+        services.AddSingleton<PerformanceOverlay>();
         services.AddSingleton<PerformanceMonitor>();
         services.AddSingleton<ScopedProfiler>();
 

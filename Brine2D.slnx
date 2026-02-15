@@ -10,9 +10,6 @@
     <Project Path="samples/GettingStarted/04-InputAndText/04-InputAndText.csproj" Id="34b92816-8a0c-4309-8b8c-6ee492e5958a" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src/Brine2D.SDL/Brine2D.SDL.csproj" Id="d52a9e89-fc0d-4760-bd78-7cd5e7d2d69d" />
-    <Project Path="src/Brine2D.Tilemap/Brine2D.Tilemap.csproj" Id="55d26457-bbaa-4b33-afd3-55966d514403" />
-    <Project Path="src/Brine2D.UI/Brine2D.UI.csproj" Id="ad1578b4-b139-4fda-9517-b75e135bb3ca" />
     <Project Path="src/Brine2D/Brine2D.csproj" Id="8a64aaee-6811-482a-959a-6631e33cf011" />
   </Folder>
   <Folder Name="/tests/">
