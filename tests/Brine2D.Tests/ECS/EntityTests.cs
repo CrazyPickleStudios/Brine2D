@@ -963,6 +963,7 @@ public class EntityTests : TestBase
         entity.Name = "TestEntity";
         entity.AddTag("Player");
         entity.AddComponent<TransformComponent>();
+        // TODO: entity.AddBehavior<T>();
 
         // Act
         var result = entity.ToString();
@@ -972,6 +973,7 @@ public class EntityTests : TestBase
         Assert.Contains(entity.Id.ToString(), result);
         Assert.Contains("Active: True", result);
         Assert.Contains("Components: 1", result);
+        // TODO: Assert.Contains("Behaviors: 1", result);
         Assert.Contains("Tags: 1", result);
     }
 

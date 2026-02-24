@@ -537,6 +537,9 @@ public class Entity
     {
         var parentInfo = _parent != null ? $", Parent: {_parent.Name}" : "";
         var childrenInfo = _children.Count > 0 ? $", Children: {_children.Count}" : "";
-        return $"Entity {Name} ({Id}) - Active: {IsActive}, Tags: {_tags.Count}{parentInfo}{childrenInfo}";
+        var componentCount = GetAllComponents().Count();
+        var componentsInfo = componentCount > 0 ? $", Components: {componentCount}" : "";
+        var behaviorsInfo = _behaviors.Count > 0 ? $", Behaviors: {_behaviors.Count}" : "";
+        return $"Entity {Name} ({Id}) - Active: {IsActive}, Tags: {_tags.Count}{componentsInfo}{behaviorsInfo}{parentInfo}{childrenInfo}";
     }
 }
