@@ -92,7 +92,7 @@ public interface IRenderer : IDisposable
     /// <summary>
     /// Set the default font for text rendering.
     /// </summary>
-    void SetDefaultFont(IFont? font);
+    void SetDefaultFont(Font? font);
     
     /// <summary>
     /// Measure the size of plain text.

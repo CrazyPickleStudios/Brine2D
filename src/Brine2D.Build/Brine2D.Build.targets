@@ -1,0 +1,242 @@
+<Project>
+
+  <!-- User-overridable properties -->
+  <PropertyGroup>
+    <!-- Root folder to scan. Override per-project: <Brine2DAssetsFolder>content</Brine2DAssetsFolder> -->
+    <Brine2DAssetsFolder     Condition="'$(Brine2DAssetsFolder)'     == ''">assets</Brine2DAssetsFolder>
+    <!-- C# namespace for the generated class. Defaults to the project's root namespace. -->
+    <Brine2DAssetsNamespace  Condition="'$(Brine2DAssetsNamespace)'  == ''">$(RootNamespace)</Brine2DAssetsNamespace>
+    <!-- Top-level class name. -->
+    <Brine2DAssetsClassName  Condition="'$(Brine2DAssetsClassName)'  == ''">Assets</Brine2DAssetsClassName>
+    <!-- Output path inside obj/. Rarely needs changing. -->
+    <Brine2DAssetsOutputFile Condition="'$(Brine2DAssetsOutputFile)' == ''">$(IntermediateOutputPath)Brine2D.Assets.generated.cs</Brine2DAssetsOutputFile>
+    <!-- Set to false to disable generation entirely. -->
+    <Brine2DGenerateAssets   Condition="'$(Brine2DGenerateAssets)'   == ''">true</Brine2DGenerateAssets>
+  </PropertyGroup>
+
+  <!--
+    Inline MSBuild task
+    RoslynCodeTaskFactory compiles this C# snippet on first use and caches the
+    result for the lifetime of the build. No separate DLL or NuGet tool required.
+
+    The task scans $(Brine2DAssetsFolder), builds a folder-mirroring nested class
+    tree, and writes Assets.generated.cs into obj/. Only writes when content
+    actually changed so downstream targets are not re-triggered unnecessarily.
+  -->
+  <UsingTask TaskName="GenerateBrine2DAssets"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <AssetFiles   ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <AssetsFolder ParameterType="System.String" Required="true" />
+      <Namespace    ParameterType="System.String" Required="true" />
+      <ClassName    ParameterType="System.String" Required="true" />
+      <OutputFile   ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+
+// Known extensions by category
+var textureExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".gif", ".webp" };
+var fontExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    { ".ttf", ".otf" };
+var soundExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    { ".wav", ".mp3", ".flac", ".aac" };
+var musicExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    { ".ogg" };
+
+bool IsKnownAsset(string ext) =>
+    textureExts.Contains(ext) || fontExts.Contains(ext) ||
+    soundExts.Contains(ext)   || musicExts.Contains(ext);
+
+// Normalize root prefix (always forward-slashes, trailing slash)
+var normalizedRoot = AssetsFolder.Replace('\\', '/').TrimEnd('/');
+var prefix         = normalizedRoot + "/";
+
+// Convert a raw filename or folder name to a valid PascalCase identifier
+static string ToIdent(string raw)
+{
+    var name  = Path.GetFileNameWithoutExtension(raw);
+    var parts = Regex.Split(name, @"[^a-zA-Z0-9]+");
+    var pascal = string.Concat(
+        parts.Where(p => p.Length > 0)
+             .Select(p => char.ToUpperInvariant(p[0]) + p.Substring(1)));
+    if (pascal.Length == 0) pascal = "Asset";
+    if (char.IsDigit(pascal[0])) pascal = "_" + pascal;
+    return pascal;
+}
+
+// Build a nested folder tree from the flat ItemGroup.
+// Node value is either a string (file path) or another SortedDictionary (folder).
+var root = new SortedDictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+foreach (var item in AssetFiles)
+{
+    var full = item.ItemSpec.Replace('\\', '/');
+    var ext  = Path.GetExtension(full).ToLowerInvariant();
+    if (!IsKnownAsset(ext)) continue;
+
+    // Make path relative to the assets folder
+    var rel = full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+        ? full.Substring(prefix.Length)
+        : full;
+
+    // Walk / create intermediate folder nodes
+    var segments = rel.Split('/');
+    var node = root;
+    for (int i = 0; i < segments.Length - 1; i++)
+    {
+        var seg = segments[i];
+        if (!node.ContainsKey(seg))
+            node[seg] = new SortedDictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        node = (SortedDictionary<string, object>)node[seg];
+    }
+
+    // Leaf: store the normalized full path as the const value
+    node[segments[segments.Length - 1]] = prefix + rel;
+}
+
+// Recursive emitter
+var body = new StringBuilder();
+
+Action<SortedDictionary<string, object>, int> Emit = null;
+Emit = (dict, depth) =>
+{
+    var pad  = new string(' ', (depth + 1) * 4);
+    bool firstItem = true;
+
+    foreach (var kvp in dict)
+    {
+        if (!firstItem) body.AppendLine();
+        firstItem = false;
+
+        if (kvp.Value is string filePath)
+        {
+            // File leaf -> const string
+            var ident = ToIdent(kvp.Key);
+            var ext   = Path.GetExtension(kvp.Key).ToLowerInvariant();
+
+            if (fontExts.Contains(ext))
+            {
+                body.AppendLine($"{pad}/// <summary>{filePath}</summary>");
+                body.AppendLine($"{pad}/// <remarks>Fonts need a size: _assets.GetOrLoadFontAsync({ClassName}.{ident}, size: 16)</remarks>");
+            }
+            else
+            {
+                body.AppendLine($"{pad}/// <summary>{filePath}</summary>");
+            }
+
+            body.AppendLine($"{pad}public const string {ident} = \"{filePath}\";");
+        }
+        else if (kvp.Value is SortedDictionary<string, object> sub)
+        {
+            // Folder -> nested static class
+            var ident = ToIdent(kvp.Key);
+            body.AppendLine($"{pad}/// <summary>Assets in {kvp.Key}/</summary>");
+            body.AppendLine($"{pad}public static class {ident}");
+            body.AppendLine($"{pad}{{");
+            Emit(sub, depth + 1);
+            body.AppendLine($"{pad}}}");
+        }
+    }
+};
+
+Emit(root, 0);
+
+// Assemble the final file
+var file = new StringBuilder();
+file.AppendLine("// <auto-generated>");
+file.AppendLine($"// Generated by Brine2D.Build. Do not edit manually.");
+file.AppendLine($"// Source: {AssetsFolder}/");
+file.AppendLine("// Rebuilds automatically when files in that folder are added, removed, or renamed.");
+file.AppendLine("// To disable: <Brine2DGenerateAssets>false</Brine2DGenerateAssets> in your .csproj");
+file.AppendLine("// </auto-generated>");
+file.AppendLine();
+file.AppendLine("#nullable enable");
+file.AppendLine();
+file.AppendLine($"namespace {Namespace};");
+file.AppendLine();
+file.AppendLine("/// <summary>");
+file.AppendLine($"/// Auto-generated path constants for every asset in <c>{AssetsFolder}/</c>.");
+file.AppendLine("/// Use directly with <c>IAssetLoader</c>, or as seeds for a typed");
+file.AppendLine("/// <c>AssetManifest</c> subclass for compile-time-safe loading.");
+file.AppendLine("/// </summary>");
+file.AppendLine("/// <example>");
+file.AppendLine("/// <code>");
+file.AppendLine("/// // Direct loading");
+file.AppendLine($"/// var tex = await _assets.GetOrLoadTextureAsync({ClassName}.Images.Player);");
+file.AppendLine("///");
+file.AppendLine("/// // Typed manifest (recommended for parallel load and progress tracking)");
+file.AppendLine("/// public class LevelAssets : AssetManifest");
+file.AppendLine("/// {");
+file.AppendLine($"///     public readonly AssetRef&lt;ITexture&gt; Player = Texture({ClassName}.Images.Player);");
+file.AppendLine($"///     public readonly AssetRef&lt;ISoundEffect&gt; Jump = Sound({ClassName}.Audio.Jump);");
+file.AppendLine("/// }");
+file.AppendLine("/// await _assets.PreloadAsync(_manifest, progress: loadingScreen.Progress, ct);");
+file.AppendLine("/// </code>");
+file.AppendLine("/// </example>");
+file.AppendLine($"public static partial class {ClassName}");
+file.AppendLine("{");
+file.Append(body.ToString().TrimEnd());
+file.AppendLine();
+file.AppendLine("}");
+
+// Only write when content changed (avoids unnecessary recompilation)
+var newContent = file.ToString();
+var outputDir  = Path.GetDirectoryName(OutputFile);
+if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+    Directory.CreateDirectory(outputDir);
+
+var existing = File.Exists(OutputFile) ? File.ReadAllText(OutputFile) : null;
+if (newContent != existing)
+    File.WriteAllText(OutputFile, newContent, System.Text.Encoding.UTF8);
+
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Collect asset files (separate target so Inputs/Outputs can reference them) -->
+  <Target Name="_Brine2DCollectAssets"
+          Condition="'$(Brine2DGenerateAssets)' == 'true' And Exists('$(Brine2DAssetsFolder)')">
+    <ItemGroup>
+      <_Brine2DAssetFile Include="$(Brine2DAssetsFolder)/**/*.*" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    Main generation target.
+    Inputs/Outputs enables true incremental builds: the task only runs when an
+    asset file is newer than the generated .cs file. On clean, unchanged builds
+    this target is completely skipped.
+  -->
+  <Target Name="Brine2DGenerateAssets"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="_Brine2DCollectAssets"
+          Inputs="@(_Brine2DAssetFile)"
+          Outputs="$(Brine2DAssetsOutputFile)"
+          Condition="'$(Brine2DGenerateAssets)' == 'true' And Exists('$(Brine2DAssetsFolder)')">
+
+    <GenerateBrine2DAssets
+      AssetFiles="@(_Brine2DAssetFile)"
+      AssetsFolder="$(Brine2DAssetsFolder)"
+      Namespace="$(Brine2DAssetsNamespace)"
+      ClassName="$(Brine2DAssetsClassName)"
+      OutputFile="$(Brine2DAssetsOutputFile)" />
+
+    <ItemGroup>
+      <Compile Include="$(Brine2DAssetsOutputFile)" />
+    </ItemGroup>
+
+    <Message Text="Brine2D: Generated $(Brine2DAssetsClassName) -> $(Brine2DAssetsOutputFile)"
+             Importance="normal" />
+  </Target>
+
+</Project>

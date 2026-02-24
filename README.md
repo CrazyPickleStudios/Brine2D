@@ -5,757 +5,911 @@
 [![codecov](https://codecov.io/github/CrazyPickleStudios/Brine2D/graph/badge.svg?token=RIDC7GF0J4)](https://codecov.io/github/CrazyPickleStudios/Brine2D)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**The ASP.NET of game engines** - A modern .NET 10 game engine built on SDL3 for creating 2D games with C#.
+**A modern, opinionated 2D game engine for .NET 10**, built on SDL3 and designed for C# developers who want a great experience without an editor or a content pipeline.
 
-Brine2D brings the familiar patterns and developer experience of ASP.NET to game development. If you've built web apps with ASP.NET Core, you'll feel right at home.
+If you've built web applications with ASP.NET Core, Brine2D will feel immediately familiar. If you've ever wanted a .NET game engine that feels like the rest of the modern .NET ecosystem, this is for you.
+
+---
 
 ## Why Brine2D?
 
-### ASP.NET-Style Application Builder
+Brine2D is a **full engine**, not just a rendering library. Scene management, an entity system, audio, input, collision, particles, UI, and a DI container all work together out of the box. Everything you'd otherwise build yourself in the first few weeks is already there.
 
-```csharp
+~~~csharp
 var builder = GameApplication.CreateBuilder(args);
 
-// Configure Brine2D with SDL backend
-builder.Services
-    .AddBrine2D(options =>
-    {
-        options.Window.Title = "My Game";
-        options.Window.Width = 1280;
-        options.Window.Height = 720;
-    })
-    .UseGPURenderer(gpu => gpu
-        .WithVSync(true)
-        .WithTargetFPS(60))
-    .UseSDL();
+builder.Configure(options =>
+{
+    options.Window.Title = "My Game";
+    options.Window.Width  = 1280;
+    options.Window.Height = 720;
+    options.Rendering.VSync = true;
+});
 
-// Register scenes using fluent builder
-builder.AddScenes(scenes => scenes
-    .Add<MainMenuScene>()
-    .Add<GameScene>());
+builder.AddScene<MainMenuScene>();
+builder.AddScene<GameScene>();
 
-var app = builder.Build();
-await app.RunAsync<MainMenuScene>();
-```
+await using var game = builder.Build();
+await game.RunAsync<MainMenuScene>();
+~~~
 
-### Clean Scene Architecture
+That's a complete entry point. `Build()` validates that every scene's dependencies are registered before the window opens. A missing service means a clear error message at startup, not a `NullReferenceException` mid-game.
 
-Scenes get framework properties automatically - no injection needed for common services:
+**No content pipeline. No editor. No `.mgcb` files.**  
+Drop assets into a folder and load them. That's it.
 
-```csharp
+~~~csharp
+public class LevelAssets : AssetManifest
+{
+    public readonly AssetRef<ITexture>     Tileset = Texture("assets/images/tileset.png");
+    public readonly AssetRef<ISoundEffect> Jump    = Sound("assets/audio/jump.wav");
+    public readonly AssetRef<IMusic>       Theme   = Music("assets/audio/music/theme.ogg");
+    public readonly AssetRef<Font>         HUD     = Font("assets/fonts/ui.ttf", size: 20);
+}
+
 public class GameScene : Scene
 {
-    private ITexture? _playerTexture;
-    
-    // No constructor needed for basic scenes!
-    // Input, Audio, Renderer, Logger, World are all available as properties
-    
+    private readonly LevelAssets _manifest = new();
+
     protected override async Task OnLoadAsync(CancellationToken ct)
+        => await _assets.PreloadAsync(_manifest, progress: loadingScreen.Progress, ct);
+
+    protected override void OnEnter()
     {
-        // Load assets only - async I/O
-        _playerTexture = await LoadTextureAsync("player.png", ct);
-        Logger.LogInformation("Assets loaded");
-    }
-    
-    protected override Task OnEnterAsync(CancellationToken ct)
-    {
-        // Initialize scene logic - spawn entities, start music, etc.
-        Renderer.ClearColor = new Color(52, 78, 65, 255);
-        
-        var player = World.CreateEntity("Player");
-        player.AddComponent(new TransformComponent 
-        { 
-            Position = new Vector2(400, 300) 
-        });
-        player.AddComponent(new SpriteComponent 
-        { 
-            Texture = _playerTexture 
-        });
-        
-        return Task.CompletedTask;
-    }
-    
-    protected override void OnUpdate(GameTime gameTime)
-    {
-        // Game logic - Input, Audio, Game are available as properties
-        if (Input.IsKeyPressed(Key.Escape))
-        {
-            Environment.Exit(0);
-        }
-    }
-    
-    protected override void OnRender(GameTime gameTime)
-    {
-        // Rich text with BBCode markup
-        Renderer.DrawText(
-            "Score: [color=#FFD700][b]9999[/b][/color]",
-            10, 10,
-            new TextRenderOptions 
-            { 
-                ParseMarkup = true,
-                Color = Color.White 
-            });
+        _player.Sprite.Texture = _manifest.Tileset;
+        Audio.PlayMusic(_manifest.Theme);
     }
 }
-```
+~~~
 
-**Framework properties (automatically available):**
-- `Renderer` - Drawing and render state
-- `Input` - Keyboard, mouse, gamepad input
-- `Audio` - Music and sound effects
-- `Logger` - Scoped logger for your scene
-- `World` - Scene-scoped entity world (auto-cleanup!)
-- `Game` - Game context and state
-
-**Only inject custom services:**
-```csharp
-public class GameScene : Scene
-{
-    private readonly IPlayerService _playerService;
-    
-    // Constructor injection for YOUR services only
-    public GameScene(IPlayerService playerService)
-    {
-        _playerService = playerService;
-    }
-}
-```
-
-### ASP.NET Patterns You Know
-
-| ASP.NET Core | Brine2D |
-|--------------|---------|
-| `WebApplication.CreateBuilder()` | `GameApplication.CreateBuilder()` |
-| `builder.Services.Add...()` | `builder.Services.AddBrine2D().UseSDL()` |
-| Controllers with base properties | Scenes with framework properties |
-| `appsettings.json` | `gamesettings.json` |
-| `ILogger<T>`, `IOptions<T>` | `ILogger<T>`, `IOptions<T>` |
-| Request-scoped DbContext | Scene-scoped `EntityWorld` |
-| Middleware pipeline | ECS system pipeline |
-
-## Features
-
-### 🎮 Core Engine
-- **Entity Component System (ECS)** - High-performance with scene-scoped worlds
-- **Scene Management** - Async loading, transitions, and loading screens
-- **Advanced Queries** - Fluent API with spatial indexing
-- **Object Pooling** - Zero-allocation systems with `ArrayPool<T>`
-- **Event System** - Type-safe `EventBus` for pub/sub
-
-### 🎨 Rendering & Graphics
-- **SDL3 GPU Backend** - Vulkan, Direct3D 12, Metal via SDL_GPU
-- **Legacy Renderer** - SDL_Renderer fallback for compatibility
-- **Rich Text Rendering** - BBCode markup (`[color=#FF0000]text[/color]`)
-- **Post-Processing** - Bloom, blur, grayscale + custom shaders (GPU only)
-- **Render Targets** - Off-screen rendering (GPU only)
-- **Scissor Rectangles** - UI clipping and scroll views
-- **Sprite Batching** - Automatic batching with frustum culling
-- **Camera System** - Follow, zoom, shake effects
-
-### 🔊 Audio & Input
-- **Spatial Audio** - 2D positional audio with SDL3_mixer
-- **Input System** - Keyboard, mouse, gamepad with action mapping
-- **Audio Streaming** - Music and sound effects
-
-### 💥 Gameplay Systems
-- **Collision Detection** - AABB and circle colliders
-- **Particle System** - GPU-accelerated with pooling
-- **Sprite Animation** - Frame-based animation system
-- **Tilemap Support** - Tiled (.tmj) integration
-- **UI Framework** - Complete component library
-
-### 🛠️ Developer Experience
-- **Dependency Injection** - Full ASP.NET Core-style container
-- **Structured Logging** - `Microsoft.Extensions.Logging` integration
-- **Configuration System** - JSON with environment overrides
-- **Hot Reload** - Asset reloading during development
+---
 
 ## Quick Start
 
-### Installation
-
-```bash
-# Create new console app
+~~~bash
 dotnet new console -n MyGame
 cd MyGame
-
-# Add Brine2D packages
 dotnet add package Brine2D
-dotnet add package Brine2D.SDL
-```
-
-### Your First Game
+~~~
 
 **Program.cs:**
-```csharp
+~~~csharp
 using Brine2D.Hosting;
 
 var builder = GameApplication.CreateBuilder(args);
 
-builder.Services
-    .AddBrine2D(options =>
-    {
-        options.Window.Title = "My First Game";
-        options.Window.Width = 1280;
-        options.Window.Height = 720;
-    })
-    .UseGPURenderer()
-    .UseSDL();
+builder.Configure(options =>
+{
+    options.Window.Title  = "My First Game";
+    options.Window.Width  = 1280;
+    options.Window.Height = 720;
+});
 
-builder.AddScenes(scenes => scenes
-    .Add<GameScene>());
-
-var app = builder.Build();
-await app.RunAsync<GameScene>();
-```
+await using var game = builder.Build();
+await game.RunAsync<GameScene>();
+~~~
 
 **GameScene.cs:**
-```csharp
+~~~csharp
 using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Input;
 
 public class GameScene : Scene
 {
-    // No constructor needed - framework properties available automatically!
-    
-    protected override Task OnLoadAsync(CancellationToken ct)
+    protected override void OnEnter()
     {
-        Logger.LogInformation("Game scene loading...");
         Renderer.ClearColor = Color.CornflowerBlue;
-        return Task.CompletedTask;
+
+        World.CreateEntity("Player")
+            .AddComponent<TransformComponent>(t => t.Position = new Vector2(640, 360))
+            .AddComponent<SpriteComponent>()
+            .AddBehavior<PlayerMovementBehavior>();
     }
-    
+
     protected override void OnUpdate(GameTime gameTime)
     {
         if (Input.IsKeyPressed(Key.Escape))
-        {
             Environment.Exit(0);
-        }
     }
-    
+
     protected override void OnRender(GameTime gameTime)
     {
-        Renderer.DrawText("Hello Brine2D!", 10, 10, Color.White);
-        Renderer.DrawCircleFilled(640, 360, 50, Color.Tomato);
+        Renderer.DrawText("Hello, Brine2D!", 10, 10, Color.White);
     }
 }
-```
+~~~
 
-**Run it:**
-```bash
+~~~bash
 dotnet run
-```
+~~~
+
+---
+
+## ASP.NET Patterns You Already Know
+
+| ASP.NET Core | Brine2D |
+|---|---|
+| `WebApplication.CreateBuilder()` | `GameApplication.CreateBuilder()` |
+| `builder.Services.AddDbContext<T>()` | `builder.Services.AddCollisionSystem()` |
+| `ControllerBase` properties | `Scene` properties (`Input`, `Audio`, `Renderer`) |
+| Request-scoped `DbContext` | Scene-scoped `IEntityWorld` (auto-disposed on exit) |
+| `ILogger<T>` | `ILogger<T>` (same interface, same DI container) |
+| Middleware pipeline | ECS systems (ordered, auto-added) |
+
+---
 
 ## Core Concepts
 
 ### Scene Lifecycle
 
-Scenes follow this lifecycle:
-
-```csharp
-public class MyScene : Scene
+~~~csharp
+public class GameScene : Scene
 {
-    // 1. OnLoadAsync - Load assets (textures, audio, etc.)
+    private LevelAssets _assets = new();
+
+    // 1. OnLoadAsync: I/O only. Runs while loading screen is visible.
     protected override async Task OnLoadAsync(CancellationToken ct)
     {
-        // Async I/O only - load resources
-        _texture = await LoadTextureAsync("player.png", ct);
-        _music = await LoadMusicAsync("theme.ogg", ct);
+        await _assets.PreloadAsync(Assets, progress: null, ct);
     }
-    
-    // 2. OnEnterAsync - Initialize scene logic
-    protected override Task OnEnterAsync(CancellationToken ct)
+
+    // 2. OnEnter: Scene logic. Assets are ready. Default systems already added.
+    protected override void OnEnter()
     {
-        // Start music
-        Audio.PlayMusic(_music);
-        
-        // Spawn entities
-        var player = World.CreateEntity("Player");
-        player.AddComponent<TransformComponent>();
-        
-        return Task.CompletedTask;
+        Audio.PlayMusic(_assets.Theme);
+
+        World.CreateEntity("Player")
+            .AddComponent<TransformComponent>(t => t.Position = new Vector2(400, 300))
+            .AddComponent<SpriteComponent>(s => s.Texture = _assets.Tileset)
+            .AddBehavior<PlayerMovementBehavior>();
+
+        // Disable systems you don't need
+        World.GetSystem<ParticleSystem>()!.IsEnabled = false;
     }
-    
-    // 3. OnUpdate - Called every frame
-    protected override void OnUpdate(GameTime gameTime)
+
+    // 3. OnUpdate: Every frame
+    protected override void OnUpdate(GameTime gameTime) { }
+
+    // 4. OnRender: Every frame, after systems render
+    protected override void OnRender(GameTime gameTime) { }
+
+    // 5. OnExit: Before unload
+    protected override void OnExit()
     {
-        // Game logic
-    }
-    
-    // 4. OnRender - Called every frame
-    protected override void OnRender(GameTime gameTime)
-    {
-        // Drawing
-    }
-    
-    // 5. OnExitAsync - Cleanup before unload
-    protected override Task OnExitAsync(CancellationToken ct)
-    {
-        // Stop music, save state, etc.
         Audio.StopMusic();
-        return Task.CompletedTask;
     }
-    
-    // 6. OnUnloadAsync - Unload assets
-    protected override Task OnUnloadAsync(CancellationToken ct)
+
+    // 6. OnUnloadAsync: Release resources
+    protected override Task OnUnloadAsync(CancellationToken ct) => Task.CompletedTask;
+}
+~~~
+
+**Framework properties (always available, no constructor needed):**
+
+| Property | Type | Description |
+|---|---|---|
+| `World` | `IEntityWorld` | Scene-scoped entity world, auto-disposed |
+| `Renderer` | `IRenderer` | Draw calls and render state |
+| `Input` | `IInputContext` | Keyboard, mouse, gamepad |
+| `Audio` | `AudioService` | Music and sound effects |
+| `Logger` | `ILogger` | Scoped to your scene type |
+| `Game` | `IGameContext` | Frame time, frame count |
+
+**Inject only what's yours:**
+~~~csharp
+public class GameScene : Scene
+{
+    private readonly IPlayerService _playerService;
+
+    // Only inject YOUR services; framework properties handle the rest
+    public GameScene(IPlayerService playerService)
     {
-        // Dispose resources if needed
-        return Task.CompletedTask;
+        _playerService = playerService;
     }
 }
-```
+~~~
 
-**Key distinction:**
-- `OnLoadAsync` - **Assets only** (I/O operations)
-- `OnEnterAsync` - **Scene logic** (entities, audio, initialization)
+**Default systems (added automatically in execution order):**
 
-### Scene Transitions
+| System | Order | Purpose |
+|---|---|---|
+| `SpriteRenderingSystem` | -100 | Sprite batching and frustum culling |
+| `ParticleSystem` | 0 | Particle effects with object pooling |
+| `VelocitySystem` | 100 | Position integration |
+| `CollisionDetectionSystem` | 200 | AABB and circle colliders |
+| `AudioSystem` | 300 | Spatial audio processing |
+| `CameraSystem` | 400 | Camera follow and zoom |
+| `DebugRenderer` | 900 | Debug visualization (disabled by default) |
 
-Load scenes with smooth transitions:
+---
 
-```csharp
-// Simple fade
+### Scene Navigation
+
+~~~csharp
+// Simple load
+await SceneManager.LoadSceneAsync<GameScene>();
+
+// With a fade transition
 await SceneManager.LoadSceneAsync<GameScene>(
-    new FadeTransition(duration: 0.5f, color: Color.Black)
-);
+    new FadeTransition(duration: 0.5f, color: Color.Black));
 
-// With loading screen
+// With a loading screen (scene loads in background, window never freezes)
 await SceneManager.LoadSceneAsync<GameScene, MyLoadingScreen>(
-    new FadeTransition(duration: 1f, color: Color.Black)
-);
-```
+    new FadeTransition(duration: 1f));
 
-**Custom transitions:**
-```csharp
-public class SlideTransition : ISceneTransition
+// With a factory, for passing runtime data DI can't provide
+await SceneManager.LoadSceneAsync(sp =>
+    new LevelScene(sp.GetRequiredService<IRenderer>(), levelNumber: 3));
+~~~
+
+Calling `LoadSceneAsync` from inside `OnUpdate` is safe; the transition is deferred to the frame boundary automatically.
+
+---
+
+### Hybrid ECBS Architecture
+
+Brine2D uses a **hybrid Entity–Component–Behavior–System** model. The distinction matters:
+
+**Component** = pure data, no logic
+~~~csharp
+public class HealthComponent : Component
 {
-    public float Duration { get; }
-    public bool IsComplete { get; private set; }
-    public float Progress { get; private set; }
-    
-    public void Begin() { }
-    public void Update(GameTime gameTime) { }
-    public void Render(IRenderer? renderer) { }
+    public int HP    { get; set; } = 100;
+    public int MaxHP { get; set; } = 100;
 }
-```
+~~~
 
-### Entity Component System
-
-Each scene has its own isolated `EntityWorld`:
-
-```csharp
-protected override Task OnEnterAsync(CancellationToken ct)
+**Behavior** = entity-specific logic, full DI support
+~~~csharp
+public class PlayerMovementBehavior : EntityBehavior
 {
-    // Create entity
-    var player = World.CreateEntity("Player");
-    
-    // Add components
-    player.AddComponent(new TransformComponent 
-    { 
-        Position = new Vector2(400, 300),
-        Rotation = 0f,
-        Scale = Vector2.One
-    });
-    
-    player.AddComponent(new SpriteComponent 
-    { 
-        Texture = _playerTexture
-    });
-    
-    // Query entities
-    var enemies = World.Query()
-        .WithAll<TransformComponent, EnemyComponent>()
-        .WithNone<DeadComponent>()
-        .Execute();
-    
-    Logger.LogInformation("Found {Count} enemies", enemies.Count);
-    
-    return Task.CompletedTask;
-}
-```
+    private readonly IInputContext _input;
+    private TransformComponent _transform = null!;
 
-**When the scene unloads, all entities are automatically destroyed!**
+    public PlayerMovementBehavior(IInputContext input) => _this.input = input;
 
-### Rich Text Rendering
+    protected override void OnAttached()
+        => _transform = Entity.GetRequiredComponent<TransformComponent>();
 
-Brine2D supports BBCode-style markup:
-
-```csharp
-// Simple colored text
-Renderer.DrawText(
-    "Health: [color=#00FF00]100[/color]",
-    10, 10,
-    new TextRenderOptions { ParseMarkup = true });
-
-// Multiple styles
-Renderer.DrawText(
-    "[b]Boss Fight![/b]\n[color=#FF0000][size=32]Dragon[/size][/color]",
-    100, 100,
-    new TextRenderOptions 
-    { 
-        ParseMarkup = true,
-        Color = Color.White,
-        MaxWidth = 300,
-        HorizontalAlign = TextAlignment.Center,
-        ShadowOffset = new Vector2(2, 2),
-        ShadowColor = new Color(0, 0, 0, 128)
-    });
-```
-
-**Supported BBCode tags:**
-- `[color=#RRGGBB]` or `[color=#RRGGBBAA]` - Text color
-- `[size=24]` - Font size in points
-- `[b]` - Bold style flag
-- `[i]` - Italic style flag
-- `[u]` - Underline
-- `[s]` - Strikethrough
-
-**Extensible parsers:**
-```csharp
-// Implement custom markup
-public class MarkdownParser : IMarkupParser
-{
-    public string FormatName => "Markdown";
-    
-    public IReadOnlyList<TextRun> Parse(string markup, TextRenderOptions options)
+    public override void Update(GameTime gameTime)
     {
-        // Parse **bold**, *italic*, etc.
-        // Return collection of TextRun
+        if (_input.IsKeyDown(Key.W))
+            _transform.Position -= Vector2.UnitY * 200f * gameTime.DeltaTime;
     }
 }
+~~~
 
-// Use custom parser
-Renderer.DrawText(
-    "Hello **world**!",
-    10, 10,
-    new TextRenderOptions 
-    { 
-        ParseMarkup = true,
-        MarkupParser = new MarkdownParser()
-    });
-```
+**System** = batch processing across many entities
+~~~csharp
+public class GravitySystem : UpdateSystemBase
+{
+    public override int UpdateOrder => SystemUpdateOrder.Physics;
 
-### Advanced Rendering
-
-**Post-Processing (GPU only):**
-```csharp
-builder.Services
-    .AddBrine2D(options =>
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
-        options.Window.Title = "My Game";
-    })
-    .UseGPURenderer(gpu => gpu
-        .WithPostProcessing(effects =>
-        {
-            effects.Add("Bloom");
-            effects.Add("Grayscale");
-            effects.Add("Blur");
-        }))
-    .UseSDL();
-```
+        world.Query()
+            .With<TransformComponent>()
+            .With<RigidbodyComponent>()
+            .ForEach((entity, transform, body) =>
+            {
+                body.Velocity += new Vector2(0, 980f) * gameTime.DeltaTime;
+                transform.Position += body.Velocity * gameTime.DeltaTime;
+            });
+    }
+}
+~~~
 
-**Render Targets (GPU only):**
-```csharp
-// Create off-screen texture
-using var minimap = Renderer.CreateRenderTarget(256, 256);
+**When to use what:**
 
-// Render to it
-Renderer.PushRenderTarget(minimap);
-RenderMinimapContent();
-Renderer.PopRenderTarget();
+| | Behavior | System |
+|---|---|---|
+| Scope | One entity | Many entities |
+| DI | ✅ Full injection | ✅ Constructor injection |
+| Examples | Player input, boss AI | Physics, rendering, audio |
+| Runs every frame | ✅ Automatic | ✅ Automatic |
 
-// Draw the texture
-Renderer.DrawTexture(minimap.Texture, 10, 10);
-```
+---
 
-**Scissor Rectangles:**
-```csharp
-// Clip rendering to region (UI scroll views, etc.)
-Renderer.PushScissorRect(new Rectangle(10, 10, 300, 200));
-DrawScrollableContent();
-Renderer.PopScissorRect();
-```
+### Asset Loading
+
+No content pipeline. No build step. Drop files into `assets/` and load them.
+
+**Option 1: Typed manifest (recommended for scenes)**
+
+Declare your assets once as a class. Load them all in parallel with one call.
+
+~~~csharp
+public class LevelAssets : AssetManifest
+{
+    public readonly AssetRef<ITexture>     Tileset  = Texture("assets/images/tileset.png", TextureScaleMode.Nearest);
+    public readonly AssetRef<ITexture>     Player   = Texture("assets/images/player.png");
+    public readonly AssetRef<ISoundEffect> Jump     = Sound("assets/audio/jump.wav");
+    public readonly AssetRef<ISoundEffect> Hurt     = Sound("assets/audio/hurt.wav");
+    public readonly AssetRef<IMusic>       Theme    = Music("assets/audio/music/level1.ogg");
+    public readonly AssetRef<Font>         HUDFont  = Font("assets/fonts/ui.ttf", size: 20);
+}
+~~~
+
+~~~csharp
+private readonly LevelAssets _assets = new();
+
+protected override async Task OnLoadAsync(CancellationToken ct)
+{
+    // All assets loaded in parallel. Progress reported to loading screen.
+    await _assets.PreloadAsync(Assets, progress: loadingScreen.Progress, ct);
+}
+
+protected override void OnEnter()
+{
+    // Implicit conversion, no .Value needed
+    _player.Sprite.Texture = _assets.Player;
+    Audio.PlayMusic(_assets.Theme);
+}
+~~~
+
+**Option 2: Direct loading (quick scripts, one-off assets)**
+
+~~~csharp
+var tex  = await _assets.GetOrLoadTextureAsync("assets/images/logo.png");
+var sfx  = await _assets.GetOrLoadSoundAsync("assets/audio/click.wav");
+var font = await _assets.GetOrLoadFontAsync("assets/fonts/mono.ttf", size: 14);
+~~~
+
+All three share the same thread-safe cache, so loading the same path twice returns the cached instance.
+
+**Asset types and their loader methods:**
+
+| Type | Method | Cached? |
+|---|---|---|
+| `ITexture` | `GetOrLoadTextureAsync` | ✅ Yes |
+| `ISoundEffect` | `GetOrLoadSoundAsync` | ✅ Yes |
+| `IMusic` | `GetOrLoadMusicAsync` | ✅ Yes |
+| `Font` | `GetOrLoadFontAsync(path, size)` | ✅ Yes |
+
+---
+
+### Queries
+
+**Fluent one-shot query:**
+~~~csharp
+// Finds all active enemies within 200px of the player, ordered by distance
+World.Query()
+    .With<TransformComponent>()
+    .With<EnemyComponent>()
+    .Without<DeadComponent>()
+    .WithTag("active")
+    .WithinRadius(playerPos, 200f)
+    .ForEach<TransformComponent, EnemyComponent>((entity, transform, enemy) =>
+    {
+        enemy.Alert();
+    });
+~~~
+
+**Cached query (for systems that run every frame):**
+~~~csharp
+// Declare in OnEnter; cache rebuilds only when components change
+private CachedEntityQuery<TransformComponent, EnemyComponent> _enemyQuery = null!;
+
+protected override void OnEnter()
+{
+    _enemyQuery = World.CreateCachedQuery<TransformComponent, EnemyComponent>()
+        .WithTag("active")
+        .Build();
+}
+
+// Use in Update: zero allocation per frame
+public override void Update(IEntityWorld world, GameTime gameTime)
+{
+    _enemyQuery.ForEach((entity, transform, enemy) =>
+    {
+        // Process...
+    });
+}
+~~~
+
+**Query factory (reusable template):**
+~~~csharp
+// Captures state once; each call returns a fresh independent clone
+private Func<EntityQuery> _nearbyEnemies;
+
+protected override void OnEnter()
+{
+    _nearbyEnemies = World.Query()
+        .With<EnemyComponent>()
+        .WithTag("active")
+        .ToFactory();
+}
+
+protected override void OnUpdate(GameTime gt)
+{
+    // Modify per-frame without affecting the template
+    _nearbyEnemies()
+        .WithinRadius(PlayerPosition, 200f)
+        .ForEach<EnemyComponent>((entity, enemy) => enemy.Alert());
+}
+~~~
+
+**Supported filters:**
+
+| Method | Description |
+|---|---|
+| `.With<T>(filter?)` | Must have component, optional value filter |
+| `.Without<T>()` | Must not have component |
+| `.WithTag(tag)` | Must have tag |
+| `.WithoutTag(tag)` | Must not have tag |
+| `.WithAllTags(...)` | Must have all tags |
+| `.WithAnyTag(...)` | Must have at least one tag |
+| `.WithinRadius(center, r)` | Spatial circle query |
+| `.WithinBounds(rect)` | Spatial AABB query |
+| `.Where(predicate)` | Custom predicate |
+| `.OrderBy(selector)` | Sort results |
+| `.Take(n)` / `.Skip(n)` | Pagination |
+| `.Random(n)` | Random selection |
+| `.OnlyActive()` | Skip inactive entities |
+
+---
+
+### Camera
+
+~~~csharp
+// Follow the player with smooth lag
+player.AddComponent<CameraFollowComponent>(c =>
+{
+    c.CameraName  = "main";
+    c.Smoothing   = 5f;      // 0 = instant snap, 2 = dreamy, 15 = tight
+    c.Deadzone    = new Vector2(50, 30); // Won't move within this range
+    c.Offset      = new Vector2(0, -50); // Look slightly ahead
+});
+
+// Zoom with smoothing
+player.GetComponent<CameraFollowComponent>()!.TargetZoom     = 1.5f;
+player.GetComponent<CameraFollowComponent>()!.ZoomSmoothing  = 3f;
+
+// Control directly
+_camera.Position = new Vector2(640, 360);
+_camera.Zoom     = 2f;
+
+// Camera shake (from any system or behavior)
+_camera.Shake(duration: 0.3f, intensity: 8f);
+~~~
+
+---
 
 ### Configuration
 
-**gamesettings.json:**
-```json
+~~~csharp
+builder.Configure(options =>
 {
-  "Window": {
-    "Title": "My Game",
-    "Width": 1280,
-    "Height": 720,
-    "Fullscreen": false,
-    "Resizable": true
-  },
-  "Rendering": {
-    "Backend": "GPU",
-    "VSync": true,
-    "TargetFPS": 60,
-    "PreferredGPUDriver": null
-  },
-  "PostProcessing": {
-    "Enabled": true,
-    "Effects": ["Bloom", "Grayscale"]
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Brine2D": "Debug"
-    }
-  }
-}
-```
+    // Window
+    options.Window.Title      = "My Game";
+    options.Window.Width      = 1280;
+    options.Window.Height     = 720;
+    options.Window.Fullscreen = false;
 
-**Environment overrides:**
-```json
-// gamesettings.Development.json
+    // Rendering
+    options.Rendering.VSync              = true;
+    options.Rendering.TargetFPS          = 60;       // 0 = unlimited
+    options.Rendering.PreferredGPUDriver = GPUDriver.Vulkan; // D3D12, Metal, Auto
+
+    // ECS
+    options.ECS.EnableMultiThreading       = true;
+    options.ECS.ParallelEntityThreshold    = 100;   // auto-parallel at 100+ entities
+    options.ECS.WorkerThreadCount          = null;  // null = all CPU cores
+
+    // Loading screens
+    options.LoadingScreenMinimumDisplayMs  = 200;   // 0 = disable flash prevention
+
+    // Headless mode: no window, no audio (for servers and testing)
+    options.Headless = false;
+});
+~~~
+
+Invalid configuration throws at `Build()` with a clear, specific error message, not at runtime.
+
+---
+
+### Custom Systems
+
+~~~csharp
+public class CameraShakeSystem : UpdateSystemBase
 {
-  "Window": {
-    "Width": 800,
-    "Height": 600
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Debug"
+    // Execution phase constants (use these instead of magic numbers)
+    public override int UpdateOrder => SystemUpdateOrder.LateUpdate; // 800
+
+    public override void Update(IEntityWorld world, GameTime gameTime)
+    {
+        world.Query()
+            .With<CameraShakeComponent>()
+            .ForEach<CameraShakeComponent>((entity, shake) =>
+            {
+                shake.Remaining -= gameTime.DeltaTime;
+                if (shake.Remaining <= 0)
+                    entity.RemoveComponent<CameraShakeComponent>();
+            });
     }
-  }
 }
-```
+~~~
 
-## Architecture
+**Ordering constants:**
 
-### Package Structure
+| Constant | Value | Use for |
+|---|---|---|
+| `SystemUpdateOrder.Input` | -100 | Input processing |
+| `SystemUpdateOrder.Update` | 0 | Main update logic |
+| `SystemUpdateOrder.Physics` | 100 | Physics simulation |
+| `SystemUpdateOrder.Collision` | 200 | Collision detection |
+| `SystemUpdateOrder.Animation` | 400 | Animation updates |
+| `SystemUpdateOrder.LateUpdate` | 800 | Post-physics cleanup |
 
-| Package | Purpose | Required? |
-|---------|---------|-----------|
-| `Brine2D` | Core engine (ECS, scenes, rendering APIs) | ✅ Yes |
-| `Brine2D.SDL` | SDL3 platform implementation | ✅ Yes |
-| `Brine2D.Tilemap` | Tiled tilemap support | Optional |
-| `Brine2D.UI` | UI component library | Optional |
+~~~csharp
+protected override void OnEnter()
+{
+    World.AddSystem<CameraShakeSystem>();
 
-### Design Principles
+    // Remove a default system you don't need
+    World.RemoveSystem(World.GetSystem<ParticleSystem>()!);
 
-**1. Scene-Scoped Resources**
-- Each scene gets its own `IEntityWorld` instance
-- Automatic cleanup when scene unloads
-- No entity leaks between scenes
-- Persistent state via services, not entities
+    // Configure a default system
+    World.GetSystem<DebugRenderer>()!.IsEnabled = true;
+    World.GetSystem<DebugRenderer>()!.ShowColliders = true;
+}
+~~~
 
-**2. Framework Properties Pattern**
-- Common services available as properties (`Input`, `Audio`, `Renderer`)
-- No constructor bloat for simple scenes
-- Constructor injection still available for custom services
-- Matches ASP.NET's `ControllerBase` pattern
+---
 
-**3. Lifecycle Separation**
-- `OnLoadAsync` for async I/O (loading assets)
-- `OnEnterAsync` for scene logic (spawning entities, starting audio)
-- Clear separation of concerns
+### Project-Wide Scene Configuration
 
-**4. Convention Over Configuration**
-- Sensible defaults ("batteries included")
-- Minimal boilerplate for common scenarios
-- Power users can customize everything
+Apply settings to every scene's world without modifying each scene:
 
-**5. Performance First**
-- Object pooling throughout hot paths
-- Automatic sprite batching
-- Spatial indexing for queries
-- GPU acceleration where available
+~~~csharp
+// In Program.cs, runs after default systems are added to every scene
+builder.ConfigureScene(world =>
+{
+    world.GetSystem<DebugRenderer>()!.IsEnabled = true;
+    world.AddSystem<AnalyticsSystem>();
+});
+~~~
+
+---
+
+### Scene Registration
+
+Optional, but catches missing DI dependencies at startup rather than at runtime:
+
+~~~csharp
+// Validated at Build() -- throws if a dependency isn't registered
+builder.AddScene<MainMenuScene>();
+builder.AddScene<GameScene>();
+
+// Multi-constructor scenes: annotate the one DI should use
+[ActivatorUtilitiesConstructor]
+public GameScene(IPlayerService playerService, IInputContext input) { ... }
+~~~
+
+Unregistered scenes still load via `ActivatorUtilities`. You'll just get a warning in the log.
+
+---
+
+### Dependency Injection
+
+~~~csharp
+// Register your services
+builder.Services.AddSingleton<IPlayerService, PlayerService>();
+builder.Services.AddSingleton<ISaveSystem, LocalSaveSystem>();
+
+// Optional features
+builder.Services.AddPostProcessing();
+builder.Services.AddTextureAtlasing();
+builder.Services.AddTilemapServices();
+builder.Services.AddCollisionSystem();
+builder.Services.AddUICanvas();
+builder.Services.AddPerformanceMonitoring();
+
+// Microsoft.Extensions.Logging works as expected
+builder.Logging.SetMinimumLevel(LogLevel.Debug);
+~~~
+
+---
+
+### Testing with Headless Mode
+
+~~~csharp
+[Fact]
+public async Task Player_TakingDamage_Dies_At_Zero_HP()
+{
+    var builder = GameApplication.CreateBuilder();
+    builder.Configure(o => o.Headless = true); // No window, no SDL
+    builder.Services.AddSingleton<IPlayerService, PlayerService>();
+
+    await using var game = builder.Build();
+
+    // Run your scene on a background thread; test thread stays free
+    var runTask = game.RunAsync<GameScene>();
+
+    // ... assert things ...
+
+    game.Services.GetRequiredService<GameLoop>().Stop();
+    await runTask;
+}
+~~~
+
+---
+
+### Rich Text
+
+~~~csharp
+Renderer.DrawText(
+    "[b]Score:[/b] [color=#FFD700]9,999[/color]\n[size=14][i]Personal best![/i][/size]",
+    x: 10, y: 10,
+    new TextRenderOptions
+    {
+        ParseMarkup  = true,
+        Color        = Color.White,
+        MaxWidth     = 300,
+        ShadowOffset = new Vector2(2, 2),
+        ShadowColor  = new Color(0, 0, 0, 128)
+    });
+~~~
+
+**Supported tags:** `[color=#RRGGBB]`, `[size=n]`, `[b]`, `[i]`, `[u]`, `[s]`
+
+---
+
+### Advanced Rendering
+
+~~~csharp
+// Post-processing
+Renderer.PostProcessing?.AddEffect("Bloom");
+Renderer.PostProcessing?.AddEffect("Grayscale");
+
+// Off-screen render target (minimap, portals, etc.)
+using var minimap = Renderer.CreateRenderTarget(256, 256);
+Renderer.PushRenderTarget(minimap);
+RenderMinimapContent();
+Renderer.PopRenderTarget();
+Renderer.DrawTexture(minimap.Texture, x: 10, y: 10);
+
+// Scissor rectangle (UI scroll views, clipping)
+Renderer.PushScissorRect(new Rectangle(10, 10, 300, 200));
+DrawScrollableContent();
+Renderer.PopScissorRect();
+~~~
+
+---
 
 ## Performance
 
-### Built-in Diagnostics
+**Built-in diagnostics:** press `F3` in any scene:
 
-Press **F3** in any scene for the FPS overlay:
+~~~
+FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
+~~~
 
-```
-FPS: 60 (16.67ms)
-Draw Calls: 12
-Entities: 1,247
-Systems: 8
-Memory: 45.2 MB
-```
+`F4` shows per-system frame timings. `F5` shows a rolling frame time graph.
 
-**Additional hotkeys:**
-- **F3** - Toggle FPS overlay
-- **F4** - System profiling (per-system timings)
-- **F5** - Frame time graph
+**How zero-allocation queries work:**
 
-### Benchmarks
+`ForEach` iterates directly over `ComponentPool<T>` snapshots rented from `ArrayPool<T>`. The hot path touches only entities that have the queried components, not the full entity list. Cached queries (`CreateCachedQuery`) rebuild only when components are added or removed; on frames with no structural changes, they iterate a pre-built list with zero setup.
 
-The `SpriteBenchmarkScene` renders **10,000+ sprites at 60 FPS** with batching enabled.
+**Characteristics:**
 
-**Optimization tips:**
-- Use sprite batching for many sprites
-- Enable frustum culling
-- Pool frequently created/destroyed objects
-- Minimize texture swaps
-- Use spatial queries for collision detection
+| Entity count | Notes |
+|---|---|
+| < 1,000 | Single-threaded, negligible cost |
+| 1,000–10,000 | Auto-parallelizes `ForEach` queries |
+| 10,000–50,000 | Component pools and cached queries shine |
+| 50,000+ | Achievable with cached queries; profiling recommended |
+
+**Tips:**
+- Use `CreateCachedQuery` for any query that runs every frame
+- Use `.WithinRadius` or `.WithinBounds` to narrow spatial queries instead of filtering manually
+- Disable default systems you don't use (`ParticleSystem`, `CollisionDetectionSystem`) in scenes that don't need them
+- `options.ECS.EnableMultiThreading = true` for large scenes on multi-core hardware
+
+---
+
+## Features
+
+### Core Engine
+- Hybrid ECBS: Components (data), Behaviors (entity logic + DI), Systems (batch processing)
+- Scene management: async loading, transitions, loading screens, frame-boundary deferral
+- Fluent entity queries: spatial indexing, zero-allocation `ForEach`, cached queries
+- Event bus: type-safe pub/sub
+- Ordered system execution with named phase constants
+- Headless mode: full engine without a window, for dedicated servers and unit tests
+- Delta time clamping: frame spikes from debugger pauses can't corrupt simulation
+
+### Rendering
+- SDL3 GPU backend: Vulkan, Direct3D 12, Metal
+- Sprite batching with automatic frustum culling
+- Post-processing pipeline: Bloom, Blur, Grayscale, custom HLSL shaders
+- Off-screen render targets
+- Scissor rectangles
+- Rich text with BBCode markup and shadow support
+- Camera system: smooth follow, deadzone, zoom, shake
+
+### Audio
+- Spatial 2D audio via SDL3_mixer
+- Music streaming
+- Sound effect pooling
+- Per-channel volume control
+
+### Input
+- Keyboard, mouse, gamepad
+- Input layer manager for context-sensitive bindings
+- Action mapping
+
+### Gameplay
+- AABB and circle collision detection
+- Particle system with object pooling
+- Frame-based sprite animation
+- Tilemap support: Tiled (`.tmj`) integration
+- UI framework: canvas, buttons, labels, scroll views
+
+### Developer Experience
+- ASP.NET Core DI container
+- `Microsoft.Extensions.Logging` structured logging
+- Engine options validated at `Build()` via `DataAnnotations`; bad config fails fast with a clear error
+- Unified asset loader: one service, all types, thread-safe cache
+- `AssetManifest`: typed, compile-time-safe asset declarations
+- Startup-time dependency validation for registered scenes
+
+---
 
 ## Samples
 
-### Getting Started
+~~~bash
+# Getting started -- step-by-step tutorials
+cd samples/GettingStarted/01-HelloBrine && dotnet run
 
-Progressive tutorials for beginners:
+# Feature showcase -- interactive demos of every system
+cd samples/FeatureDemos && dotnet run
+~~~
 
-```bash
-cd samples/GettingStarted/01-HelloBrine
-dotnet run
-```
+**Getting Started tutorials:**
+1. `01-HelloBrine`: Window and first render
+2. `02-SceneBasics`: Lifecycle and scene transitions
+3. `03-DependencyInjection`: Services, DI, and configuration
+4. `04-InputAndText`: Input and rich text rendering
 
-**Included tutorials:**
-1. **01-HelloBrine** - Minimal setup and window
-2. **02-SceneBasics** - Lifecycle and transitions
-3. **03-DependencyInjection** - Services and configuration
-4. **04-InputAndText** - Input handling and rendering
+**Feature demos (interactive):**
+- ECS query system: fluent queries, spatial indexing, caching
+- Particles: GPU-accelerated effects
+- Texture atlasing: runtime sprite packing
+- Collision: AABB and circle demos
+- Spatial audio: 2D positional sound
+- Post-processing: real-time shader effects
+- Scissor rectangles: UI clipping and scroll views
+- Transitions: fade, slide, custom
+- UI framework: complete component demos
+- Sprite benchmark: **50,000+ sprite stress test** with performance overlay
 
-### Feature Demos
+---
 
-Interactive showcase of all engine features:
+## Architecture
 
-```bash
-cd samples/FeatureDemos
-dotnet run
-```
+~~~
+src/
+  Brine2D/         - core engine (published to NuGet as Brine2D)
+  Brine2D.Build/   - optional MSBuild tooling (Brine2D.Build, coming in 1.0)
+samples/
+  GettingStarted/  - numbered tutorials
+  FeatureDemos/    - interactive feature showcase
+tests/
+  Brine2D.Tests/              - unit tests
+  Brine2D.Integration.Tests/  - integration tests
+~~~
 
-**Demo scenes:**
-- **Query System** - Entity queries and spatial indexing
-- **Particles** - GPU-accelerated particle effects
-- **Texture Atlas** - Runtime sprite packing
-- **Collision** - AABB and circle colliders
-- **Spatial Audio** - 2D positional audio
-- **Post-Processing** - Real-time shader effects
-- **Scissor Rects** - UI clipping
-- **Rich Text** - BBCode markup rendering
-- **Sprite Benchmark** - 10,000+ sprite stress test
+**Design principles:**
 
-## Documentation
+- *Scene-scoped worlds*: each scene gets its own `IEntityWorld`, auto-disposed on exit. No entity leaks between scenes.
+- *Framework properties*: common services available on `Scene` without constructor injection, matching ASP.NET's `ControllerBase` pattern.
+- *Lifecycle separation*: `OnLoadAsync` for I/O, `OnEnter` for logic. Default systems are in place by the time `OnEnter` runs.
+- *Convention over configuration*: sensible defaults everywhere; power users can replace, remove, or reorder anything.
+- *Fail fast*: `Build()` validates options and scene dependencies before any window opens.
 
-**Coming soon:** [brine2d.com](https://www.brine2d.com)
+---
 
-Topics:
-- Complete API reference
-- Architecture guides
-- Best practices
-- Performance optimization
-- Shader authoring
-- Custom systems
+## Platform Support
+
+| Platform | GPU Backend | Status |
+|---|---|---|
+| Windows | Vulkan / Direct3D 12 | ✅ Tested |
+| macOS | Metal | ⚠️ Untested |
+| Linux | Vulkan | ⚠️ Untested |
+
+SDL3 provides the cross-platform layer. macOS and Linux should work. Community testing welcome.
+
+---
+
+## Requirements
+
+- .NET 10 SDK
+- SDL3, SDL3_image, SDL3_mixer, SDL3_ttf (all included via NuGet as `SDL3-CS.*`)
+- No other native dependencies to install manually
+
+---
 
 ## Current Status
 
-**⚠️ Version 0.9.x-beta**
+**Version 0.9.x-beta.** All core features working; API may change before 1.0.
 
-This is a **beta release** with all core features working:
-
-✅ **Working:**
-- ECS with scene-scoped worlds
+✅ Working:
+- Scene management, transitions, loading screens
+- Hybrid ECBS with scene-scoped worlds
+- Zero-allocation parallel queries
+- Unified asset loader with `AssetManifest` support
 - SDL3 GPU and legacy renderers
-- Rich text with BBCode markup
-- Post-processing pipeline (GPU only)
-- Render targets and scissor rects
-- Scene management with transitions
+- Rich text with BBCode
+- Post-processing, render targets, scissor rects
 - Spatial audio
 - Collision detection
 - Particle system
 - UI framework
+- Tilemap support
+- Headless mode
+- Startup dependency validation
 
-⚠️ **Known Limitations:**
-- Documentation incomplete
-- Linux/macOS untested (should work via SDL3)
-- API may change before 1.0
-- Test coverage ~20% (target: 80%+)
+⚠️ Known limitations:
+- macOS and Linux untested
+- Documentation site in progress
+- Test coverage ~20% (target: 80% for 1.0)
+- API stability not guaranteed until 1.0
 
-**Coming in 1.0.0:**
-- [ ] Stable API guarantee
-- [ ] Complete documentation site
-- [ ] Full platform testing (Windows/Linux/macOS)
+**Coming in 1.0:**
+- [ ] Stable API
+- [ ] Complete documentation at [brine2d.com](https://brine2d.com)
+- [ ] macOS and Linux CI
 - [ ] 80%+ test coverage
-- [ ] Performance benchmarks
-- [ ] Migration guides from beta
+- [ ] `Brine2D.Build`: optional NuGet for auto-generated asset path constants
 
-## Requirements
+---
 
-- **.NET 10 SDK** or later
-- **SDL3** (included via SDL3-CS NuGet)
-- **SDL3_image** (texture loading)
-- **SDL3_mixer** (audio playback)
+## Testing
 
-## Platform Support
+~~~bash
+dotnet test
+dotnet test --collect:"XPlat Code Coverage"
+dotnet test tests/Brine2D.Tests
+~~~
 
-| Platform | GPU Backend | Legacy Backend | Status |
-|----------|-------------|----------------|--------|
-| Windows | Vulkan/D3D12 | ✅ SDL_Renderer | ✅ Fully tested |
-| Linux | Vulkan | ✅ SDL_Renderer | ⚠️ Untested |
-| macOS | Metal | ✅ SDL_Renderer | ⚠️ Untested |
+---
 
-SDL3 provides cross-platform support. **Community testing needed for Linux/macOS!**
+## Contributing
+
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Most useful right now:
+- Testing on macOS or Linux and reporting results
+- Adding test coverage
+- Building a sample game and documenting rough edges
+- Trying the getting-started path as a new user and filing issues where it's unclear
+
+---
 
 ## Community
 
 - **Discussions:** [GitHub Discussions](https://github.com/CrazyPickleStudios/Brine2D/discussions)
 - **Issues:** [Issue Tracker](https://github.com/CrazyPickleStudios/Brine2D/issues)
-- **Samples:** [Sample Projects](https://github.com/CrazyPickleStudios/Brine2D/tree/main/samples)
-
-## Roadmap
-
-See the full [roadmap and milestones](https://github.com/CrazyPickleStudios/Brine2D/milestones).
-
-**1.0.0 Goals:**
-- Stable, production-ready API
-- Complete documentation
-- Multi-platform testing
-- High test coverage
-- Performance baselines
-
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-**Ways to help:**
-- Test on Linux/macOS
-- Report bugs
-- Submit feature requests
-- Write documentation
-- Create tutorials
-- Build sample projects
-
-## Testing
-
-```bash
-# Run all tests
-dotnet test
-
-# With coverage
-dotnet test --collect:"XPlat Code Coverage"
-
-# Specific test project
-dotnet test tests/Brine2D.Tests
-```
-
-**Current coverage:** ~20% | **Target for 1.0:** 80%+
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Credits
-
-**Built with:**
-- [SDL3](https://github.com/libsdl-org/SDL) - Cross-platform multimedia
-- [SDL3-CS](https://github.com/edwardgushchin/SDL3-CS) - C# bindings for SDL3
-- [stb_image](https://github.com/nothings/stb) - Image loading
-
-**Inspired by:**
-- **ASP.NET Core** - Hosting model and DI patterns
-- **Unity** - Component-based architecture
-- **Godot** - Scene system design
-- **MonoGame** - .NET game development philosophy
+- **Docs:** [brine2d.com](https://brine2d.com)
 
 ---
 
-**Made with ❤️ by CrazyPickle Studios**
+## License
 
-*The ASP.NET of game engines - familiar patterns, modern .NET, built for C# developers.*
+MIT - see [LICENSE](LICENSE).
+
+---
+
+## Credits
+
+**Built on:**
+- [SDL3](https://github.com/libsdl-org/SDL): cross-platform multimedia
+- [SDL3-CS](https://github.com/edwardgushchin/SDL3-CS): C# bindings
+
+*Brine2D is part of the .NET game development ecosystem and stands on the shoulders of the community that proved C# is a great language for games.*
+
+---
+
+*Made with ❤️ by CrazyPickle Studios. Modern .NET, no editor required.*

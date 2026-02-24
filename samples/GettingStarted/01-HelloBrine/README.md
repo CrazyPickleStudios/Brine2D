@@ -1,73 +1,74 @@
 # 01 - Hello Brine
 
-Your first Brine2D application! This sample demonstrates the minimal setup required to create a game window and render text.
+Your first Brine2D application. This sample covers the minimal setup to open a game window and render text.
 
 ## What You'll Learn
 
-- ✅ GameApplication setup (similar to WebApplication in ASP.NET)
-- ✅ Service registration with `AddBrine2D()`
-- ✅ Scene creation and lifecycle
-- ✅ Basic text rendering
-- ✅ Input handling (ESC to exit)
+- GameApplication setup (similar to WebApplication in ASP.NET)
+- Scene creation and lifecycle
+- Basic rendering and input
 
 ## The Code
 
-### Program.cs - Setup
+### Program.cs
 
 ~~~csharp
+using Brine2D.Hosting;
+
 var builder = GameApplication.CreateBuilder(args);
 
-// Add Brine2D with sensible defaults
-builder.Services.AddBrine2D(options =>
+builder.Configure(options =>
 {
-    options.WindowTitle = "01 - Hello Brine";
-    options.WindowWidth = 1280;
-    options.WindowHeight = 720;
+    options.Window.Title  = "01 - Hello Brine";
+    options.Window.Width  = 1280;
+    options.Window.Height = 720;
 });
 
-builder.Services.AddScene<GameScene>();
+builder.AddScene<GameScene>();
 
-var game = builder.Build();
+await using var game = builder.Build();
 await game.RunAsync<GameScene>();
 ~~~
 
-**Key Points:**
-- `GameApplication.CreateBuilder()` - Just like ASP.NET's `WebApplication.CreateBuilder()`
-- `AddBrine2D()` - Registers all essential services (rendering, input, audio, core)
-- `AddScene<T>()` - Registers your game scene (like adding a Controller)
-- `RunAsync<T>()` - Starts the game loop with the specified scene
+### GameScene.cs
 
-### GameScene.cs - Your Game
+Framework services are available as properties on `Scene`: `Renderer`, `Input`, `Audio`, `World`, `Logger`, `Game`. No constructor needed for any of them.
 
 ~~~csharp
+using Brine2D.Core;
+using Brine2D.Engine;
+
 public class GameScene : Scene
 {
-    private readonly IRenderer _renderer;
-    private readonly IInputService _input;
-    private readonly IGameContext _gameContext;
-
-    // Constructor injection - DI provides services automatically!
-    public GameScene(
-        IRenderer renderer,
-        IInputService input,
-        IGameContext gameContext,
-        ILogger<GameScene> logger) : base(logger)
+    protected override void OnEnter()
     {
-        _renderer = renderer;
-        _input = input;
-        _gameContext = gameContext;
-    }
-
-    protected override void OnRender(GameTime gameTime)
-    {
-        _renderer.DrawText("Hello, Brine2D!", 100, 100, Color.White);
-        _renderer.DrawText("Press ESC to exit", 100, 140, Color.LightGray);
+        Renderer.ClearColor = Color.CornflowerBlue;
     }
 
     protected override void OnUpdate(GameTime gameTime)
     {
-        if (_input.IsKeyPressed(Keys.Escape))
-            _gameContext.RequestExit();
+        if (Input.IsKeyPressed(Key.Escape))
+            Environment.Exit(0);
+    }
+
+    protected override void OnRender(GameTime gameTime)
+    {
+        Renderer.DrawText("Hello, Brine2D!", 100, 100, Color.White);
+        Renderer.DrawText("Press ESC to exit", 100, 140, Color.LightGray);
+    }
+}
+~~~
+
+If your scene needs your own services, inject only those:
+
+~~~csharp
+public class GameScene : Scene
+{
+    private readonly IScoreService _scores;
+
+    public GameScene(IScoreService scores)
+    {
+        _scores = scores;
     }
 }
 ~~~
@@ -75,13 +76,13 @@ public class GameScene : Scene
 ## ASP.NET Parallels
 
 | ASP.NET Core | Brine2D |
-|--------------|---------|
+|---|---|
 | `WebApplication.CreateBuilder()` | `GameApplication.CreateBuilder()` |
 | `builder.Services.AddControllers()` | `builder.Services.AddBrine2D()` |
-| `app.MapControllers()` | `builder.Services.AddScene<T>()` |
+| `app.MapControllers()` | `builder.AddScene<T>()` |
 | `app.Run()` | `await game.RunAsync<T>()` |
-| Constructor injection | ✅ Same pattern! |
-| `ILogger<T>` | ✅ Same! |
+| `ControllerBase` properties | `Scene` properties (`Renderer`, `Input`, `Audio`) |
+| `ILogger<T>` | `ILogger<T>` (same interface, same DI container) |
 
 ## Run It
 
@@ -89,14 +90,10 @@ public class GameScene : Scene
 dotnet run
 ~~~
 
-You should see a window with "Hello, Brine2D!" text. Press ESC to exit.
+You should see a blue window with "Hello, Brine2D!" text. Press ESC to exit.
 
 ## What's Next?
 
-- **02-SceneBasics** - Learn about scene lifecycle and transitions
+- **02-SceneBasics** - Scene lifecycle and transitions
 - **03-DependencyInjection** - Custom services and configuration
 - **04-InputAndText** - Keyboard, mouse, and text rendering
-
----
-
-**Welcome to Brine2D!**

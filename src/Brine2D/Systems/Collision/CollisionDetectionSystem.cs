@@ -1,40 +1,36 @@
-using Brine2D.Core;
 using Brine2D.Collision;
-using Brine2D.ECS.Components;
+using Brine2D.Core;
 using Brine2D.ECS;
+using Brine2D.ECS.Components;
 using Brine2D.ECS.Systems;
-using System.Numerics;
 
 namespace Brine2D.Systems.Collision;
 
 /// <summary>
-/// System that detects collisions between ColliderComponents.
-/// Bridges ECS with the low-level CollisionSystem from Brine2D.Collision.
-/// 
-/// This is NOT a physics simulation system - it only detects overlaps.
-/// For physics simulation (velocity, forces, mass), see PhysicsSimulationSystem.
+/// System that detects collisions between entities with ColliderComponent.
+/// Uses a spatial hash grid for efficient broad-phase collision detection.
 /// </summary>
-public class CollisionDetectionSystem : IUpdateSystem, IDisposable
+public class CollisionDetectionSystem : UpdateSystemBase
 {
-    public string Name => "CollisionDetectionSystem";
-    public int UpdateOrder => 200; // After movement, before rendering
-
     private readonly CollisionSystem _collisionSystem;
     private readonly Dictionary<Entity, CollisionShape> _entityShapes = new();
     private readonly Dictionary<Entity, HashSet<Entity>> _previousCollisions = new();
 
-    public CollisionDetectionSystem(CollisionSystem collisionSystem)
+    public CollisionDetectionSystem()
     {
-        _collisionSystem = collisionSystem;
+        _collisionSystem = new CollisionSystem();
     }
 
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
-        // Sync collider positions with transforms and create shapes if needed
+        // Sync colliders (create/update shapes)
         SyncColliders(world);
 
         // Detect collisions
         DetectCollisions(world);
+
+        // Clean up destroyed entities
+        CleanupDestroyedEntities(world);
     }
 
     private void SyncColliders(IEntityWorld world)
@@ -118,40 +114,42 @@ public class CollisionDetectionSystem : IUpdateSystem, IDisposable
                 currentColliding.Add(other);
 
                 // Check if this is a new collision
-                if (!_previousCollisions.ContainsKey(entity) ||
-                    !_previousCollisions[entity].Contains(other))
+                if (!_previousCollisions.TryGetValue(entity, out var previous) || !previous.Contains(other))
                 {
+                    // Collision enter
                     collider.NotifyCollisionEnter(otherCollider);
-                    otherCollider.NotifyCollisionEnter(collider);
                 }
             }
 
-            // Detect collision exits
-            if (_previousCollisions.ContainsKey(entity))
+            // Check for collision exits
+            if (_previousCollisions.TryGetValue(entity, out var previousSet))
             {
-                var exited = _previousCollisions[entity].Except(currentColliding);
-                foreach (var other in exited)
+                foreach (var previous in previousSet)
                 {
-                    var otherCollider = other.GetComponent<ColliderComponent>();
-                    if (otherCollider != null)
+                    if (!currentColliding.Contains(previous))
                     {
-                        collider.NotifyCollisionExit(otherCollider);
-                        otherCollider.NotifyCollisionExit(collider);
+                        var otherCollider = previous.GetComponent<ColliderComponent>();
+                        if (otherCollider != null)
+                        {
+                            collider.NotifyCollisionExit(otherCollider);
+                        }
                     }
                 }
             }
 
+            // Update previous collisions
             _previousCollisions[entity] = currentColliding;
         }
     }
 
-    public void Dispose()
+    private void CleanupDestroyedEntities(IEntityWorld world)
     {
-        foreach (var shape in _entityShapes.Values)
+        var destroyed = _entityShapes.Keys.Where(e => !e.IsActive).ToList();
+        foreach (var entity in destroyed)
         {
-            _collisionSystem.RemoveShape(shape);
+            _collisionSystem.RemoveShape(_entityShapes[entity]);
+            _entityShapes.Remove(entity);
+            _previousCollisions.Remove(entity);
         }
-        _entityShapes.Clear();
-        _previousCollisions.Clear();
     }
 }

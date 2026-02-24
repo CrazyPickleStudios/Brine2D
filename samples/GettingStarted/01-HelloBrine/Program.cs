@@ -2,31 +2,19 @@
 using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Input;
-using Brine2D.Rendering;
-using Brine2D.SDL;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
-// Create the game application builder (similar to ASP.NET)
 var builder = GameApplication.CreateBuilder(args);
 
-// Add Brine2D with SDL backend
-builder.Services
-    .AddBrine2D(options =>
-    {
-        options.Window.Title = "Hello Brine2D";
-        options.Window.Width = 1280;
-        options.Window.Height = 720;
-        options.Rendering.Backend = GraphicsBackend.GPU;
-        options.Rendering.VSync = true;
-    })
-    .UseSDL(); // Activate SDL backend
+builder.Configure(options =>
+{
+    options.Window.Title = "01 - Hello Brine";
+    options.Window.Width = 1280;
+    options.Window.Height = 720;
+});
 
-// Register scene
-builder.Services.AddScene<GameScene>();
+builder.AddScene<GameScene>();
 
-// Build and run
-var game = builder.Build();
+await using var game = builder.Build();
 await game.RunAsync<GameScene>();
 
 // Scene definition

@@ -286,7 +286,6 @@ public class SceneManagerTests : TestBase
     {
         public ManualScene()
         {
-            EnableLifecycleHooks = false;
             EnableAutomaticFrameManagement = false;
         }
     }

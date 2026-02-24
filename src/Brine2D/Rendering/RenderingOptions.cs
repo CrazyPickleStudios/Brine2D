@@ -1,42 +1,32 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Drawing;
-using System.Text;
 
 namespace Brine2D.Rendering;
 
 /// <summary>
 /// Configuration options for the rendering system.
 /// </summary>
-public class RenderingOptions
+public sealed class RenderingOptions
 {
     /// <summary>
-    /// Configuration section name for binding from JSON.
-    /// </summary>
-    public const string SectionName = "Rendering";
-
-    /// <summary>
-    /// Gets or sets the graphics backend to use (GPU or LegacyRenderer).
-    /// Defaults to GPU for modern hardware-accelerated rendering.
-    /// </summary>
-    public GraphicsBackend Backend { get; set; } = GraphicsBackend.GPU;
-    
-    /// <summary>
     /// Gets or sets whether VSync is enabled.
+    /// When true, frame rate is synchronized with display refresh rate.
     /// </summary>
     public bool VSync { get; set; } = true;
-    
+
     /// <summary>
-    /// Gets or sets the preferred GPU driver (Vulkan, Metal, D3D11, D3D12).
-    /// Null = auto-select based on platform.
+    /// Preferred GPU driver backend.
+    /// If null or Auto, SDL3 will automatically select the best driver for the platform.
     /// </summary>
-    public string? PreferredGPUDriver { get; set; } = null;
-    
+    public GPUDriver PreferredGPUDriver { get; set; } = GPUDriver.Auto;
+
     /// <summary>
     /// Gets or sets the target frames per second for the game loop.
+    /// 0 = unlimited (use VSync or monitor refresh rate).
     /// </summary>
-    public int TargetFPS { get; set; } = 60;
-    
+    [Range(0, 240, ErrorMessage = "TargetFPS must be between 0 (uncapped) and 240")]
+    public int TargetFPS { get; set; } = 0;
+
     /// <summary>
     /// Gets or sets the clear color used when clearing the screen each frame.
     /// </summary>

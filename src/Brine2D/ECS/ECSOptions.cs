@@ -13,11 +13,6 @@ namespace Brine2D.ECS;
 public class ECSOptions
 {
     /// <summary>
-    /// Configuration section name for binding from JSON.
-    /// </summary>
-    public const string SectionName = "ECS";
-    
-    /// <summary>
     /// Gets or sets the initial entity capacity to pre-allocate.
     /// </summary>
     /// <remarks>
@@ -25,7 +20,7 @@ public class ECSOptions
     /// to avoid resizing during gameplay. If you expect more entities,
     /// increase this value to reduce memory allocations during runtime.
     /// </remarks>
-    [Range(16, int.MaxValue, ErrorMessage = "InitialEntityCapacity must be at least 16.")]
+    [Range(16, 1_000_000, ErrorMessage = "InitialEntityCapacity must be between 16 and 1,000,000")]
     public int InitialEntityCapacity { get; set; } = 1000;
     
     /// <summary>
@@ -49,7 +44,7 @@ public class ECSOptions
     /// (via parallel entity processing).
     /// </remarks>
     public bool EnableMultiThreading { get; set; } = true;
-    
+
     /// <summary>
     /// Gets or sets the number of worker threads for parallel system execution.
     /// </summary>
@@ -66,9 +61,9 @@ public class ECSOptions
     /// This setting is only used when <see cref="EnableMultiThreading"/> is true.
     /// </para>
     /// </remarks>
-    [Range(1, 64, ErrorMessage = "WorkerThreadCount must be between 1 and 64.")]
+    [Range(1, 128, ErrorMessage = "WorkerThreadCount must be between 1 and 128 if specified")]
     public int? WorkerThreadCount { get; set; } = null;
-    
+
     /// <summary>
     /// Gets or sets the minimum number of entities required before parallel processing is used.
     /// </summary>
@@ -89,6 +84,6 @@ public class ECSOptions
     /// (better for lightweight components with high iteration overhead).
     /// </para>
     /// </remarks>
-    [Range(1, int.MaxValue, ErrorMessage = "ParallelEntityThreshold must be at least 1.")]
+    [Range(1, int.MaxValue, ErrorMessage = "ParallelEntityThreshold must be at least 1")]
     public int ParallelEntityThreshold { get; set; } = 100;
 }

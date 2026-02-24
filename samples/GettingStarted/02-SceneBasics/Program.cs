@@ -1,23 +1,17 @@
-﻿using Brine2D.Engine;
-using Brine2D.Hosting;
-using Brine2D.SDL;
+﻿using Brine2D.Hosting;
 using SceneBasics;
 
-// Create builder and configure Brine2D
-// (See 01-HelloBrine for detailed setup explanation)
 var builder = GameApplication.CreateBuilder(args);
 
-builder.Services.AddBrine2D(options =>
+builder.Configure(options =>
 {
     options.Window.Title = "02 - Scene Basics";
     options.Window.Width = 1280;
     options.Window.Height = 720;
 });
 
-// Register both scenes
-builder.Services.AddScene<MenuScene>();
-builder.Services.AddScene<GameScene>();
+builder.AddScene<MenuScene>();
+builder.AddScene<GameScene>();
 
-// Build and run starting with MenuScene
-var game = builder.Build();
+await using var game = builder.Build();
 await game.RunAsync<MenuScene>();

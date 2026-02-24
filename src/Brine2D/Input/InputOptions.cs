@@ -6,11 +6,6 @@ namespace Brine2D.Input;
 public class InputOptions
 {
     /// <summary>
-    /// Configuration section name for binding from JSON.
-    /// </summary>
-    public const string SectionName = "Input";
-    
-    /// <summary>
     /// Gets or sets whether gamepad support is enabled.
     /// </summary>
     public bool EnableGamepad { get; set; } = true;

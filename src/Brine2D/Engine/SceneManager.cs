@@ -1,35 +1,34 @@
-﻿using Brine2D.Core;
+﻿using Brine2D.Audio;
+using Brine2D.Core;
 using Brine2D.ECS;
-using Brine2D.ECS.Systems;
+using Brine2D.Hosting;
 using Brine2D.Input;
 using Brine2D.Rendering;
+using Brine2D.Systems.Audio;
+using Brine2D.Systems.Collision;
+using Brine2D.Systems.Physics;
+using Brine2D.Systems.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.Engine
 {
     /// <summary>
-    /// Default implementation of scene management.
-    /// Executes lifecycle hooks (like ECS pipelines) automatically - no manual calls needed!
-    /// Handles frame management (Clear/BeginFrame/EndFrame) automatically.
-    /// Supports scene transitions and loading screens.
-    /// Defers scene transitions to frame boundaries for safety.
-    /// Scenes can opt-out of automatic behavior for advanced control.
+    /// Manages scene lifetime: loading, transitions, loading screens, and frame-boundary deferral.
     /// </summary>
     internal sealed class SceneManager : ISceneManager
     {
         private readonly ILogger<SceneManager> _logger;
         private readonly IServiceProvider _serviceProvider;
-        private readonly Dictionary<Type, Type> _registeredScenes;
-        private readonly List<ISceneLifecycleHook> _hooks;
         private readonly IRenderer? _renderer;
+        private readonly int _loadingScreenMinimumDisplayMs;
 
         private ISceneTransition? _activeTransition;
         private LoadingScene? _activeLoadingScreen;
         private bool _isTransitioning = false;
 
         private Scene? _currentScene;
-        private IServiceScope? _currentSceneScope; 
+        private IServiceScope? _currentSceneScope;
 
         // Deferred transition support (like EntityWorld pattern)
         private bool _isProcessingFrame = false;
@@ -40,6 +39,8 @@ namespace Brine2D.Engine
         // Factory-based scene loading support
         private Func<IServiceProvider, Scene>? _deferredSceneFactory;
 
+        private readonly HashSet<Type> _registeredScenes;
+
         public Scene? CurrentScene
         {
             get => _currentScene;
@@ -49,80 +50,60 @@ namespace Brine2D.Engine
         public SceneManager(
             ILogger<SceneManager> logger,
             IServiceProvider serviceProvider,
-            IEnumerable<ISceneLifecycleHook>? hooks = null,
-            IRenderer? renderer = null)
+            IRenderer? renderer = null,
+            HashSet<Type>? registeredScenes = null,
+            Brine2DOptions? options = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-            _registeredScenes = new Dictionary<Type, Type>();
             _renderer = renderer;
-
-            // Sort hooks by order
-            _hooks = hooks?.OrderBy(h => h.Order).ToList() ?? new List<ISceneLifecycleHook>();
-
-            if (_hooks.Any())
-            {
-                _logger.LogDebug("SceneManager initialized with {Count} lifecycle hooks", _hooks.Count);
-                foreach (var hook in _hooks)
-                {
-                    _logger.LogDebug("  - {HookType} (order: {Order})",
-                        hook.GetType().Name, hook.Order);
-                }
-            }
+            _registeredScenes = registeredScenes ?? new HashSet<Type>();
+            _loadingScreenMinimumDisplayMs = options?.LoadingScreenMinimumDisplayMs ?? 200;
 
             if (_renderer != null)
-            {
                 _logger.LogDebug("SceneManager will handle automatic frame management");
-            }
-        }
-
-        public void RegisterScene<TScene>() where TScene : Scene
-        {
-            var sceneType = typeof(TScene);
-            _registeredScenes[sceneType] = sceneType;
-            _logger.LogDebug("Registered scene: {SceneType}", sceneType.Name);
         }
 
         /// <summary>
         /// Called by GameLoop to indicate frame processing has started.
         /// Scene transitions will be deferred until ProcessDeferredTransitionsAsync().
         /// </summary>
-        internal void BeginFrame()
-        {
-            _isProcessingFrame = true;
-        }
+        internal void BeginFrame() => _isProcessingFrame = true;
 
         /// <summary>
         /// Processes deferred scene transitions at frame boundaries.
         /// Called by GameLoop after Update() and Render() complete.
         /// </summary>
-        internal async Task ProcessDeferredTransitionsAsync(CancellationToken ct)
+        internal Task ProcessDeferredTransitionsAsync(CancellationToken ct)
         {
             _isProcessingFrame = false;
 
-            // Handle factory-based deferred load
-            if (_deferredSceneFactory != null)
-            {
-                _logger.LogDebug("Processing deferred scene transition using factory");
+            // Fast path; no allocation when nothing is deferred (the common case, every frame)
+            if (_deferredSceneFactory == null && _deferredSceneType == null)
+                return Task.CompletedTask;
 
-                await LoadSceneInternalFactoryAsync(_deferredSceneFactory, _deferredTransition, _deferredLoadingScreen, ct);
+            return _deferredSceneFactory != null
+                ? ProcessDeferredFactoryAsync(ct)
+                : ProcessDeferredTypeAsync(ct);
+        }
 
-                _deferredSceneFactory = null;
-                _deferredSceneType = null;
-                _deferredTransition = null;
-                _deferredLoadingScreen = null;
-            }
-            // Handle type-based deferred load
-            else if (_deferredSceneType != null)
-            {
-                _logger.LogDebug("Processing deferred scene transition to {SceneName}", _deferredSceneType.Name);
+        private async Task ProcessDeferredFactoryAsync(CancellationToken ct)
+        {
+            _logger.LogDebug("Processing deferred scene transition using factory");
+            await LoadSceneInternalFactoryAsync(_deferredSceneFactory!, _deferredTransition, _deferredLoadingScreen, ct);
+            _deferredSceneFactory = null;
+            _deferredSceneType = null;
+            _deferredTransition = null;
+            _deferredLoadingScreen = null;
+        }
 
-                await LoadSceneInternalAsync(_deferredSceneType, _deferredTransition, _deferredLoadingScreen, ct);
-
-                _deferredSceneType = null;
-                _deferredTransition = null;
-                _deferredLoadingScreen = null;
-            }
+        private async Task ProcessDeferredTypeAsync(CancellationToken ct)
+        {
+            _logger.LogDebug("Processing deferred scene transition to {SceneName}", _deferredSceneType!.Name);
+            await LoadSceneInternalAsync(_deferredSceneType, _deferredTransition, _deferredLoadingScreen, ct);
+            _deferredSceneType = null;
+            _deferredTransition = null;
+            _deferredLoadingScreen = null;
         }
 
         // Generic method (most common use case)
@@ -130,36 +111,24 @@ namespace Brine2D.Engine
             ISceneTransition? transition = null,
             CancellationToken cancellationToken = default)
             where TScene : Scene
-        {
-            return LoadSceneAsync(typeof(TScene), transition, null, cancellationToken);
-        }
+            => LoadSceneAsync(typeof(TScene), transition, null, cancellationToken);
 
-        // Generic with loading screen
+        // Generic with loading screen; fully sets up the loading screen before handing off
         public Task LoadSceneAsync<TScene, TLoadingScene>(
             ISceneTransition? transition = null,
             CancellationToken cancellationToken = default)
             where TScene : Scene
             where TLoadingScene : LoadingScene
         {
-            var loadingScreen = _serviceProvider.GetService<TLoadingScene>();
+            var loadingScreen = _serviceProvider.GetService<TLoadingScene>()
+                ?? ActivatorUtilities.CreateInstance<TLoadingScene>(_serviceProvider);
 
-            if (loadingScreen == null)
-            {
-                // Fallback: create with Activator if not registered
-                loadingScreen = Activator.CreateInstance<TLoadingScene>();
-            }
-
-            if (loadingScreen != null)
-            {
-                var loggerFactory = _serviceProvider.GetRequiredService<ILoggerFactory>();
-                loadingScreen.Logger = loggerFactory.CreateLogger(typeof(TLoadingScene));
-                loadingScreen.Renderer = _serviceProvider.GetRequiredService<IRenderer>();
-            }
+            SetupLoadingScene(loadingScreen);
 
             return LoadSceneAsync(typeof(TScene), transition, loadingScreen, cancellationToken);
         }
 
-        // Type-based method (implementation with deferment support)
+        // Type-based method (implementation with deferral support)
         public async Task LoadSceneAsync(
             Type sceneType,
             ISceneTransition? transition = null,
@@ -167,11 +136,8 @@ namespace Brine2D.Engine
             CancellationToken cancellationToken = default)
         {
             if (!typeof(Scene).IsAssignableFrom(sceneType))
-            {
-                throw new ArgumentException($"Type {sceneType.Name} does not implement IScene", nameof(sceneType));
-            }
+                throw new ArgumentException($"Type {sceneType.Name} does not inherit from Scene", nameof(sceneType));
 
-            // Defer if called during frame processing
             if (_isProcessingFrame)
             {
                 _deferredSceneType = sceneType;
@@ -180,164 +146,219 @@ namespace Brine2D.Engine
                 return;
             }
 
-            // Safe to load immediately (called outside frame processing)
             await LoadSceneInternalAsync(sceneType, transition, loadingScreen, cancellationToken);
         }
 
         /// <summary>
         /// Loads a scene using a custom factory function.
-        /// This allows passing runtime data to scenes that DI alone cannot provide.
+        /// Use when runtime data needs to be passed to the initial scene that DI alone cannot provide.
         /// </summary>
-        /// <typeparam name="TScene">The scene type to load.</typeparam>
-        /// <param name="sceneFactory">Factory function to create the scene.</param>
-        /// <param name="transition">Optional transition effect.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <example>
-        /// <code>
-        /// // Pass level number to scene
-        /// var levelNumber = 5;
-        /// await sceneManager.LoadSceneAsync&lt;GameScene&gt;(sp => 
-        /// {
-        ///     var renderer = sp.GetRequiredService&lt;IRenderer&gt;();
-        ///     var input = sp.GetRequiredService&lt;IInputService&gt;();
-        ///     var logger = sp.GetRequiredService&lt;ILogger&lt;GameScene&gt;&gt;();
-        ///     return new GameScene(renderer, input, logger, levelNumber);
-        /// });
-        /// </code>
-        /// </example>
         public async Task LoadSceneAsync<TScene>(
             Func<IServiceProvider, TScene> sceneFactory,
             ISceneTransition? transition = null,
+            LoadingScene? loadingScreen = null,
             CancellationToken cancellationToken = default)
             where TScene : Scene
         {
-            if (sceneFactory == null)
-                throw new ArgumentNullException(nameof(sceneFactory));
+            ArgumentNullException.ThrowIfNull(sceneFactory);
 
-            // Defer if called during frame processing
             if (_isProcessingFrame)
             {
-                // Store the factory for deferred execution
                 _deferredSceneFactory = sp => sceneFactory(sp);
                 _deferredSceneType = typeof(TScene);
                 _deferredTransition = transition;
-                _deferredLoadingScreen = null;
+                _deferredLoadingScreen = loadingScreen;
                 return;
             }
 
-            // Safe to load immediately
-            await LoadSceneInternalFactoryAsync(sp => sceneFactory(sp), transition, null, cancellationToken);
+            await LoadSceneInternalFactoryAsync(sp => sceneFactory(sp), transition, loadingScreen, cancellationToken);
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // Setup helpers
+        // -----------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Assigns framework properties to a loading screen.
+        /// World is intentionally not set; loading screens have no ECS world.
+        /// Previously only Logger and Renderer were set here, leaving Audio/Input/Game null
+        /// and causing NREs in any LoadingScene override that accessed those properties.
+        /// </summary>
+        private void SetupLoadingScene(LoadingScene loadingScene)
+        {
+            var loggerFactory = _serviceProvider.GetRequiredService<ILoggerFactory>();
+            loadingScene.Logger = loggerFactory.CreateLogger(loadingScene.GetType());
+            loadingScene.Renderer = _serviceProvider.GetRequiredService<IRenderer>();
+            loadingScene.Input = _serviceProvider.GetRequiredService<IInputContext>();
+            loadingScene.Audio = _serviceProvider.GetRequiredService<AudioService>();
+            loadingScene.Game = _serviceProvider.GetRequiredService<IGameContext>();
         }
 
         /// <summary>
-        /// Internal method that actually performs the scene load (type-based).
+        /// Shared scene setup applied to every scene regardless of how it was created.
+        /// Assigns all framework-injected properties and adds default world systems.
         /// </summary>
-        private async Task LoadSceneInternalAsync(
+        private void SetupScene(Scene scene, IServiceScope scope)
+        {
+            var loggerFactory = _serviceProvider.GetRequiredService<ILoggerFactory>();
+            scene.Logger = loggerFactory.CreateLogger(scene.GetType());
+
+            var world = scope.ServiceProvider.GetRequiredService<IEntityWorld>();
+
+            // Default systems; disable any via World.GetSystem<T>()!.IsEnabled = false in OnEnter()
+            world.AddSystem<SpriteRenderingSystem>();
+            world.AddSystem<ParticleSystem>();
+            world.AddSystem<VelocitySystem>();
+            world.AddSystem<CollisionDetectionSystem>();
+            world.AddSystem<AudioSystem>();
+            world.AddSystem<CameraSystem>();
+            world.AddSystem<DebugRenderer>(debug => debug.IsEnabled = false);
+
+            // Apply project-level scene configuration (registered via builder.ConfigureScene())
+            _serviceProvider.GetService<SceneWorldConfiguration>()?.Apply(world);
+
+            _logger.LogDebug("Default engine systems added to world for scene: {SceneName}", scene.GetType().Name);
+
+            scene.World = world;
+            scene.Renderer = _serviceProvider.GetRequiredService<IRenderer>();
+            scene.Input = _serviceProvider.GetRequiredService<IInputContext>();
+            scene.Audio = _serviceProvider.GetRequiredService<AudioService>();
+            scene.Game = _serviceProvider.GetRequiredService<IGameContext>();
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // Internal load paths; thin wrappers over the shared core
+        // -----------------------------------------------------------------------------------------
+
+        // Resolves the scene from DI/ActivatorUtilities, then delegates to the core
+        private Task LoadSceneInternalAsync(
             Type sceneType,
             ISceneTransition? transition,
             LoadingScene? loadingScreen,
             CancellationToken cancellationToken)
+            => LoadSceneInternalCoreAsync(
+                scope =>
+                {
+                    var scene = scope.ServiceProvider.GetService(sceneType) as Scene;
+                    if (scene != null)
+                    {
+                        _logger.LogDebug("Loaded registered scene from DI: {SceneName}", sceneType.Name);
+                        return scene;
+                    }
+
+                    scene = (Scene)ActivatorUtilities.CreateInstance(scope.ServiceProvider, sceneType);
+                    _logger.LogDebug("Created unregistered scene via ActivatorUtilities: {SceneName}", sceneType.Name);
+                    return scene;
+                },
+                sceneType.Name,
+                transition, loadingScreen, cancellationToken);
+
+        // Creates the scene via caller-supplied factory, then delegates to the core
+        private Task LoadSceneInternalFactoryAsync(
+            Func<IServiceProvider, Scene> sceneFactory,
+            ISceneTransition? transition,
+            LoadingScene? loadingScreen,
+            CancellationToken cancellationToken)
+            => LoadSceneInternalCoreAsync(
+                scope => sceneFactory(scope.ServiceProvider)
+                    ?? throw new InvalidOperationException("Scene factory returned null"),
+                "factory",
+                transition, loadingScreen, cancellationToken);
+
+        /// <summary>
+        /// Core scene loading logic shared by all load paths.
+        /// Handles the transition, loading screen, old-scene teardown, scope creation,
+        /// scene setup, lifecycle calls, and configurable minimum display delay.
+        /// </summary>
+        private async Task LoadSceneInternalCoreAsync(
+            Func<IServiceScope, Scene> resolveScene,
+            string logName,
+            ISceneTransition? transition,
+            LoadingScene? loadingScreen,
+            CancellationToken cancellationToken)
         {
-            if (_isTransitioning) return;
+            if (_isTransitioning)
+            {
+                // A transition is already running (e.g., a LoadSceneAsync call arrived from an
+                // async callback outside the frame boundary). Silently dropping it would cause
+                // hard-to-diagnose bugs, so warn loudly instead.
+                _logger.LogWarning(
+                    "LoadScene({Scene}) ignored; a scene transition is already in progress. " +
+                    "Call LoadSceneAsync from within a frame (OnUpdate/OnEnter) to use deferred queuing.",
+                    logName);
+                return;
+            }
+
             _isTransitioning = true;
 
             try
             {
-                _logger.LogInformation("Loading scene: {SceneName}", sceneType.Name);
+                _logger.LogInformation("Loading scene: {SceneName}", logName);
 
-                // Start transition
+                // Begin visual transition effect (if any)
                 if (transition != null)
                 {
                     _activeTransition = transition;
                     _activeTransition.Begin();
                 }
 
-                // Load and set loading screen as current scene FIRST
+                // Swap in the loading screen and tear down the outgoing scene
+                var oldScene = CurrentScene;
+
                 if (loadingScreen != null)
                 {
                     _activeLoadingScreen = loadingScreen;
                     await _activeLoadingScreen.OnLoadAsync(cancellationToken);
-
-                    // Make loading screen the current scene
-                    var oldScene = CurrentScene;
                     CurrentScene = _activeLoadingScreen;
-
-                    // Unload old scene in background
-                    if (oldScene != null)
-                    {
-                        _logger.LogDebug("Exiting current scene {SceneName}", oldScene.GetType().Name);
-                        oldScene.OnExit();
-                        
-                        if (oldScene is Scene oldConcreteScene)
-                        {
-                            RemoveSceneSystemConfiguration(oldConcreteScene);
-                        }
-                        
-                        await oldScene.OnUnloadAsync(cancellationToken);
-                    }
                 }
                 else
                 {
-                    // No loading screen - just unload old scene
-                    var oldScene = CurrentScene;
                     CurrentScene = null;
-                    if (oldScene != null)
-                    {
-                        _logger.LogDebug("Exiting current scene {SceneName}", oldScene.GetType().Name);
-                        oldScene.OnExit();
-                        
-                        if (oldScene is Scene oldConcreteScene)
-                        {
-                            RemoveSceneSystemConfiguration(oldConcreteScene);
-                        }
-                        
-                        await oldScene.OnUnloadAsync(cancellationToken);
-                    }
+                }
+
+                if (oldScene != null)
+                {
+                    _logger.LogDebug("Exiting current scene {SceneName}", oldScene.GetType().Name);
+                    oldScene.OnExit();
+                    await oldScene.OnUnloadAsync(cancellationToken);
                 }
 
                 _activeLoadingScreen?.UpdateProgress(0.3f, "Creating scene...");
 
-                // Create new scene
-                var scene = (Scene)_serviceProvider.GetRequiredService(sceneType);
+                // Create a fresh DI scope for the new scene
+                _logger.LogDebug("Creating new scene service scope");
+                _currentSceneScope?.Dispose();
+                _currentSceneScope = _serviceProvider.CreateScope();
 
-                if (scene is Scene concreteScene)
+                var scene = resolveScene(_currentSceneScope);
+
+                var sceneType = scene.GetType();
+                if (!_registeredScenes.Contains(sceneType))
                 {
-                    // Set logger specific to this scene type
-                    var loggerFactory = _serviceProvider.GetRequiredService<ILoggerFactory>();
-                    concreteScene.Logger = loggerFactory.CreateLogger(sceneType);
-
-                    // Set entity world (scoped per scene)
-                    concreteScene.World = _serviceProvider.GetRequiredService<IEntityWorld>();
-
-                    // Set renderer
-                    concreteScene.Renderer = _serviceProvider.GetRequiredService<IRenderer>();
-
-                    // Initialize scene-specific systems
-                    concreteScene.InitializeSystems(_serviceProvider, _logger);
-                    ApplySceneSystemConfiguration(concreteScene);
+                    _logger.LogWarning(
+                        "Scene {SceneName} was not registered via builder.AddScene<T>(). " +
+                        "Consider registering it for automatic dependency validation at startup.",
+                        sceneType.Name);
                 }
+
+                SetupScene(scene, _currentSceneScope);
 
                 _activeLoadingScreen?.UpdateProgress(0.5f, "Loading assets...");
 
-                // Load scene (loading screen renders during this)
                 await scene.OnLoadAsync(cancellationToken);
-
-                // Add
                 scene.OnEnter();
 
                 _activeLoadingScreen?.UpdateProgress(1.0f, "Ready!");
 
-                if (_activeLoadingScreen != null)
-                {
-                    await Task.Delay(200, cancellationToken);
-                }
+                // Hold the loading screen visible for the configured minimum duration so it
+                // doesn't flash imperceptibly on fast loads. Configurable via
+                // builder.Configure(o => o.LoadingScreenMinimumDisplayMs = 0) to disable.
+                if (_activeLoadingScreen != null && _loadingScreenMinimumDisplayMs > 0)
+                    await Task.Delay(_loadingScreenMinimumDisplayMs, cancellationToken);
 
-                // Swap to loaded scene
                 CurrentScene = scene;
-
                 _logger.LogInformation("Scene loaded successfully: {SceneName}", scene.Name);
 
-                // Clean up loading screen
                 if (_activeLoadingScreen != null)
                 {
                     await _activeLoadingScreen.OnUnloadAsync(cancellationToken);
@@ -346,111 +367,26 @@ namespace Brine2D.Engine
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load scene: {SceneName}", sceneType.Name);
+                _logger.LogError(ex, "Failed to load scene: {SceneName}", logName);
                 throw;
             }
             finally
             {
                 _isTransitioning = false;
+                _activeTransition = null;
             }
         }
 
-        /// <summary>
-        /// Internal method for factory-based scene loading (non-generic for deferred execution).
-        /// </summary>
-        private async Task LoadSceneInternalFactoryAsync(
-            Func<IServiceProvider, Scene> sceneFactory,
-            ISceneTransition? transition,
-            LoadingScene? loadingScreen,
-            CancellationToken cancellationToken)
-        {
-            if (_isTransitioning) return;
-            _isTransitioning = true;
-
-            _logger.LogInformation("Loading scene using factory");
-
-            try
-            {
-                // START TRANSITION
-                if (transition != null)
-                {
-                    _activeTransition = transition;
-                    _activeTransition.Begin();
-                }
-
-                // UNLOAD CURRENT SCENE
-                if (CurrentScene != null)
-                {
-                    _logger.LogDebug("Exiting current scene {SceneName}", CurrentScene.GetType().Name);
-                    CurrentScene.OnExit(); 
-
-                    if (CurrentScene is Scene oldConcreteScene)
-                    {
-                        RemoveSceneSystemConfiguration(oldConcreteScene);
-                    }
-
-                    await CurrentScene.OnUnloadAsync(cancellationToken);
-                    CurrentScene = null;
-                }
-
-                // Dispose old scene scope
-                _currentSceneScope?.Dispose();
-                _currentSceneScope = null;
-
-                // LOAD NEW SCENE
-                _logger.LogDebug("Creating new scene scope");
-                _currentSceneScope = _serviceProvider.CreateScope();
-
-                // Create scene using factory
-                var scene = sceneFactory(_currentSceneScope.ServiceProvider);
-        
-                if (scene == null)
-                {
-                    throw new InvalidOperationException("Scene factory returned null");
-                }
-
-                // Initialize concrete scene if applicable
-                if (scene is Scene concreteScene)
-                {
-                    var loggerFactory = _currentSceneScope.ServiceProvider.GetRequiredService<ILoggerFactory>();
-                    concreteScene.Logger = loggerFactory.CreateLogger(scene.GetType());
-
-                    concreteScene.World = _currentSceneScope.ServiceProvider.GetRequiredService<IEntityWorld>();
-                    concreteScene.Renderer = _currentSceneScope.ServiceProvider.GetRequiredService<IRenderer>();
-
-                    concreteScene.InitializeSystems(_currentSceneScope.ServiceProvider, _logger);
-                    ApplySceneSystemConfiguration(concreteScene);
-                }
-
-                // Load scene
-                _logger.LogDebug("Loading scene {SceneName}", scene.GetType().Name);
-                await scene.OnLoadAsync(cancellationToken);
-
-                CurrentScene = scene;
-
-                _logger.LogInformation("Scene {SceneName} loaded successfully", scene.GetType().Name);
-        
-                // Transition will complete via Update() calls in the game loop
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load scene using factory");
-                throw;
-            }
-            finally
-            {
-                _isTransitioning = false;
-            }
-        }
+        // -----------------------------------------------------------------------------------------
+        // Per-frame update and render
+        // -----------------------------------------------------------------------------------------
 
         public void Update(GameTime gameTime)
         {
-            // Update active transition (if any)
             if (_activeTransition != null)
             {
                 _activeTransition.Update(gameTime);
 
-                // Clear transition when complete so scene can start updating
                 if (_activeTransition.IsComplete)
                 {
                     _activeTransition = null;
@@ -458,14 +394,10 @@ namespace Brine2D.Engine
                     _logger.LogDebug("Transition completed");
                 }
 
-                // If transition is still active, don't update scene yet
                 if (_activeTransition != null)
-                {
                     return;
-                }
             }
 
-            // Update loading screen (if any)
             if (_activeLoadingScreen != null)
             {
                 _activeLoadingScreen.OnUpdate(gameTime);
@@ -475,192 +407,36 @@ namespace Brine2D.Engine
             var currentScene = CurrentScene;
             if (currentScene == null) return;
 
-            var world = currentScene.World;
-
-            if (currentScene.EnableLifecycleHooks)
-            {
-                // Pre-update hooks
-                foreach (var hook in _hooks)
-                {
-                    try
-                    {
-                        hook.PreUpdate(gameTime, world);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error in PreUpdate hook: {HookType}", hook.GetType().Name);
-                    }
-                }
-            }
-
             currentScene.OnUpdate(gameTime);
-
-            if (currentScene.EnableLifecycleHooks)
-            {
-                world.Update(gameTime);
-
-                // Post-update hooks
-                foreach (var hook in _hooks)
-                {
-                    try
-                    {
-                        hook.PostUpdate(gameTime, world);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error in PostUpdate hook: {HookType}", hook.GetType().Name);
-                    }
-                }
-            }
+            currentScene.World.Update(gameTime);
         }
 
         public void Render(GameTime gameTime)
         {
             var currentScene = CurrentScene;
 
-            // Automatic frame management (default)
             if (currentScene != null && currentScene.EnableAutomaticFrameManagement && _renderer != null)
-            {
                 _renderer.BeginFrame();
-            }
 
-            // Render loading screen if active (takes over entire render)
             if (_activeLoadingScreen != null)
             {
                 _activeLoadingScreen.OnRender(gameTime);
             }
             else if (currentScene != null)
             {
-                var world = currentScene.World;
+                if (_renderer != null)
+                    currentScene.World.Render(_renderer);
 
-                if (currentScene.EnableLifecycleHooks)
-                {
-                    // Pre-render hooks (ECS rendering systems)
-                    foreach (var hook in _hooks)
-                    {
-                        try
-                        {
-                            hook.PreRender(gameTime, world);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error in PreRender hook: {HookType}", hook.GetType().Name);
-                        }
-                    }
-                }
-
-                // World render (OOP components)
-                if (_renderer != null && currentScene.EnableLifecycleHooks)
-                {
-                    world.Render(_renderer);
-                }
-
-                // Scene render (UI, overlays, custom rendering)
                 currentScene.OnRender(gameTime);
-
-                if (currentScene.EnableLifecycleHooks)
-                {
-                    // Post-render hooks (debug overlays, etc.)
-                    foreach (var hook in _hooks)
-                    {
-                        try
-                        {
-                            hook.PostRender(gameTime, world);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error in PostRender hook: {HookType}", hook.GetType().Name);
-                        }
-                    }
-                }
             }
 
-            // Render transition overlay on top of everything
             if (_activeTransition != null && _renderer != null)
-            {
                 _activeTransition.Render(_renderer);
-            }
 
-            // Automatic frame management (default)
             if (currentScene != null && currentScene.EnableAutomaticFrameManagement && _renderer != null)
             {
                 _renderer.ApplyPostProcessing();
                 _renderer.EndFrame();
-            }
-        }
-
-        private void ApplySceneSystemConfiguration(Scene scene)
-        {
-            if (scene.SystemConfigurator == null) return;
-
-            var updatePipeline = _serviceProvider.GetService<UpdatePipeline>();
-            var renderPipeline = _serviceProvider.GetService<RenderPipeline>();
-
-            // Add scene-specific systems
-            foreach (var system in scene.SystemConfigurator.SceneSystems)
-            {
-                if (system is IUpdateSystem updateSystem)
-                {
-                    updatePipeline?.AddSystem(updateSystem);
-                    _logger.LogDebug("Added scene-specific update system: {SystemName}", updateSystem.Name);
-                }
-                else if (system is IRenderSystem renderSystem)
-                {
-                    renderPipeline?.AddSystem(renderSystem);
-                    _logger.LogDebug("Added scene-specific render system: {SystemName}", renderSystem.GetType().Name);
-                }
-            }
-
-            // Disable global systems for this scene
-            if (scene.SystemConfigurator.DisabledSystemNames.Count > 0)
-            {
-                updatePipeline?.DisableSystems(scene.SystemConfigurator.DisabledSystemNames);
-                renderPipeline?.DisableSystems(scene.SystemConfigurator.DisabledSystemNames);
-                _logger.LogDebug("Disabled {Count} systems for scene '{SceneName}'",
-                    scene.SystemConfigurator.DisabledSystemNames.Count, scene.Name);
-            }
-        }
-
-        private void RemoveSceneSystemConfiguration(Scene scene)
-        {
-            if (scene.SystemConfigurator == null) return;
-
-            var updatePipeline = _serviceProvider.GetService<UpdatePipeline>();
-            var renderPipeline = _serviceProvider.GetService<RenderPipeline>();
-
-            // Remove scene-specific systems
-            foreach (var system in scene.SystemConfigurator.SceneSystems)
-            {
-                if (system is IUpdateSystem updateSystem)
-                {
-                    updatePipeline?.RemoveSystem(updateSystem);
-                }
-                else if (system is IRenderSystem renderSystem)
-                {
-                    renderPipeline?.RemoveSystem(renderSystem);
-                }
-            }
-
-            // Re-enable all systems
-            updatePipeline?.EnableAllSystems();
-            renderPipeline?.EnableAllSystems();
-
-            _logger.LogDebug("Removed scene-specific systems for '{SceneName}'", scene.Name);
-        }
-
-        public async Task LoadSceneChainAsync(
-            SceneChain chain,
-            CancellationToken cancellationToken = default)
-        {
-            if (chain == null)
-                throw new ArgumentNullException(nameof(chain));
-            
-            foreach (var (sceneType, transition) in chain.Scenes)
-            {
-                await LoadSceneAsync(sceneType, transition, null, cancellationToken);
-                
-                // Wait for scene to signal completion (optional - implement if needed)
-                // This would require scenes to have a "completion" event/task
             }
         }
     }

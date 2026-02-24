@@ -6,11 +6,10 @@ namespace Brine2D.ECS.Components;
 /// <summary>
 /// Component that defines a collision shape for an entity.
 /// Supports circle and box (AABB) shapes.
+/// Pure data - logic handled by CollisionDetectionSystem.
 /// </summary>
 public class ColliderComponent : Component
 {
-    private TransformComponent? _transform;
-    
     /// <summary>
     /// The collision shape (managed by CollisionDetectionSystem).
     /// </summary>
@@ -75,7 +74,7 @@ public class ColliderComponent : Component
     {
         ShapeType = CollisionShapeType.Circle;
         Radius = radius;
-        Shape = null;
+        Shape = null; // Force recreate in CollisionDetectionSystem
     }
 
     /// <summary>
@@ -86,17 +85,7 @@ public class ColliderComponent : Component
         ShapeType = CollisionShapeType.Box;
         Width = width;
         Height = height;
-        Shape = null;
-    }
-
-    /// <summary>
-    /// Gets the world-space center of this collider.
-    /// </summary>
-    public Vector2 WorldCenter => (_transform?.Position ?? Vector2.Zero) + Offset;
-
-    protected internal override void OnAdded()
-    {
-        _transform = GetRequiredComponent<TransformComponent>();
+        Shape = null; // Force recreate in CollisionDetectionSystem
     }
 
     protected internal override void OnRemoved()

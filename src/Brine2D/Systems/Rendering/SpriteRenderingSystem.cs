@@ -12,9 +12,9 @@ namespace Brine2D.Systems.Rendering;
 /// Uses batching for optimal performance on both Legacy and GPU renderers.
 /// Includes frustum culling to only render visible sprites.
 /// </summary>
-public class SpriteRenderingSystem : IRenderSystem
+public class SpriteRenderingSystem : RenderSystemBase
 {
-    public int RenderOrder => 0;
+    public override int RenderOrder => SystemRenderOrder.Sprites; // Explicit order
     public string Name => "SpriteRenderingSystem";
 
     private readonly ITextureLoader _textureLoader;
@@ -74,7 +74,7 @@ public class SpriteRenderingSystem : IRenderSystem
     /// Renders all entities with SpriteComponent using batching.
     /// Automatically culls off-screen sprites when a camera is present.
     /// </summary>
-    public void Render(IRenderer renderer, IEntityWorld world)
+    public override void Render(IEntityWorld world, IRenderer renderer)
     {
         _cachedSprites.Clear();
         

@@ -1,4 +1,4 @@
-namespace Brine2D.Audio;
+﻿namespace Brine2D.Audio;
 
 /// <summary>
 /// Represents streaming music (typically for background music).

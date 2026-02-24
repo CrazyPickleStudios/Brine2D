@@ -1,6 +1,6 @@
 using Brine2D.Rendering;
 
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 /// <summary>
 /// Service for loading and compiling shaders using ShaderCross.

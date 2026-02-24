@@ -3,7 +3,7 @@ using Brine2D.Rendering.SDL.Shaders;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 /// <summary>
 /// SDL3 shader loader using ShaderCross for cross-platform compilation.

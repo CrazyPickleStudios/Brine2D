@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Build-only package; no runtime DLL is emitted or shipped.
+      IncludeBuildOutput=false prevents the empty output assembly from being packed.
+      DevelopmentDependency=true means consuming packages won't list this as a dependency.
+      This keeps the runtime graph clean; Brine2D.Build is invisible to end-users
+      who only reference the main Brine2D package.
+
+      STATUS: Not yet published. Infrastructure is complete; publish when the
+      MSBuild task has been validated across Windows/macOS/Linux and CI environments.
+      See: https://github.com/CrazyPickleStudios/Brine2D/issues (track readiness here)
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+
+    <PackageId>Brine2D.Build</PackageId>
+    <Version>0.9.0-beta</Version>
+    <Authors>CrazyPickle Studios</Authors>
+    <Description>
+      MSBuild tooling for Brine2D. Automatically generates strongly-typed C# asset
+      path constants from your assets/ folder on every build. No content pipeline,
+      no CLI tools, no manual maintenance. Add one PackageReference and drag files in.
+    </Description>
+    <PackageTags>brine2d;gameengine;msbuild;assets;codegen;build</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://brine2d.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/CrazyPickleStudios/Brine2D</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      NuGet convention: any file at build/{PackageId}.targets is automatically imported
+      into every project that references this package. No extra steps for end-users.
+    -->
+    <None Include="Brine2D.Build.targets"
+          Pack="true"
+          PackagePath="build/Brine2D.Build.targets" />
+
+    <None Include="README.md"
+          Pack="true"
+          PackagePath="\" />
+  </ItemGroup>
+
+</Project>

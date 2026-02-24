@@ -1,9 +1,10 @@
+using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Rendering;
 using Brine2D.Systems.Physics;
-using NSubstitute;
+using Xunit;
 
 namespace Brine2D.Tests.ECS;
 
@@ -22,8 +23,8 @@ public class EntityWorldTests : TestBase
         var entity2 = world.CreateEntity();
 
         // Assert
-        Assert.NotEqual(Guid.Empty, entity1.Id);
-        Assert.NotEqual(Guid.Empty, entity2.Id);
+        Assert.NotEqual(0, entity1.Id); // 0 is the invalid/null sentinel
+        Assert.NotEqual(0, entity2.Id);
         Assert.NotEqual(entity1.Id, entity2.Id);
     }
 
@@ -61,7 +62,7 @@ public class EntityWorldTests : TestBase
 
         // Act
         var entity = world.CreateEntity("TestEntity");
-        world.Flush(); // Process deferred operations
+        world.Flush();
 
         // Assert
         Assert.Contains(entity, world.Entities);
@@ -114,7 +115,7 @@ public class EntityWorldTests : TestBase
         // Act
         world.DestroyEntity(entity);
 
-        // Assert - Should be inactive immediately (before Flush)
+        // Assert - inactive before Flush
         Assert.False(entity.IsActive);
     }
 
@@ -126,9 +127,9 @@ public class EntityWorldTests : TestBase
         var entity = world.CreateEntity();
         world.Flush();
 
-        // Act - Try to destroy twice
+        // Act
         world.DestroyEntity(entity);
-        world.DestroyEntity(entity); // Should not throw or cause issues
+        world.DestroyEntity(entity);
         world.Flush();
 
         // Assert
@@ -142,14 +143,13 @@ public class EntityWorldTests : TestBase
         var world = CreateTestWorld();
         var entity = world.CreateEntity<TestEntity>();
         world.Flush();
-        var testEntity = (TestEntity)entity;
 
         // Act
         world.DestroyEntity(entity);
         world.Flush();
 
         // Assert
-        Assert.True(testEntity.OnDestroyCalled);
+        Assert.True(((TestEntity)entity).OnDestroyCalled);
     }
 
     #endregion
@@ -179,7 +179,7 @@ public class EntityWorldTests : TestBase
         var world = CreateTestWorld();
 
         // Act
-        var found = world.GetEntityById(Guid.NewGuid());
+        var found = world.GetEntityById(-1);
 
         // Assert
         Assert.Null(found);
@@ -228,7 +228,7 @@ public class EntityWorldTests : TestBase
 
         // Assert
         Assert.NotNull(found);
-        Assert.Equal(entity1.Id, found.Id); // Should return first one
+        Assert.Equal(entity1.Id, found.Id);
     }
 
     [Fact]
@@ -316,7 +316,7 @@ public class EntityWorldTests : TestBase
     {
         // Arrange
         var world = CreateTestWorld();
-        var entity1 = world.CreateEntity("Entity1");
+        world.CreateEntity("Entity1");
         var entity2 = world.CreateEntity("Entity2");
         world.Flush();
 
@@ -345,83 +345,7 @@ public class EntityWorldTests : TestBase
 
     #endregion
 
-    #region Update and Render
-
-    [Fact]
-    public void Update_CallsOnUpdateForActiveEntities()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity<TestEntity>();
-        world.Flush();
-        var testEntity = (TestEntity)entity;
-
-        var gameTime = new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016));
-
-        // Act
-        world.Update(gameTime);
-
-        // Assert
-        Assert.True(testEntity.OnUpdateCalled);
-    }
-
-    [Fact]
-    public void Update_DoesNotCallOnUpdateForInactiveEntities()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity<TestEntity>();
-        entity.IsActive = false;
-        world.Flush();
-        var testEntity = (TestEntity)entity;
-
-        var gameTime = new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016));
-
-        // Act
-        world.Update(gameTime);
-
-        // Assert
-        Assert.False(testEntity.OnUpdateCalled);
-    }
-
-    [Fact]
-    public void Update_CallsOnUpdateForEnabledComponents()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TestComponent>();
-        world.Flush();
-        var component = entity.GetComponent<TestComponent>()!;
-
-        var gameTime = new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016));
-
-        // Act
-        world.Update(gameTime);
-
-        // Assert
-        Assert.True(component.OnUpdateCalled);
-    }
-
-    [Fact]
-    public void Update_DoesNotCallOnUpdateForDisabledComponents()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TestComponent>();
-        world.Flush();
-        var component = entity.GetComponent<TestComponent>()!;
-        component.IsEnabled = false;
-
-        var gameTime = new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016));
-
-        // Act
-        world.Update(gameTime);
-
-        // Assert
-        Assert.False(component.OnUpdateCalled);
-    }
+    #region Update
 
     [Fact]
     public void Update_ProcessesDeferredOperations()
@@ -429,49 +353,13 @@ public class EntityWorldTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-
-        var gameTime = new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016));
+        Assert.Empty(world.Entities);
 
         // Act
-        world.Update(gameTime);
+        world.Update(new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016)));
 
-        // Assert - Entity should be in world after update
+        // Assert
         Assert.Contains(entity, world.Entities);
-    }
-
-    [Fact]
-    public void Render_CallsOnRenderForActiveEntities()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity<TestEntity>();
-        world.Flush();
-        var testEntity = (TestEntity)entity;
-        var mockRenderer = Substitute.For<IRenderer>();
-
-        // Act
-        world.Render(mockRenderer);
-
-        // Assert
-        Assert.True(testEntity.OnRenderCalled);
-    }
-
-    [Fact]
-    public void Render_CallsOnRenderForEnabledComponents()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TestComponent>();
-        world.Flush();
-        var component = entity.GetComponent<TestComponent>()!;
-        var mockRenderer = Substitute.For<IRenderer>();
-
-        // Act
-        world.Render(mockRenderer);
-
-        // Assert
-        Assert.True(component.OnRenderCalled);
     }
 
     #endregion
@@ -479,12 +367,12 @@ public class EntityWorldTests : TestBase
     #region Clear and Flush
 
     [Fact]
-    public void Clear_QueuesAllEntitiesForDestruction()
+    public void Clear_RemovesAllEntities()
     {
         // Arrange
         var world = CreateTestWorld();
-        var entity1 = world.CreateEntity();
-        var entity2 = world.CreateEntity();
+        world.CreateEntity();
+        world.CreateEntity();
         world.Flush();
 
         // Act
@@ -517,14 +405,12 @@ public class EntityWorldTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
-
-        // Assert - Entity not in list yet
         Assert.Empty(world.Entities);
 
         // Act
         world.Flush();
 
-        // Assert - Entity now in list
+        // Assert
         Assert.Contains(entity, world.Entities);
     }
 
@@ -541,60 +427,27 @@ public class EntityWorldTests : TestBase
         // Assert
         Assert.True(((TestEntity)entity).OnInitializeCalled);
     }
-    
+
     [Fact]
     public void Flush_HandlesMultipleCreationsAndDeletions()
     {
         // Arrange
         var world = CreateTestWorld();
-
-        // Act - Create, flush, then destroy in same cycle
         var entity1 = world.CreateEntity("Temp1");
         var entity2 = world.CreateEntity("Temp2");
-        world.Flush(); // Process creations
-
+        world.Flush();
         Assert.Equal(2, world.Entities.Count);
 
+        // Act
         world.DestroyEntity(entity1);
-        var entity3 = world.CreateEntity("Temp3"); // Create while destroying
-        world.Flush(); // Process both operations
+        var entity3 = world.CreateEntity("Temp3");
+        world.Flush();
 
-        // Assert - entity2 and entity3 should remain, entity1 should be gone
+        // Assert
         Assert.Equal(2, world.Entities.Count);
         Assert.DoesNotContain(entity1, world.Entities);
         Assert.Contains(entity2, world.Entities);
         Assert.Contains(entity3, world.Entities);
-    }
-
-    #endregion
-
-    #region Service Provider
-
-    [Fact]
-    public void GetService_UnregisteredService_ReturnsNull()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-
-        // Act - IRenderer is not registered in test setup
-        var service = world.GetService<IRenderer>();
-
-        // Assert
-        Assert.Null(service);
-    }
-
-    [Fact]
-    public void GetRequiredService_UnregisteredService_ThrowsException()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-
-        // Act & Assert - IRenderer is not registered in test setup
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            world.GetRequiredService<IRenderer>());
-
-        Assert.Contains("IRenderer", exception.Message);
-        Assert.Contains("not registered", exception.Message);
     }
 
     #endregion
@@ -688,16 +541,14 @@ public class EntityWorldTests : TestBase
         world.Flush();
 
         var query = world.Query().With<TransformComponent>();
-        var firstResults = query.Execute().ToList();
-        Assert.Single(firstResults);
+        Assert.Single(query.Execute().ToList());
 
-        // Act - Add component to new entity
+        // Act
         var entity2 = world.CreateEntity().AddComponent<TransformComponent>();
         world.Flush();
 
-        // Assert - Query should see new entity
-        var secondResults = query.Execute().ToList();
-        Assert.Equal(2, secondResults.Count);
+        // Assert
+        Assert.Equal(2, query.Execute().ToList().Count);
     }
 
     [Fact]
@@ -709,16 +560,14 @@ public class EntityWorldTests : TestBase
         world.Flush();
 
         var query = world.Query().With<TransformComponent>();
-        var firstResults = query.Execute().ToList();
-        Assert.Single(firstResults);
+        Assert.Single(query.Execute().ToList());
 
-        // Act - Remove component
+        // Act
         entity.RemoveComponent<TransformComponent>();
         world.Flush();
 
-        // Assert - Query should not see entity anymore
-        var secondResults = query.Execute().ToList();
-        Assert.Empty(secondResults);
+        // Assert
+        Assert.Empty(query.Execute().ToList());
     }
 
     #endregion
@@ -728,14 +577,8 @@ public class EntityWorldTests : TestBase
     [Fact]
     public void Entities_IsReadOnly()
     {
-        // Arrange
         var world = CreateTestWorld();
-
-        // Act
-        var entities = world.Entities;
-
-        // Assert
-        Assert.IsAssignableFrom<IReadOnlyList<Entity>>(entities);
+        Assert.IsAssignableFrom<IReadOnlyList<Entity>>(world.Entities);
     }
 
     [Fact]
@@ -743,16 +586,14 @@ public class EntityWorldTests : TestBase
     {
         // Arrange
         var world = CreateTestWorld();
-
-        // Act & Assert - Initially empty
         Assert.Empty(world.Entities);
 
-        // Add entity
+        // Add
         var entity = world.CreateEntity();
         world.Flush();
         Assert.Single(world.Entities);
 
-        // Remove entity
+        // Remove
         world.DestroyEntity(entity);
         world.Flush();
         Assert.Empty(world.Entities);
@@ -768,9 +609,8 @@ public class EntityWorldTests : TestBase
         // Arrange
         var world = CreateTestWorld();
 
-        // Create entities
         var player = world.CreateEntity("Player")
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(100, 100))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
             .AddComponent<VelocityComponent>(v => v.MaxSpeed = 200f)
             .AddTag("Player");
 
@@ -780,17 +620,13 @@ public class EntityWorldTests : TestBase
 
         world.Flush();
 
-        // Assert creation
         Assert.Equal(2, world.Entities.Count);
         Assert.NotNull(world.GetEntityByName("Player"));
         Assert.Single(world.GetEntitiesByTag("Player"));
         Assert.Equal(2, world.GetEntitiesWithComponent<TransformComponent>().Count());
 
-        // Update
-        var gameTime = new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016));
-        world.Update(gameTime);
+        world.Update(new GameTime(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(0.016)));
 
-        // Query
         var movableEntities = world.Query()
             .With<TransformComponent>()
             .With<VelocityComponent>()
@@ -798,13 +634,11 @@ public class EntityWorldTests : TestBase
             .ToList();
         Assert.Single(movableEntities);
 
-        // Destroy
         world.DestroyEntity(enemy);
         world.Flush();
         Assert.Single(world.Entities);
         Assert.Null(world.GetEntityByName("Enemy"));
 
-        // Clear
         world.Clear();
         Assert.Empty(world.Entities);
     }
@@ -816,24 +650,9 @@ public class EntityWorldTests : TestBase
     private class TestEntity : Entity
     {
         public bool OnInitializeCalled { get; private set; }
-        public bool OnUpdateCalled { get; private set; }
-        public bool OnRenderCalled { get; private set; }
         public bool OnDestroyCalled { get; private set; }
 
-        public override void OnInitialize()
-        {
-            OnInitializeCalled = true;
-        }
-
-        public override void OnUpdate(GameTime gameTime)
-        {
-            OnUpdateCalled = true;
-        }
-
-        public override void OnRender(IRenderer renderer)
-        {
-            OnRenderCalled = true;
-        }
+        public override void OnInitialize() => OnInitializeCalled = true;
 
         public override void OnDestroy()
         {
@@ -842,21 +661,7 @@ public class EntityWorldTests : TestBase
         }
     }
 
-    private class TestComponent : Component
-    {
-        public bool OnUpdateCalled { get; private set; }
-        public bool OnRenderCalled { get; private set; }
-
-        protected internal override void OnUpdate(GameTime gameTime)
-        {
-            OnUpdateCalled = true;
-        }
-
-        protected internal override void OnRender(IRenderer renderer)
-        {
-            OnRenderCalled = true;
-        }
-    }
+    private class TestComponent : Component { }
 
     #endregion
 }

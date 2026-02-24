@@ -78,7 +78,7 @@ internal sealed class GameEngine
             }
 
             // Check input service (optional for headless)
-            var inputService = _serviceProvider.GetService<IInputContext>();
+            var inputService = _serviceProvider.GetService<InputContext>();
             if (inputService != null)
             {
                 _logger.LogDebug("Input service available");

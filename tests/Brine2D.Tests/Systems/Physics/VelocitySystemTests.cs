@@ -14,18 +14,14 @@ public class VelocitySystemTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0, 0))
-            .AddComponent<VelocityComponent>(v => 
-            {
-                v.Velocity = new Vector2(100, 50);
-            });
+            .AddComponent<TransformComponent>(t => t.LocalPosition = Vector2.Zero)
+            .AddComponent<VelocityComponent>(v => v.Velocity = new Vector2(100, 50));
         world.Flush();
 
         var system = new VelocitySystem();
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)); // 0.1 seconds
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
 
         // Assert
         var transform = entity.GetComponent<TransformComponent>()!;
@@ -39,18 +35,17 @@ public class VelocitySystemTests : TestBase
         var world = CreateTestWorld();
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = Vector2.Zero)
-            .AddComponent<VelocityComponent>(v => v.Velocity = new Vector2(60, 0)); // 60 units/sec
+            .AddComponent<VelocityComponent>(v => v.Velocity = new Vector2(60, 0));
         world.Flush();
 
         var system = new VelocitySystem();
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0)); // ~16.67ms
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0)));
 
-        // Assert
+        // Assert - 60 * (1/60) = 1
         var transform = entity.GetComponent<TransformComponent>()!;
-        Assert.Equal(1f, transform.LocalPosition.X, precision: 2); // 60 * (1/60) = 1
+        Assert.Equal(1f, transform.LocalPosition.X, precision: 2);
     }
 
     [Fact]
@@ -59,27 +54,23 @@ public class VelocitySystemTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0, 0))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = Vector2.Zero)
             .AddComponent<VelocityComponent>(v => v.Velocity = new Vector2(100, 0));
-        
+
         var entity2 = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0, 0))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = Vector2.Zero)
             .AddComponent<VelocityComponent>(v => v.Velocity = new Vector2(0, 200));
-        
+
         world.Flush();
 
         var system = new VelocitySystem();
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
 
         // Assert
-        var transform1 = entity1.GetComponent<TransformComponent>()!;
-        var transform2 = entity2.GetComponent<TransformComponent>()!;
-        
-        Assert.Equal(new Vector2(10, 0), transform1.LocalPosition);
-        Assert.Equal(new Vector2(0, 20), transform2.LocalPosition);
+        Assert.Equal(new Vector2(10, 0), entity1.GetComponent<TransformComponent>()!.LocalPosition);
+        Assert.Equal(new Vector2(0, 20), entity2.GetComponent<TransformComponent>()!.LocalPosition);
     }
 
     [Fact]
@@ -89,38 +80,30 @@ public class VelocitySystemTests : TestBase
         var world = CreateTestWorld();
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(5, 5));
-        // No VelocityComponent
         world.Flush();
 
         var system = new VelocitySystem();
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
 
-        // Assert - Position unchanged
-        var transform = entity.GetComponent<TransformComponent>()!;
-        Assert.Equal(new Vector2(5, 5), transform.LocalPosition);
+        // Assert
+        Assert.Equal(new Vector2(5, 5), entity.GetComponent<TransformComponent>()!.LocalPosition);
     }
 
     [Fact]
-    public void Update_EntityWithoutTransform_Ignored()
+    public void Update_EntityWithoutTransform_DoesNotThrow()
     {
         // Arrange
         var world = CreateTestWorld();
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<VelocityComponent>(v => v.Velocity = new Vector2(100, 100));
-        // No TransformComponent
         world.Flush();
 
         var system = new VelocitySystem();
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
 
-        // Act - Should not throw
-        system.Update(gameTime, world);
-
-        // Assert - No exception thrown
-        Assert.True(true);
+        // Act & Assert
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
     }
 
     [Fact]
@@ -133,18 +116,15 @@ public class VelocitySystemTests : TestBase
             .AddComponent<VelocityComponent>(v => v.Velocity = new Vector2(100, 100));
         world.Flush();
 
-        var velocity = entity.GetComponent<VelocityComponent>()!;
-        velocity.IsEnabled = false;
+        entity.GetComponent<VelocityComponent>()!.IsEnabled = false;
 
         var system = new VelocitySystem();
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
 
-        // Assert - Position should not change
-        var transform = entity.GetComponent<TransformComponent>()!;
-        Assert.Equal(Vector2.Zero, transform.LocalPosition);
+        // Assert
+        Assert.Equal(Vector2.Zero, entity.GetComponent<TransformComponent>()!.LocalPosition);
     }
 
     [Fact]
@@ -158,33 +138,17 @@ public class VelocitySystemTests : TestBase
         world.Flush();
 
         var system = new VelocitySystem();
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
 
         // Assert
-        var transform = entity.GetComponent<TransformComponent>()!;
-        Assert.Equal(new Vector2(10, 10), transform.LocalPosition);
+        Assert.Equal(new Vector2(10, 10), entity.GetComponent<TransformComponent>()!.LocalPosition);
     }
 
     [Fact]
     public void UpdateOrder_IsCorrect()
     {
-        // Arrange
-        var system = new VelocitySystem();
-
-        // Act & Assert
-        Assert.Equal(100, system.UpdateOrder);
-    }
-
-    [Fact]
-    public void Name_IsCorrect()
-    {
-        // Arrange
-        var system = new VelocitySystem();
-
-        // Act & Assert
-        Assert.Equal("VelocitySystem", system.Name);
+        Assert.Equal(100, new VelocitySystem().UpdateOrder);
     }
 }

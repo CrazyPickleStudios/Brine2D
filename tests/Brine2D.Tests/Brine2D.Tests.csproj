@@ -27,4 +27,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Animation\" />
+    <Folder Include="ECS\Systems\" />
+  </ItemGroup>
+
 </Project>

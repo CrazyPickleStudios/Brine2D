@@ -1,11 +1,11 @@
 using Brine2D.Events;
 using Brine2D.Hosting;
-using Brine2D.SDL.Common.Events;
-using Brine2D.SDL.Events;
+using Brine2D.Common;
+using Brine2D.Events;
 using Microsoft.Extensions.Hosting; // Use Microsoft's interface
 using Microsoft.Extensions.Logging;
 
-namespace Brine2D.SDL;
+namespace Brine2D;
 
 /// <summary>
 /// Central SDL3 event processing service.

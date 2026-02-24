@@ -3,7 +3,7 @@ using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 /// <summary>
 /// SDL3 GPU shader implementation.

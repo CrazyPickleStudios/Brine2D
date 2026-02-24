@@ -14,9 +14,7 @@ public static class PerformanceServiceCollectionExtensions
         services.AddSingleton<PerformanceOverlay>();
         services.AddSingleton<PerformanceMonitor>();
         services.AddSingleton<ScopedProfiler>();
-
-        services.AddSingleton<ISceneLifecycleHook, PerformanceLifecycleHook>();
-
+        
         return services;
     }
 }

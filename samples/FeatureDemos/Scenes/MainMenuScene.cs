@@ -1,4 +1,5 @@
 using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.Engine.Transitions;
 using Brine2D.Input;
 using Brine2D.Rendering;
@@ -11,7 +12,6 @@ using FeatureDemos.Scenes.Collision;
 using FeatureDemos.Scenes.UI;
 using FeatureDemos.Scenes.Performance;
 using FeatureDemos.Scenes.Rendering;
-using Brine2D.Systems.Rendering;
 using Brine2D.Engine;
 
 namespace FeatureDemos.Scenes;
@@ -23,9 +23,7 @@ namespace FeatureDemos.Scenes;
 /// </summary>
 public class MainMenuScene : Scene
 {
-    private readonly IInputContext _input;
     private readonly ISceneManager _sceneManager;
-    private readonly IGameContext _gameContext;
     
     private int _selectedIndex = 0;
     private readonly List<DemoEntry> _demos;
@@ -39,50 +37,39 @@ public class MainMenuScene : Scene
     private const float RightColumnX = 640f;
     private const float ColumnWidth = 520f;
 
-    public MainMenuScene(
-        IInputContext input,
-        ISceneManager sceneManager,
-        IGameContext gameContext,  
-        DebugRenderer debugRenderer)
+    public MainMenuScene(ISceneManager sceneManager)
     {
-        _input = input;
         _sceneManager = sceneManager;
-        _gameContext = gameContext; 
-
-        debugRenderer.ShowEntityNames = false;
         
         // Define all demos organized by category
         _demos = new List<DemoEntry>
         {
-            // ECS Demos (Left Column)
-            new("Query System", typeof(QueryDemoScene), "Advanced entity queries", "ECS"),
-            new("Particle System", typeof(ParticleDemoScene), "Pooled particle effects", "ECS"),
-            
-            // Rendering Demos (Left Column)
-            new("Texture Atlasing", typeof(TextureAtlasDemoScene), "Sprite batching & atlases", "Rendering"),
-            new("Scissor Rects", typeof(ScissorRectDemoScene), "UI clipping & scroll views", "Rendering"),
-            
-            // Collision Demos (Left Column)
-            new("Collision Detection", typeof(CollisionDemoScene), "Physics & colliders", "Collision"),
+            // ECS
+            new("Query System",          () => _sceneManager.LoadSceneAsync<QueryDemoScene>(new FadeTransition(0.5f, Color.Black)),           "Advanced entity queries",        "ECS"),
+            new("Particle System",       () => _sceneManager.LoadSceneAsync<ParticleDemoScene>(new FadeTransition(0.5f, Color.Black)),         "Pooled particle effects",        "ECS"),
 
-            // Audio Demos (Left Column)
-            new("Spatial Audio", typeof(SpatialAudioDemoScene), "2D spatial audio with panning", "Audio"),
+            // Rendering
+            new("Texture Atlasing",      () => _sceneManager.LoadSceneAsync<TextureAtlasDemoScene>(new FadeTransition(0.5f, Color.Black)),     "Sprite batching & atlases",      "Rendering"),
+            new("Scissor Rects",         () => _sceneManager.LoadSceneAsync<ScissorRectDemoScene>(new FadeTransition(0.5f, Color.Black)),       "UI clipping & scroll views",     "Rendering"),
 
-            // UI Demos (Right Column)
-            new("UI Components", typeof(UIDemoScene), "Complete UI framework", "UI"),
-            
-            // Transition Demos (Right Column)
-            new("Scene Transitions", typeof(TransitionDemoScene), "Fade & loading screens", "Transitions"),
-            
-            // Performance Demos (Right Column)
-            new("Performance Benchmark", typeof(SpriteBenchmarkScene), "Batching & culling test", "Performance"),
-            new("Background Loading", typeof(BackgroundLoadingDemoScene), "Async asset streaming", "Performance"),
-            
-            // Advanced Demos (Right Column)
-            new("Manual Control", typeof(ManualControlScene), "Opt-out lifecycle hooks", "Advanced")
+            // Collision
+            new("Collision Detection",   () => _sceneManager.LoadSceneAsync<CollisionDemoScene>(new FadeTransition(0.5f, Color.Black)),         "Physics & colliders",            "Collision"),
+
+            // Audio
+            new("Spatial Audio",         () => _sceneManager.LoadSceneAsync<SpatialAudioDemoScene>(new FadeTransition(0.5f, Color.Black)),      "2D spatial audio with panning",  "Audio"),
+
+            // UI
+            new("UI Components",         () => _sceneManager.LoadSceneAsync<UIDemoScene>(new FadeTransition(0.5f, Color.Black)),                "Complete UI framework",          "UI"),
+
+            // Transitions
+            new("Scene Transitions",     () => _sceneManager.LoadSceneAsync<TransitionDemoScene>(new FadeTransition(0.5f, Color.Black)),        "Fade & loading screens",         "Transitions"),
+
+            // Performance
+            new("Performance Benchmark", () => _sceneManager.LoadSceneAsync<SpriteBenchmarkScene>(new FadeTransition(0.5f, Color.Black)),       "Batching & culling test",        "Performance"),
+            new("Background Loading",    () => _sceneManager.LoadSceneAsync<BackgroundLoadingDemoScene, CustomLoadingScreen>(),                  "Async asset streaming",          "Performance"),
         };
     }
-
+    
     protected override Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Renderer.ClearColor = new Color(15, 20, 35);
@@ -101,32 +88,32 @@ public class MainMenuScene : Scene
     protected override void OnUpdate(GameTime gameTime)
     {
         // Navigation - Up/Down
-        if (_input.IsKeyPressed(Key.Up))
+        if (Input.IsKeyPressed(Key.Up))
         {
             _selectedIndex = (_selectedIndex - 1 + _demos.Count) % _demos.Count;
             Logger.LogDebug("Selected: {Name}", _demos[_selectedIndex].DisplayName);
         }
-        if (_input.IsKeyPressed(Key.Down))
+        if (Input.IsKeyPressed(Key.Down))
         {
             _selectedIndex = (_selectedIndex + 1) % _demos.Count;
             Logger.LogDebug("Selected: {Name}", _demos[_selectedIndex].DisplayName);
         }
         
         // Navigation - Left/Right (jump to adjacent column)
-        if (_input.IsKeyPressed(Key.Left))
+        if (Input.IsKeyPressed(Key.Left))
         {
             var targetIndex = _selectedIndex - GetItemsPerColumn();
             if (targetIndex < 0)
                 targetIndex = _demos.Count + targetIndex;
             _selectedIndex = targetIndex % _demos.Count;
         }
-        if (_input.IsKeyPressed(Key.Right))
+        if (Input.IsKeyPressed(Key.Right))
         {
             _selectedIndex = (_selectedIndex + GetItemsPerColumn()) % _demos.Count;
         }
 
         // Selection
-        if (_input.IsKeyPressed(Key.Enter) || _input.IsKeyPressed(Key.Space))
+        if (Input.IsKeyPressed(Key.Enter) || Input.IsKeyPressed(Key.Space))
         {
             LoadSelectedDemo();
         }
@@ -135,7 +122,7 @@ public class MainMenuScene : Scene
         for (int i = 0; i < Math.Min(_demos.Count, 9); i++)
         {
             var key = Key.D1 + i; // D1 = '1', D2 = '2', etc.
-            if (_input.IsKeyPressed(key))
+            if (Input.IsKeyPressed(key))
             {
                 _selectedIndex = i;
                 LoadSelectedDemo();
@@ -143,17 +130,17 @@ public class MainMenuScene : Scene
         }
         
         // 0 key for 10th demo
-        if (_demos.Count >= 10 && _input.IsKeyPressed(Key.D0))
+        if (_demos.Count >= 10 && Input.IsKeyPressed(Key.D0))
         {
             _selectedIndex = 9;
             LoadSelectedDemo();
         }
 
         // Exit
-        if (_input.IsKeyPressed(Key.Escape))
+        if (Input.IsKeyPressed(Key.Escape))
         {
             Logger.LogInformation("Exiting Feature Demos");
-            _gameContext.RequestExit();
+            Game.RequestExit();
         }
     }
 
@@ -161,21 +148,7 @@ public class MainMenuScene : Scene
     {
         var selected = _demos[_selectedIndex];
         Logger.LogInformation("Loading demo: {Name}", selected.DisplayName);
-        
-        // Use fade transition
-        if (selected.DisplayName == "Background Loading")
-        {
-            Logger.LogInformation("Loading demo: {Name}", selected.DisplayName);
-            
-            _ = _sceneManager.LoadSceneAsync<BackgroundLoadingDemoScene, CustomLoadingScreen>();
-        }
-        else
-        {
-            _ = _sceneManager.LoadSceneAsync(
-                selected.SceneType,
-                new FadeTransition(duration: 0.5f, color: Color.Black)
-            );
-        }
+        _ = selected.Load();
     }
 
     protected override void OnRender(GameTime gameTime)
@@ -282,5 +255,5 @@ public class MainMenuScene : Scene
     /// <summary>
     /// Represents a demo entry in the menu.
     /// </summary>
-    private record DemoEntry(string DisplayName, Type SceneType, string Description, string Category);
+    private record DemoEntry(string DisplayName, Func<Task> Load, string Description, string Category);
 }

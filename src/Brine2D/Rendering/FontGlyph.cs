@@ -1,4 +1,4 @@
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 /// <summary>
 /// Contains metrics and texture coordinates for a single glyph in a font atlas.

@@ -20,20 +20,16 @@ public class CameraSystemTests : TestBase
         mockCamera.Position.Returns(Vector2.Zero);
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 50))
-            .AddComponent<CameraFollowComponent>(c =>
-            {
-                c.Smoothing = 0; // Instant follow for testing
-            });
+            .AddComponent<CameraFollowComponent>(c => c.Smoothing = 0);
 
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
         // Assert
         mockCamera.Received(1).Position = new Vector2(100, 50);
@@ -49,7 +45,7 @@ public class CameraSystemTests : TestBase
         mockCamera.Position.Returns(Vector2.Zero);
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
             .AddComponent<CameraFollowComponent>(c =>
             {
@@ -60,10 +56,9 @@ public class CameraSystemTests : TestBase
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
         // Assert
         mockCamera.Received(1).Position = new Vector2(110, 95);
@@ -76,27 +71,26 @@ public class CameraSystemTests : TestBase
         var world = CreateTestWorld();
         var mockCameraManager = Substitute.For<ICameraManager>();
         var mockCamera = Substitute.For<ICamera>();
-        mockCamera.Position.Returns(new Vector2(0, 50)); // Y at 50
+        mockCamera.Position.Returns(new Vector2(0, 50));
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 200))
             .AddComponent<CameraFollowComponent>(c =>
             {
                 c.FollowX = true;
-                c.FollowY = false; // Don't follow Y
+                c.FollowY = false;
                 c.Smoothing = 0;
             });
 
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
-        // Assert - X should update, Y should stay at 50
+        // Assert
         mockCamera.Received(1).Position = new Vector2(100, 50);
     }
 
@@ -107,14 +101,14 @@ public class CameraSystemTests : TestBase
         var world = CreateTestWorld();
         var mockCameraManager = Substitute.For<ICameraManager>();
         var mockCamera = Substitute.For<ICamera>();
-        mockCamera.Position.Returns(new Vector2(50, 0)); // X at 50
+        mockCamera.Position.Returns(new Vector2(50, 0));
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(200, 100))
             .AddComponent<CameraFollowComponent>(c =>
             {
-                c.FollowX = false; // Don't follow X
+                c.FollowX = false;
                 c.FollowY = true;
                 c.Smoothing = 0;
             });
@@ -122,12 +116,11 @@ public class CameraSystemTests : TestBase
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
-        // Assert - Y should update, X should stay at 50
+        // Assert
         mockCamera.Received(1).Position = new Vector2(50, 100);
     }
 
@@ -141,23 +134,22 @@ public class CameraSystemTests : TestBase
         mockCamera.Position.Returns(new Vector2(100, 100));
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var entity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(105, 105)) // 5 units away
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(105, 105))
             .AddComponent<CameraFollowComponent>(c =>
             {
-                c.Deadzone = new Vector2(10, 10); // 10 unit deadzone
+                c.Deadzone = new Vector2(10, 10);
                 c.Smoothing = 0;
             });
 
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
-        // Assert - Camera should stay at (100, 100) because target is within deadzone
+        // Assert
         mockCamera.Received(1).Position = new Vector2(100, 100);
     }
 
@@ -171,7 +163,7 @@ public class CameraSystemTests : TestBase
         mockCamera.Position.Returns(Vector2.Zero);
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var lowPriority = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(50, 50))
             .AddComponent<CameraFollowComponent>(c =>
             {
@@ -179,23 +171,22 @@ public class CameraSystemTests : TestBase
                 c.Smoothing = 0;
             });
 
-        var highPriority = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
             .AddComponent<CameraFollowComponent>(c =>
             {
-                c.Priority = 10; // Higher priority
+                c.Priority = 10;
                 c.Smoothing = 0;
             });
 
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
-        // Assert - Should follow high priority target
+        // Assert
         mockCamera.Received(1).Position = new Vector2(100, 100);
     }
 
@@ -205,7 +196,7 @@ public class CameraSystemTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var mockCameraManager = Substitute.For<ICameraManager>();
-        
+
         var mainCamera = Substitute.For<ICamera>();
         mainCamera.Position.Returns(Vector2.Zero);
         mockCameraManager.GetCamera("main").Returns(mainCamera);
@@ -214,7 +205,7 @@ public class CameraSystemTests : TestBase
         minimapCamera.Position.Returns(Vector2.Zero);
         mockCameraManager.GetCamera("minimap").Returns(minimapCamera);
 
-        var mainTarget = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
             .AddComponent<CameraFollowComponent>(c =>
             {
@@ -222,7 +213,7 @@ public class CameraSystemTests : TestBase
                 c.Smoothing = 0;
             });
 
-        var minimapTarget = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(200, 200))
             .AddComponent<CameraFollowComponent>(c =>
             {
@@ -233,10 +224,9 @@ public class CameraSystemTests : TestBase
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
         // Assert
         mainCamera.Received(1).Position = new Vector2(100, 100);
@@ -252,23 +242,22 @@ public class CameraSystemTests : TestBase
         var mockCamera = Substitute.For<ICamera>();
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
             .AddComponent<CameraFollowComponent>(c =>
             {
-                c.IsActive = false; // Inactive
+                c.IsActive = false;
                 c.Smoothing = 0;
             });
 
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
-        // Assert - Camera position should not be set
+        // Assert
         mockCamera.DidNotReceive().Position = Arg.Any<Vector2>();
     }
 
@@ -281,31 +270,29 @@ public class CameraSystemTests : TestBase
         var mockCamera = Substitute.For<ICamera>();
         mockCameraManager.GetCamera("main").Returns(mockCamera);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<CameraFollowComponent>(c => c.Smoothing = 0);
-        // No TransformComponent
 
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
         // Act
-        system.Update(gameTime, world);
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
         // Assert
         mockCamera.DidNotReceive().Position = Arg.Any<Vector2>();
     }
 
     [Fact]
-    public void Update_CameraNotFound_Ignored()
+    public void Update_CameraNotFound_DoesNotThrow()
     {
         // Arrange
         var world = CreateTestWorld();
         var mockCameraManager = Substitute.For<ICameraManager>();
         mockCameraManager.GetCamera("nonexistent").Returns((ICamera?)null);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
             .AddComponent<CameraFollowComponent>(c =>
             {
@@ -316,34 +303,22 @@ public class CameraSystemTests : TestBase
         world.Flush();
 
         var system = new CameraSystem(mockCameraManager);
-        var gameTime = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016));
 
-        // Act - Should not throw
-        system.Update(gameTime, world);
-
-        // Assert - No exception
-        Assert.True(true);
+        // Act & Assert
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
     }
 
     [Fact]
     public void UpdateOrder_IsCorrect()
     {
-        // Arrange
-        var mockCameraManager = Substitute.For<ICameraManager>();
-        var system = new CameraSystem(mockCameraManager);
-
-        // Act & Assert
+        var system = new CameraSystem(Substitute.For<ICameraManager>());
         Assert.Equal(500, system.UpdateOrder);
     }
 
     [Fact]
     public void Name_IsCorrect()
     {
-        // Arrange
-        var mockCameraManager = Substitute.For<ICameraManager>();
-        var system = new CameraSystem(mockCameraManager);
-
-        // Act & Assert
+        var system = new CameraSystem(Substitute.For<ICameraManager>());
         Assert.Equal("CameraSystem", system.Name);
     }
 }

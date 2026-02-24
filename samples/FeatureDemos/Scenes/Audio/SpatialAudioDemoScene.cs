@@ -19,7 +19,7 @@ namespace FeatureDemos.Scenes.Audio;
 /// </summary>
 public class SpatialAudioDemoScene : DemoSceneBase
 {
-    private readonly IAudioService _audio;
+    private readonly AudioService _audio;
     private readonly IInputContext _input;
 
     private Entity? _player;
@@ -27,9 +27,9 @@ public class SpatialAudioDemoScene : DemoSceneBase
     private Entity? _soundSource2;
     private Entity? _soundSource3;
 
-    private ISoundEffect? _coinSound;
-    private ISoundEffect? _explosionSound;
-    private ISoundEffect? _ambientSound;
+    private SoundEffect? _coinSound;
+    private SoundEffect? _explosionSound;
+    private SoundEffect? _ambientSound;
 
     private bool _soundsLoaded = false;
 
@@ -37,7 +37,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         IInputContext input,
         ISceneManager sceneManager,
         IGameContext gameContext,
-        IAudioService audio,
+        AudioService audio,
         PerformanceOverlay? perfOverlay = null)
         : base(input, sceneManager, gameContext, perfOverlay)
     {

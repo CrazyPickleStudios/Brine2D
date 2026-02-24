@@ -1,5 +1,5 @@
+using Brine2D.Audio;
 using Brine2D.Rendering;
-using Brine2D.Threading;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -7,58 +7,97 @@ using System.Diagnostics;
 namespace Brine2D.Assets;
 
 /// <summary>
-/// Manages asynchronous loading of game assets with caching and progress tracking.
+/// Unified async asset loading with caching.
+/// All asset types (textures, sounds, music, fonts) go through one service.
+/// Inject <see cref="IAssetLoader"/> into your scene or system constructor.
+/// No content pipeline, no build step: drag files into your assets folder and load them.
 /// </summary>
 public interface IAssetLoader
 {
-    /// <summary>
-    /// Loads a texture asynchronously with optional progress reporting.
-    /// IAssetLoader handles threading internally - just await this method.
-    /// </summary>
+    // ---- Textures ----
+
+    /// <summary>Loads a texture. Does not cache. Use <see cref="GetOrLoadTextureAsync"/> for scenes.</summary>
     Task<ITexture> LoadTextureAsync(
-        string path, 
+        string path,
         TextureScaleMode scaleMode = TextureScaleMode.Linear,
         IProgress<float>? progress = null,
         CancellationToken cancellationToken = default);
-    
+
+    /// <summary>Returns a cached texture, loading it on first request.</summary>
+    Task<ITexture> GetOrLoadTextureAsync(string path, CancellationToken cancellationToken = default);
+
+    // ---- Audio ----
+
+    /// <summary>Returns a cached sound effect, loading it on first request.</summary>
+    Task<ISoundEffect> GetOrLoadSoundAsync(string path, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns cached music, loading it on first request.</summary>
+    Task<IMusic> GetOrLoadMusicAsync(string path, CancellationToken cancellationToken = default);
+
+    // ---- Fonts ----
+
     /// <summary>
-    /// Preloads multiple assets in parallel with overall progress reporting
+    /// Returns a cached font, loading it on first request.
+    /// The (path, size) pair is the cache key; the same file at different sizes is two separate entries.
     /// </summary>
+    Task<Font> GetOrLoadFontAsync(string path, int size, CancellationToken cancellationToken = default);
+
+    // ---- Manifest preloading ----
+
+    /// <summary>
+    /// Resolves all <see cref="AssetRef{T}"/> fields declared on <paramref name="manifest"/>
+    /// in parallel, reporting progress as each asset completes.
+    /// Call this in <c>OnLoadAsync</c>. Assets are safe to access from <c>OnEnter</c> onwards.
+    /// </summary>
+    Task PreloadAsync(
+        AssetManifest manifest,
+        IProgress<AssetLoadProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Preloads a list of descriptors in parallel (legacy / JSON manifest path).</summary>
     Task PreloadAssetsAsync(
         IEnumerable<AssetDescriptor> assets,
         IProgress<AssetLoadProgress>? progress = null,
         CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// Gets a cached texture if available, otherwise loads it
-    /// </summary>
-    Task<ITexture> GetOrLoadTextureAsync(string path, CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// Unloads all cached assets
-    /// </summary>
+
+    /// <summary>Unloads all cached assets and frees GPU/audio resources.</summary>
     void UnloadAll();
 }
 
+/// <inheritdoc cref="IAssetLoader"/>
 public class AssetLoader : IAssetLoader, IDisposable
 {
     private readonly ILogger<AssetLoader> _logger;
     private readonly ITextureLoader _textureLoader;
-    
-    // Thread-safe cache
-    private readonly ConcurrentDictionary<string, ITexture> _textureCache = new();
-    private readonly ConcurrentDictionary<string, Task<ITexture>> _loadingTextures = new();
-    
+    private readonly IAudioService _audioService;
+    private readonly IFontLoader _fontLoader;
+
+    // Per-type thread-safe caches
+    private readonly ConcurrentDictionary<string, ITexture>         _textureCache = new();
+    private readonly ConcurrentDictionary<string, Task<ITexture>>   _loadingTextures = new();
+    private readonly ConcurrentDictionary<string, ISoundEffect>      _soundCache = new();
+    private readonly ConcurrentDictionary<string, Task<ISoundEffect>> _loadingSounds = new();
+    private readonly ConcurrentDictionary<string, IMusic>            _musicCache = new();
+    private readonly ConcurrentDictionary<string, Task<IMusic>>      _loadingMusic = new();
+    private readonly ConcurrentDictionary<string, Font>              _fontCache = new();
+    private readonly ConcurrentDictionary<string, Task<Font>>        _loadingFonts = new();
+
     private bool _disposed;
 
     public AssetLoader(
         ILogger<AssetLoader> logger,
-        ITextureLoader textureLoader)
+        ITextureLoader textureLoader,
+        IAudioService audioService,
+        IFontLoader fontLoader)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
+        _audioService = audioService ?? throw new ArgumentNullException(nameof(audioService));
+        _fontLoader = fontLoader ?? throw new ArgumentNullException(nameof(fontLoader));
     }
-    
+
+    // ---- Textures ----
+
     public async Task<ITexture> LoadTextureAsync(
         string path,
         TextureScaleMode scaleMode = TextureScaleMode.Linear,
@@ -68,51 +107,74 @@ public class AssetLoader : IAssetLoader, IDisposable
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Path cannot be null or empty", nameof(path));
 
-        _logger.LogDebug("Loading texture asynchronously: {Path}", path);
-        
         progress?.Report(0f);
-
-        // TextureLoader handles threading internally
         var texture = await _textureLoader.LoadTextureAsync(path, scaleMode, cancellationToken);
-        
         progress?.Report(1f);
-        
-        _logger.LogInformation("Texture loaded: {Path} ({Width}x{Height})", 
-            path, texture.Width, texture.Height);
-        
+
+        _logger.LogDebug("Texture loaded: {Path} ({Width}x{Height})", path, texture.Width, texture.Height);
         return texture;
     }
 
-    public async Task<ITexture> GetOrLoadTextureAsync(string path, CancellationToken cancellationToken = default)
+    public Task<ITexture> GetOrLoadTextureAsync(string path, CancellationToken cancellationToken = default)
     {
-        // Fast path: check cache first
-        if (_textureCache.TryGetValue(path, out var cachedTexture))
-        {
-            _logger.LogTrace("Texture cache hit: {Path}", path);
-            return cachedTexture;
-        }
-
-        // Ensure only one load operation per path
-        var loadTask = _loadingTextures.GetOrAdd(path, _ =>
-        {
-            return LoadAndCacheTextureAsync(path, cancellationToken);
-        });
-
-        return await loadTask;
+        if (_textureCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
+        return _loadingTextures.GetOrAdd(path, _ => LoadAndCache(
+            path,
+            ct => LoadTextureAsync(path, cancellationToken: ct),
+            _textureCache, _loadingTextures,
+            cancellationToken));
     }
 
-    private async Task<ITexture> LoadAndCacheTextureAsync(string path, CancellationToken cancellationToken)
+    // ---- Audio ----
+
+    public Task<ISoundEffect> GetOrLoadSoundAsync(string path, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var texture = await LoadTextureAsync(path, cancellationToken: cancellationToken);
-            _textureCache[path] = texture;
-            return texture;
-        }
-        finally
-        {
-            _loadingTextures.TryRemove(path, out _);
-        }
+        if (_soundCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
+        return _loadingSounds.GetOrAdd(path, _ => LoadAndCache(
+            path,
+            ct => _audioService.LoadSoundAsync(path, ct),
+            _soundCache, _loadingSounds,
+            cancellationToken));
+    }
+
+    public Task<IMusic> GetOrLoadMusicAsync(string path, CancellationToken cancellationToken = default)
+    {
+        if (_musicCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
+        return _loadingMusic.GetOrAdd(path, _ => LoadAndCache(
+            path,
+            ct => _audioService.LoadMusicAsync(path, ct),
+            _musicCache, _loadingMusic,
+            cancellationToken));
+    }
+
+    // ---- Fonts ----
+
+    public Task<Font> GetOrLoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
+    {
+        var key = $"{path}:{size}";
+        if (_fontCache.TryGetValue(key, out var cached)) return Task.FromResult(cached);
+        return _loadingFonts.GetOrAdd(key, _ => LoadAndCache(
+            key,
+            ct => _fontLoader.LoadFontAsync(path, size, ct),
+            _fontCache, _loadingFonts,
+            cancellationToken));
+    }
+
+    // ---- Manifest preloading ----
+
+    public async Task PreloadAsync(
+        AssetManifest manifest,
+        IProgress<AssetLoadProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+
+        var refs = manifest.GetAll();
+        await RunParallelPreload(
+            refs.Count,
+            refs.Select(r => (r.Path, LoadFunc: (Func<CancellationToken, Task>)(ct => r.LoadAsync(this, ct)))),
+            progress,
+            cancellationToken);
     }
 
     public async Task PreloadAssetsAsync(
@@ -120,102 +182,122 @@ public class AssetLoader : IAssetLoader, IDisposable
         IProgress<AssetLoadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var assetList = assets.ToList();
-        var totalCount = assetList.Count;
-        var loadedCount = 0;
-        var failedCount = 0;
-        
-        _logger.LogInformation("Preloading {Count} assets in parallel", totalCount);
-        
+        var list = assets.ToList();
+        await RunParallelPreload(
+            list.Count,
+            list.Select(a => (a.Path, LoadFunc: (Func<CancellationToken, Task>)(ct => LoadDescriptorAsync(a, ct)))),
+            progress,
+            cancellationToken);
+    }
+
+    // ---- Shared parallel loader ----
+
+    private async Task RunParallelPreload(
+        int total,
+        IEnumerable<(string Path, Func<CancellationToken, Task> LoadFunc)> items,
+        IProgress<AssetLoadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var loaded = 0;
+        var failed = 0;
         var sw = Stopwatch.StartNew();
-        
-        // Load assets in parallel with controlled concurrency
-        var options = new ParallelOptions
+
+        _logger.LogInformation("Preloading {Count} assets", total);
+
+        await Parallel.ForEachAsync(items, new ParallelOptions
         {
             MaxDegreeOfParallelism = Environment.ProcessorCount,
             CancellationToken = cancellationToken
-        };
-
-        await Parallel.ForEachAsync(assetList, options, async (asset, ct) =>
+        }, async (item, ct) =>
         {
             try
             {
-                switch (asset.Type)
-                {
-                    case AssetType.Texture:
-                        await GetOrLoadTextureAsync(asset.Path, ct);
-                        break;
-                    
-                    // Add more asset types here (audio, fonts, etc.)
-                    default:
-                        _logger.LogWarning("Unknown asset type: {Type}", asset.Type);
-                        break;
-                }
-                
-                Interlocked.Increment(ref loadedCount);
+                await item.LoadFunc(ct);
+                Interlocked.Increment(ref loaded);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load asset: {Path}", asset.Path);
-                Interlocked.Increment(ref failedCount);
+                _logger.LogError(ex, "Failed to preload asset: {Path}", item.Path);
+                Interlocked.Increment(ref failed);
             }
-            
-            // Report progress
-            var currentProgress = new AssetLoadProgress
+
+            progress?.Report(new AssetLoadProgress
             {
-                TotalAssets = totalCount,
-                LoadedAssets = loadedCount,
-                FailedAssets = failedCount,
-                CurrentAsset = asset.Path
-            };
-            
-            progress?.Report(currentProgress);
+                TotalAssets = total,
+                LoadedAssets = loaded,
+                FailedAssets = failed,
+                CurrentAsset = item.Path
+            });
         });
-        
-        sw.Stop();
+
         _logger.LogInformation(
-            "Asset preloading complete: {Loaded}/{Total} loaded, {Failed} failed in {ElapsedMs}ms",
-            loadedCount, totalCount, failedCount, sw.ElapsedMilliseconds);
+            "Preload complete: {Loaded}/{Total} loaded, {Failed} failed in {Ms}ms",
+            loaded, total, failed, sw.ElapsedMilliseconds);
     }
+
+    private Task LoadDescriptorAsync(AssetDescriptor asset, CancellationToken ct) => asset.Type switch
+    {
+        AssetType.Texture  => GetOrLoadTextureAsync(asset.Path, ct),
+        AssetType.Audio    => GetOrLoadSoundAsync(asset.Path, ct),
+        AssetType.Music    => GetOrLoadMusicAsync(asset.Path, ct),
+        AssetType.Font     => Task.CompletedTask, // fonts need a size; use AssetManifest or GetOrLoadFontAsync directly
+        _                  => Task.CompletedTask
+    };
+
+    // ---- Generic cache helper ----
+
+    private static async Task<T> LoadAndCache<T>(
+        string key,
+        Func<CancellationToken, Task<T>> load,
+        ConcurrentDictionary<string, T> cache,
+        ConcurrentDictionary<string, Task<T>> inflight,
+        CancellationToken ct)
+    {
+        try
+        {
+            var value = await load(ct);
+            cache[key] = value;
+            return value;
+        }
+        finally
+        {
+            inflight.TryRemove(key, out _);
+        }
+    }
+
+    // ---- Unload ----
 
     public void UnloadAll()
     {
-        _logger.LogInformation("Unloading all cached assets");
-        
-        foreach (var texture in _textureCache.Values)
-        {
-            _textureLoader.UnloadTexture(texture);
-        }
-        
-        _textureCache.Clear();
-        _loadingTextures.Clear();
+        foreach (var t in _textureCache.Values) _textureLoader.UnloadTexture(t);
+        foreach (var s in _soundCache.Values)   _audioService.UnloadSound(s);
+        foreach (var f in _fontCache.Values)    _fontLoader.UnloadFont(f);
+        // Music is typically streamed; unload via audio service if it supports it
+
+        _textureCache.Clear(); _loadingTextures.Clear();
+        _soundCache.Clear();   _loadingSounds.Clear();
+        _musicCache.Clear();   _loadingMusic.Clear();
+        _fontCache.Clear();    _loadingFonts.Clear();
     }
 
     public void Dispose()
     {
         if (_disposed) return;
-        
         UnloadAll();
         _disposed = true;
         GC.SuppressFinalize(this);
     }
 }
 
-// Supporting types remain the same
+// ---- Supporting types ----
+
 public record AssetDescriptor(AssetType Type, string Path);
 
-public enum AssetType
-{
-    Texture,
-    Audio,
-    Font,
-    Shader,
-    Data
-}
+public enum AssetType { Texture, Audio, Music, Font, Shader, Data }
 
 public record AssetLoadProgress
 {
-    public int TotalAssets { get; init; }
+    public int TotalAssets  { get; init; }
     public int LoadedAssets { get; init; }
     public int FailedAssets { get; init; }
     public string CurrentAsset { get; init; } = string.Empty;

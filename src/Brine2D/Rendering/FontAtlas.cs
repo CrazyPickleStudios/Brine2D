@@ -2,7 +2,7 @@ using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 /// <summary>
 /// Represents a font atlas containing pre-rendered glyphs packed into a texture.
@@ -26,7 +26,7 @@ public class FontAtlas : IDisposable
     /// <summary>
     /// Generates a font atlas for the given font with ASCII printable characters (32-126).
     /// </summary>
-    public bool Generate(SDL3Font font, ITextureContext textureContext, TextureScaleMode scaleMode = TextureScaleMode.Nearest)
+    public bool Generate(Font font, ITextureContext textureContext, TextureScaleMode scaleMode = TextureScaleMode.Nearest)
     {
         if (font == null || !font.IsLoaded)
         {

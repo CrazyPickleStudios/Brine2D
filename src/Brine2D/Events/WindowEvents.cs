@@ -1,4 +1,4 @@
-namespace Brine2D.SDL.Common.Events;
+namespace Brine2D.Events;
 
 /// <summary>
 /// Raised when the window is resized.

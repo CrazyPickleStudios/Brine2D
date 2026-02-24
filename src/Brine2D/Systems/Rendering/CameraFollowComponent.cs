@@ -16,9 +16,23 @@ public class CameraFollowComponent : Component
     public string CameraName { get; set; } = "main";
 
     /// <summary>
-    /// Smoothing factor for camera movement (0 = instant, higher = smoother).
+    /// Follow speed. Higher = snappier. 0 = instant snap.
+    /// Typical values: 2 (dreamy), 5 (responsive), 15 (tight), 0 (instant).
+    /// Frame-rate independent.
     /// </summary>
     public float Smoothing { get; set; } = 5f;
+
+    /// <summary>
+    /// Zoom smoothing speed. Higher = snappier. 0 = zoom not controlled by this component.
+    /// Typical values: 2 (dreamy), 5 (responsive), 15 (tight).
+    /// Frame-rate independent.
+    /// </summary>
+    public float ZoomSmoothing { get; set; } = 0f;
+
+    /// <summary>
+    /// Target zoom level applied when <see cref="ZoomSmoothing"/> is greater than zero.
+    /// </summary>
+    public float TargetZoom { get; set; } = 1f;
 
     /// <summary>
     /// Offset from entity position (screen space).

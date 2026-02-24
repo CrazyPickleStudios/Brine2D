@@ -9,7 +9,7 @@ public sealed class TextRun
 {
     public required string Text { get; init; }
     public Color Color { get; init; } = Color.White;
-    public IFont? Font { get; init; }
+    public Font? Font { get; init; }
     public float FontSize { get; init; } = 16f;
     public TextStyle Style { get; init; } = TextStyle.Normal;
     

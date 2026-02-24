@@ -8,11 +8,6 @@ namespace Brine2D.Audio;
 public class AudioOptions
 {
     /// <summary>
-    /// Configuration section name for binding from JSON.
-    /// </summary>
-    public const string SectionName = "Audio";
-
-    /// <summary>
     /// Gets or sets the maximum number of audio tracks (channels) available.
     /// Must be between 1 and 32. Defaults to 8.
     /// </summary>

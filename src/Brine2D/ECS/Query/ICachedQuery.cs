@@ -6,4 +6,11 @@ namespace Brine2D.ECS.Query;
 internal interface ICachedQuery
 {
     void Invalidate();
+
+    /// <summary>
+    /// The component types this query is interested in.
+    /// Used for targeted invalidation; only queries that care about
+    /// a changed component type will be invalidated.
+    /// </summary>
+    IReadOnlyCollection<Type> ComponentTypes { get; }
 }

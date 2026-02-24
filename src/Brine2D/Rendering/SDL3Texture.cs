@@ -1,71 +1,51 @@
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 /// <summary>
-/// SDL3 implementation of a texture.
+/// SDL3 GPU API texture implementation.
 /// </summary>
 public class SDL3Texture : ITexture
 {
     private readonly ILogger<SDL3Texture> _logger;
-    private nint _texture;
+    private nint _textureHandle;
     private bool _disposed;
-    private TextureScaleMode _scaleMode;
 
+    public string Source { get; }
     public int Width { get; }
     public int Height { get; }
-    public string Source { get; }
-    public bool IsLoaded => _texture != IntPtr.Zero && !_disposed;
+    public bool IsLoaded => _textureHandle != nint.Zero && !_disposed;
+    public TextureScaleMode ScaleMode { get; set; }
+    
+    internal nint Handle => _textureHandle;
 
-    public TextureScaleMode ScaleMode
-    {
-        get => _scaleMode;
-        set
-        {
-            if (_scaleMode != value && _texture != IntPtr.Zero)
-            {
-                _scaleMode = value;
-                ApplyScaleMode();
-            }
-        }
-    }
-
-    internal nint Handle => _texture;
-
-    public SDL3Texture(string source, nint texture, int width, int height, TextureScaleMode scaleMode, ILogger<SDL3Texture> logger)
+    public SDL3Texture(
+        string source,
+        nint textureHandle,
+        int width,
+        int height,
+        TextureScaleMode scaleMode,
+        ILogger<SDL3Texture> logger)
     {
         Source = source ?? throw new ArgumentNullException(nameof(source));
-        _texture = texture;
+        _textureHandle = textureHandle;
         Width = width;
         Height = height;
-        _scaleMode = scaleMode;
+        ScaleMode = scaleMode;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        ApplyScaleMode();
-        _logger.LogDebug("Texture created: {Source} ({Width}x{Height}), ScaleMode: {ScaleMode}", source, width, height, scaleMode);
-    }
-
-    private void ApplyScaleMode()
-    {
-        if (_texture == IntPtr.Zero) return;
-
-        var sdlScaleMode = _scaleMode == TextureScaleMode.Nearest
-            ? SDL3.SDL.ScaleMode.Nearest
-            : SDL3.SDL.ScaleMode.Linear;
-
-        SDL3.SDL.SetTextureScaleMode(_texture, sdlScaleMode);
     }
 
     public void Dispose()
     {
         if (_disposed) return;
 
-        if (_texture != IntPtr.Zero)
+        if (_textureHandle != nint.Zero)
         {
-            SDL3.SDL.DestroyTexture(_texture);
-            _texture = IntPtr.Zero;
-            _logger.LogDebug("Texture disposed: {Source}", Source);
+            // Note: GPU textures need to be released with SDL_ReleaseGPUTexture
+            // which requires the device handle. This is handled in the texture loader's Dispose
+            _logger.LogDebug("Marking GPU texture for disposal: {Source}", Source);
+            _textureHandle = nint.Zero;
         }
 
         _disposed = true;

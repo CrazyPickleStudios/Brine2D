@@ -16,7 +16,7 @@ public class EntityTests : TestBase
         var entity = world.CreateEntity();
 
         // Assert
-        Assert.NotEqual(Guid.Empty, entity.Id);
+        Assert.NotEqual(0, entity.Id);
     }
 
     [Fact]

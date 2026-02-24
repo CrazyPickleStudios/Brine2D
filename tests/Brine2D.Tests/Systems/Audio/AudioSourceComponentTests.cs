@@ -7,18 +7,21 @@ namespace Brine2D.Tests.Systems.Audio;
 
 public class AudioSourceComponentTests : TestBase
 {
+    private AudioSourceComponent CreateAudioSource(Action<AudioSourceComponent>? configure = null)
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity()
+            .AddComponent<AudioSourceComponent>(configure);
+        return entity.GetComponent<AudioSourceComponent>()!;
+    }
+
     #region Default Values
 
     [Fact]
     public void Constructor_DefaultValues_AreCorrect()
     {
-        // Arrange & Act
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
+        var audioSource = CreateAudioSource();
 
-        // Assert
         Assert.Null(audioSource.SoundEffect);
         Assert.Null(audioSource.Music);
         Assert.Equal(1.0f, audioSource.Volume);
@@ -44,34 +47,22 @@ public class AudioSourceComponentTests : TestBase
     [Fact]
     public void SoundEffect_SetAndGet_WorksCorrectly()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
+        var audioSource = CreateAudioSource();
         var mockSound = Substitute.For<ISoundEffect>();
 
-        // Act
         audioSource.SoundEffect = mockSound;
 
-        // Assert
         Assert.Equal(mockSound, audioSource.SoundEffect);
     }
 
     [Fact]
     public void Music_SetAndGet_WorksCorrectly()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
+        var audioSource = CreateAudioSource();
         var mockMusic = Substitute.For<IMusic>();
 
-        // Act
         audioSource.Music = mockMusic;
 
-        // Assert
         Assert.Equal(mockMusic, audioSource.Music);
     }
 
@@ -80,48 +71,25 @@ public class AudioSourceComponentTests : TestBase
     #region Volume
 
     [Fact]
-    public void Volume_SetAndGet_WorksCorrectly()
+    public void Volume_DefaultIsOne()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
+        Assert.Equal(1.0f, CreateAudioSource().Volume);
+    }
 
-        // Act
+    [Fact]
+    public void Volume_CanBeSet()
+    {
+        var audioSource = CreateAudioSource();
         audioSource.Volume = 0.5f;
-
-        // Assert
         Assert.Equal(0.5f, audioSource.Volume);
     }
 
     [Fact]
     public void Volume_CanBeZero()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.Volume = 0f;
-
-        // Assert
         Assert.Equal(0f, audioSource.Volume);
-    }
-
-    [Fact]
-    public void Volume_DefaultIsOne()
-    {
-        // Arrange & Act
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Assert
-        Assert.Equal(1.0f, audioSource.Volume);
     }
 
     #endregion
@@ -129,114 +97,58 @@ public class AudioSourceComponentTests : TestBase
     #region Playback Control
 
     [Fact]
-    public void PlayOnEnable_SetAndGet_WorksCorrectly()
+    public void PlayOnEnable_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.PlayOnEnable = true;
-
-        // Assert
         Assert.True(audioSource.PlayOnEnable);
     }
 
     [Fact]
-    public void Loop_SetAndGet_WorksCorrectly()
+    public void Loop_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.Loop = true;
-
-        // Assert
         Assert.True(audioSource.Loop);
     }
 
     [Fact]
-    public void LoopCount_SetAndGet_WorksCorrectly()
+    public void LoopCount_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.LoopCount = 3;
-
-        // Assert
         Assert.Equal(3, audioSource.LoopCount);
     }
 
     [Fact]
-    public void LoopCount_CanBeNegativeForInfinite()
+    public void LoopCount_NegativeOneIsInfinite()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.LoopCount = -1;
-
-        // Assert
         Assert.Equal(-1, audioSource.LoopCount);
     }
 
     [Fact]
-    public void TriggerPlay_SetAndGet_WorksCorrectly()
+    public void TriggerPlay_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.TriggerPlay = true;
-
-        // Assert
         Assert.True(audioSource.TriggerPlay);
     }
 
     [Fact]
-    public void TriggerStop_SetAndGet_WorksCorrectly()
+    public void TriggerStop_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.TriggerStop = true;
-
-        // Assert
         Assert.True(audioSource.TriggerStop);
     }
 
     [Fact]
-    public void IsPlaying_CanBeSetInternally()
+    public void IsPlaying_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act - Simulate system setting this
+        var audioSource = CreateAudioSource();
         audioSource.IsPlaying = true;
-
-        // Assert
         Assert.True(audioSource.IsPlaying);
     }
 
@@ -245,130 +157,66 @@ public class AudioSourceComponentTests : TestBase
     #region Spatial Audio
 
     [Fact]
-    public void EnableSpatialAudio_SetAndGet_WorksCorrectly()
+    public void EnableSpatialAudio_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.EnableSpatialAudio = true;
-
-        // Assert
         Assert.True(audioSource.EnableSpatialAudio);
     }
 
     [Fact]
-    public void MinDistance_SetAndGet_WorksCorrectly()
+    public void MinDistance_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.MinDistance = 100f;
-
-        // Assert
         Assert.Equal(100f, audioSource.MinDistance);
     }
 
     [Fact]
-    public void MaxDistance_SetAndGet_WorksCorrectly()
+    public void MaxDistance_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.MaxDistance = 1000f;
-
-        // Assert
         Assert.Equal(1000f, audioSource.MaxDistance);
     }
 
     [Fact]
-    public void RolloffFactor_SetAndGet_WorksCorrectly()
+    public void RolloffFactor_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.RolloffFactor = 2.0f;
-
-        // Assert
         Assert.Equal(2.0f, audioSource.RolloffFactor);
     }
 
     [Fact]
     public void RolloffFactor_CanBeZero()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.RolloffFactor = 0f;
-
-        // Assert
         Assert.Equal(0f, audioSource.RolloffFactor);
     }
 
     [Fact]
-    public void SpatialBlend_SetAndGet_WorksCorrectly()
+    public void SpatialBlend_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act
+        var audioSource = CreateAudioSource();
         audioSource.SpatialBlend = 0.5f;
-
-        // Assert
         Assert.Equal(0.5f, audioSource.SpatialBlend);
     }
 
     [Fact]
-    public void SpatialVolume_CanBeSetBySystem()
+    public void SpatialVolume_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act - Simulate system calculating this
+        var audioSource = CreateAudioSource();
         audioSource.SpatialVolume = 0.75f;
-
-        // Assert
         Assert.Equal(0.75f, audioSource.SpatialVolume);
     }
 
     [Fact]
-    public void SpatialPan_CanBeSetBySystem()
+    public void SpatialPan_CanBeSet()
     {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<AudioSourceComponent>();
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Act - Simulate system calculating this
+        var audioSource = CreateAudioSource();
         audioSource.SpatialPan = 0.3f;
-
-        // Assert
         Assert.Equal(0.3f, audioSource.SpatialPan);
     }
 
@@ -377,47 +225,35 @@ public class AudioSourceComponentTests : TestBase
     #region Integration Tests
 
     [Fact]
-    public void AudioSourceComponent_SimpleSoundEffect_WorksCorrectly()
+    public void AudioSourceComponent_SoundEffectConfiguration()
     {
-        // Arrange & Act - Simple sound effect
-        var world = CreateTestWorld();
         var mockSound = Substitute.For<ISoundEffect>();
 
-        var entity = world.CreateEntity()
-            .AddComponent<AudioSourceComponent>(a =>
-            {
-                a.SoundEffect = mockSound;
-                a.Volume = 0.8f;
-                a.TriggerPlay = true;
-            });
+        var audioSource = CreateAudioSource(a =>
+        {
+            a.SoundEffect = mockSound;
+            a.Volume = 0.8f;
+            a.TriggerPlay = true;
+        });
 
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Assert
         Assert.Equal(mockSound, audioSource.SoundEffect);
         Assert.Equal(0.8f, audioSource.Volume);
         Assert.True(audioSource.TriggerPlay);
     }
 
     [Fact]
-    public void AudioSourceComponent_BackgroundMusic_WorksCorrectly()
+    public void AudioSourceComponent_BackgroundMusicConfiguration()
     {
-        // Arrange & Act - Background music
-        var world = CreateTestWorld();
         var mockMusic = Substitute.For<IMusic>();
 
-        var entity = world.CreateEntity()
-            .AddComponent<AudioSourceComponent>(a =>
-            {
-                a.Music = mockMusic;
-                a.Volume = 0.6f;
-                a.Loop = true;
-                a.PlayOnEnable = true;
-            });
+        var audioSource = CreateAudioSource(a =>
+        {
+            a.Music = mockMusic;
+            a.Volume = 0.6f;
+            a.Loop = true;
+            a.PlayOnEnable = true;
+        });
 
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Assert
         Assert.Equal(mockMusic, audioSource.Music);
         Assert.Equal(0.6f, audioSource.Volume);
         Assert.True(audioSource.Loop);
@@ -425,26 +261,20 @@ public class AudioSourceComponentTests : TestBase
     }
 
     [Fact]
-    public void AudioSourceComponent_SpatialAudio_WorksCorrectly()
+    public void AudioSourceComponent_SpatialAudioConfiguration()
     {
-        // Arrange & Act - Spatial audio setup
-        var world = CreateTestWorld();
         var mockSound = Substitute.For<ISoundEffect>();
 
-        var entity = world.CreateEntity()
-            .AddComponent<AudioSourceComponent>(a =>
-            {
-                a.SoundEffect = mockSound;
-                a.EnableSpatialAudio = true;
-                a.MinDistance = 100f;
-                a.MaxDistance = 800f;
-                a.RolloffFactor = 1.5f;
-                a.SpatialBlend = 0.9f;
-            });
+        var audioSource = CreateAudioSource(a =>
+        {
+            a.SoundEffect = mockSound;
+            a.EnableSpatialAudio = true;
+            a.MinDistance = 100f;
+            a.MaxDistance = 800f;
+            a.RolloffFactor = 1.5f;
+            a.SpatialBlend = 0.9f;
+        });
 
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Assert
         Assert.True(audioSource.EnableSpatialAudio);
         Assert.Equal(100f, audioSource.MinDistance);
         Assert.Equal(800f, audioSource.MaxDistance);
@@ -453,30 +283,24 @@ public class AudioSourceComponentTests : TestBase
     }
 
     [Fact]
-    public void AudioSourceComponent_CompleteSetup_WorksCorrectly()
+    public void AudioSourceComponent_FullConfiguration()
     {
-        // Arrange & Act
-        var world = CreateTestWorld();
         var mockSound = Substitute.For<ISoundEffect>();
 
-        var entity = world.CreateEntity()
-            .AddComponent<AudioSourceComponent>(a =>
-            {
-                a.SoundEffect = mockSound;
-                a.Volume = 0.7f;
-                a.PlayOnEnable = true;
-                a.Loop = true;
-                a.LoopCount = 3;
-                a.EnableSpatialAudio = true;
-                a.MinDistance = 75f;
-                a.MaxDistance = 600f;
-                a.RolloffFactor = 1.2f;
-                a.SpatialBlend = 0.8f;
-            });
+        var audioSource = CreateAudioSource(a =>
+        {
+            a.SoundEffect = mockSound;
+            a.Volume = 0.7f;
+            a.PlayOnEnable = true;
+            a.Loop = true;
+            a.LoopCount = 3;
+            a.EnableSpatialAudio = true;
+            a.MinDistance = 75f;
+            a.MaxDistance = 600f;
+            a.RolloffFactor = 1.2f;
+            a.SpatialBlend = 0.8f;
+        });
 
-        var audioSource = entity.GetComponent<AudioSourceComponent>()!;
-
-        // Assert
         Assert.Equal(mockSound, audioSource.SoundEffect);
         Assert.Equal(0.7f, audioSource.Volume);
         Assert.True(audioSource.PlayOnEnable);

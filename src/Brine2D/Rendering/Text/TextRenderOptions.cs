@@ -16,7 +16,7 @@ public sealed class TextRenderOptions
     /// <summary>
     /// Default font (null = use renderer's default font).
     /// </summary>
-    public IFont? Font { get; init; }
+    public Font? Font { get; init; }
     
     /// <summary>
     /// Base font size in points.

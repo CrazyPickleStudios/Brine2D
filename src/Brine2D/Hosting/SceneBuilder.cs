@@ -7,6 +7,13 @@ namespace Brine2D.Hosting;
 /// <summary>
 /// Builder for configuring scenes.
 /// </summary>
+/// <remarks>
+/// Scene registration is optional. Scenes can be loaded without explicit registration,
+/// but registering scenes is recommended for:
+/// - Self-documentation (shows available scenes in Program.cs)
+/// - Startup validation (ensures scenes can be resolved)
+/// - Slightly better performance (DI container caches type info)
+/// </remarks>
 public class SceneBuilder
 {
     private readonly IServiceCollection _services;
@@ -24,6 +31,9 @@ public class SceneBuilder
     /// <remarks>
     /// Scenes are registered as transient services, meaning a new instance
     /// is created each time the scene is loaded.
+    /// 
+    /// Registration is optional - scenes can be loaded without it via ActivatorUtilities.
+    /// However, explicit registration is recommended for documentation and validation.
     /// </remarks>
     public SceneBuilder Add<TScene>() where TScene : Scene
     {
@@ -43,7 +53,7 @@ public class SceneBuilder
             if (!typeof(Scene).IsAssignableFrom(sceneType))
             {
                 throw new ArgumentException(
-                    $"Type {sceneType.Name} does not implement IScene",
+                    $"Type {sceneType.Name} does not inherit from Scene",
                     nameof(sceneTypes));
             }
 

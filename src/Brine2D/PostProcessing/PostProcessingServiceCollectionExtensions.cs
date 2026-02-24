@@ -2,7 +2,7 @@ using System;
 using Brine2D.Rendering.PostProcessing;
 using Brine2D.Rendering.SDL.PostProcessing;
 using Brine2D.Rendering.SDL.PostProcessing.Effects;
-using Brine2D.SDL.Rendering;
+using Brine2D.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -70,7 +70,7 @@ public static class PostProcessingServiceCollectionExtensions
             var renderer = provider.GetRequiredService<IRenderer>();
             
             // Get the GPU device handle from renderer
-            if (renderer is not SDL3GPURenderer gpuRenderer)
+            if (renderer is not SDL3Renderer gpuRenderer)
             {
                 throw new InvalidOperationException("Grayscale effect requires SDL3GPURenderer");
             }
@@ -96,7 +96,7 @@ public static class PostProcessingServiceCollectionExtensions
             var logger = provider.GetService<ILogger<BlurEffect>>();
             var renderer = provider.GetRequiredService<IRenderer>();
 
-            if (renderer is not SDL3GPURenderer gpuRenderer)
+            if (renderer is not SDL3Renderer gpuRenderer)
             {
                 throw new InvalidOperationException("Blur effect requires SDL3GPURenderer");
             }

@@ -1,4 +1,4 @@
-namespace Brine2D.SDL.Common;
+namespace Brine2D.Common;
 
 /// <summary>
 /// Provides access to the current SDL3 window handle.

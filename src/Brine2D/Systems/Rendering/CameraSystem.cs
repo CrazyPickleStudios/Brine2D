@@ -12,7 +12,7 @@ namespace Brine2D.Systems.Rendering;
 /// System that controls cameras to follow entities.
 /// Bridge between ECS and Rendering - lives in Brine2D.Rendering.ECS.
 /// </summary>
-public class CameraSystem : IUpdateSystem
+public class CameraSystem : UpdateSystemBase
 {
     public string Name => "CameraSystem"; 
     public int UpdateOrder => 500; 
@@ -24,9 +24,13 @@ public class CameraSystem : IUpdateSystem
         _cameraManager = cameraManager;
     }
 
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
         var deltaTime = (float)gameTime.DeltaTime;
+
+        // Advance shake on all registered cameras
+        foreach (var camera in _cameraManager.GetAllCameras().Values)
+            camera.UpdateShake(deltaTime);
 
         // Group targets by camera name
         var targetsByCamera = world.GetEntitiesWithComponent<CameraFollowComponent>() 
@@ -75,14 +79,16 @@ public class CameraSystem : IUpdateSystem
                 targetPos.Y = currentPos.Y;
 
             // Smoothly move camera
-            if (follow.Smoothing > 0)
-            {
-                camera.Position = Vector2.Lerp(currentPos, targetPos, follow.Smoothing * deltaTime);
-            }
-            else
-            {
-                camera.Position = targetPos;
-            }
+            // Frame-rate independent exponential decay.
+            // Smoothing=5 reaches 99% of target in ~0.9s regardless of framerate.
+            var lerpFactor = follow.Smoothing > 0f
+                ? 1f - MathF.Exp(-follow.Smoothing * deltaTime)
+                : 1f;
+            camera.Position = Vector2.Lerp(currentPos, targetPos, lerpFactor);
+
+            // Smoothly adjust zoom (only when opted in via ZoomSmoothing > 0)
+            if (follow.ZoomSmoothing > 0f)
+                camera.ZoomSmooth(follow.TargetZoom, follow.ZoomSmoothing, deltaTime);
         }
     }
 }

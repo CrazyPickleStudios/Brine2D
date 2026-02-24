@@ -11,14 +11,14 @@ namespace Brine2D.Systems.AI;
 /// System that processes AI behaviors and applies movement.
 /// Supports patrol, chase, flee, and wander behaviors.
 /// </summary>
-public class AISystem : IUpdateSystem
+public class AISystem : UpdateSystemBase
 {
     public string Name => "AISystem";
     public int UpdateOrder => 50; 
 
     private readonly Random _random = new();
 
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
         var deltaTime = (float)gameTime.DeltaTime;
         var aiEntities = world.GetEntitiesWithComponent<AIControllerComponent>(); 

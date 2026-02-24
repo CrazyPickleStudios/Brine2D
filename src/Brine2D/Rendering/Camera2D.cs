@@ -6,13 +6,20 @@ namespace Brine2D.Rendering;
 /// <summary>
 /// A 2D camera for viewing and navigating the game world.
 /// </summary>
-public class Camera2D : ICamera
+public class Camera2D : ICamera, IDisposable
 {
     private Vector2 _position;
     private float _zoom = 1.0f;
     private float _rotation;
     private int _viewportWidth;
     private int _viewportHeight;
+    private ICameraManager? _manager;
+    private string? _registeredName;
+
+    private float _shakeIntensity;
+    private float _shakeDuration;
+    private float _shakeElapsed;
+    private readonly Random _shakeRng = new();
 
     public Vector2 Position
     {
@@ -54,12 +61,10 @@ public class Camera2D : ICamera
 
     public Matrix4x4 GetViewMatrix()
     {
-        // Build transformation matrix
-        // Order: Translate to origin -> Rotate -> Scale -> Translate to viewport center
-        
-        var origin = new Vector3(-_position.X, -_position.Y, 0);
+        var shakeOffset = GetShakeOffset();
+        var origin = new Vector3(-_position.X + shakeOffset.X, -_position.Y + shakeOffset.Y, 0);
         var center = new Vector3(ViewportCenter.X, ViewportCenter.Y, 0);
-        
+
         var translationToOrigin = Matrix4x4.CreateTranslation(origin);
         var rotation = Matrix4x4.CreateRotationZ(MathF.PI / 180f * _rotation);
         var scale = Matrix4x4.CreateScale(_zoom, _zoom, 1);
@@ -76,8 +81,6 @@ public class Camera2D : ICamera
         
         return new Vector2(screenPos4.X, screenPos4.Y);
     }
-
-    // Add these methods to your Camera2D class:
 
     public Rectangle GetVisibleBounds()
     {
@@ -122,15 +125,18 @@ public class Camera2D : ICamera
 
     public void FollowSmooth(Vector2 targetPosition, float smoothing, float deltaTime)
     {
-        if (smoothing <= 0)
-        {
-            Position = targetPosition;
-            return;
-        }
-
-        // Exponential smoothing (feels better than linear)
-        var lerpFactor = 1.0f - MathF.Pow(smoothing, deltaTime * 60f); // Normalize to 60fps
+        if (smoothing <= 0f) { Position = targetPosition; return; }
+        // Exponential decay; frame-rate independent. smoothing=5 is responsive, smoothing=1 is sluggish.
+        var lerpFactor = 1f - MathF.Exp(-smoothing * deltaTime);
         Position = Vector2.Lerp(Position, targetPosition, lerpFactor);
+    }
+
+    public void ZoomSmooth(float targetZoom, float smoothing, float deltaTime)
+    {
+        if (smoothing <= 0f) { Zoom = targetZoom; return; }
+        // Same exponential decay as FollowSmooth; frame-rate independent.
+        var lerpFactor = 1f - MathF.Exp(-smoothing * deltaTime);
+        Zoom = Zoom + (targetZoom - Zoom) * lerpFactor;
     }
 
     public Vector2 ScreenToWorld(Vector2 screenPosition)
@@ -166,5 +172,48 @@ public class Camera2D : ICamera
     public void CenterOn(Vector2 target)
     {
         _position = target;
+    }
+
+    public void Shake(float intensity, float duration)
+    {
+        // Blend with any ongoing shake; take whichever is more intense
+        if (intensity > _shakeIntensity * (1f - _shakeElapsed / Math.Max(_shakeDuration, 0.001f)))
+        {
+            _shakeIntensity = intensity;
+            _shakeDuration = duration;
+            _shakeElapsed = 0f;
+        }
+    }
+
+    public void UpdateShake(float deltaTime)
+    {
+        if (_shakeElapsed < _shakeDuration)
+            _shakeElapsed = Math.Min(_shakeElapsed + deltaTime, _shakeDuration);
+    }
+
+    private Vector2 GetShakeOffset()
+    {
+        if (_shakeElapsed >= _shakeDuration || _shakeIntensity <= 0f) return Vector2.Zero;
+        var decay = 1f - (_shakeElapsed / _shakeDuration);
+        var magnitude = _shakeIntensity * decay;
+        return new Vector2(
+            (_shakeRng.NextSingle() * 2f - 1f) * magnitude,
+            (_shakeRng.NextSingle() * 2f - 1f) * magnitude);
+    }
+
+    internal void TrackRegistration(ICameraManager manager, string name)
+    {
+        _manager = manager;
+        _registeredName = name;
+    }
+
+    public void Dispose()
+    {
+        if (_manager != null && _registeredName != null)
+        {
+            _manager.RemoveCamera(_registeredName);
+            _manager = null;
+            _registeredName = null;
+        }
     }
 }

@@ -1,4 +1,4 @@
-namespace Brine2D.Audio;
+﻿namespace Brine2D.Audio;
 
 /// <summary>
 /// Represents a loaded sound effect.

@@ -9,10 +9,10 @@ namespace Brine2D.Systems.Physics;
 /// <summary>
 /// System that handles collision detection between entities.
 /// </summary>
-public class PhysicsSystem : IUpdateSystem, IDisposable
+public class PhysicsSystem : UpdateSystemBase
 {
     public string Name => "PhysicsSystem";
-    public int UpdateOrder => 200;
+    public override int UpdateOrder => SystemUpdateOrder.Physics; // Explicit order
 
     private readonly CollisionSystem _collisionSystem;
     private readonly Dictionary<Entity, CollisionShape> _entityShapes = new();
@@ -23,7 +23,7 @@ public class PhysicsSystem : IUpdateSystem, IDisposable
         _collisionSystem = collisionSystem;
     }
 
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
         // Sync collider positions with transforms
         SyncColliders(world);

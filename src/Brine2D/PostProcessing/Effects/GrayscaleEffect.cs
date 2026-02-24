@@ -1,6 +1,6 @@
 using Brine2D.Rendering;
 using Brine2D.Rendering.SDL.Shaders.PostProcessing;
-using Brine2D.SDL.Rendering;
+using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 

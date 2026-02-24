@@ -1,99 +1,60 @@
-using Brine2D.Core;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+namespace Brine2D.Engine;
 
-namespace Brine2D.Engine
+/// <summary>
+/// Manages scene lifetime, transitions, and loading screens.
+/// Inject this to trigger scene navigation from within your game code.
+/// </summary>
+/// <example>
+/// <code>
+/// public class MainMenuScene : Scene
+/// {
+///     private readonly ISceneManager _scenes;
+///
+///     public MainMenuScene(ISceneManager scenes) => _scenes = scenes;
+///
+///     protected override void OnEnter()
+///     {
+///         // Navigate on button press
+///         World.CreateEntity("StartButton")
+///             .AddBehavior&lt;ButtonBehavior&gt;(b =>
+///                 b.OnClick = () => _scenes.LoadSceneAsync&lt;GameScene&gt;());
+///     }
+/// }
+/// </code>
+/// </example>
+public interface ISceneManager
 {
     /// <summary>
-    /// Manages game scenes and transitions.
+    /// Gets the currently active scene, or null if no scene is loaded.
     /// </summary>
-    public interface ISceneManager
-    {
-        /// <summary>
-        /// Gets the currently active scene.
-        /// </summary>
-        Scene? CurrentScene { get; }
+    Scene? CurrentScene { get; }
 
-        /// <summary>
-        /// Registers a scene type with the scene manager.
-        /// </summary>
-        void RegisterScene<TScene>() where TScene : Scene;
+    /// <summary>
+    /// Loads a scene by type with an optional transition.
+    /// </summary>
+    Task LoadSceneAsync<TScene>(
+        ISceneTransition? transition = null,
+        CancellationToken cancellationToken = default)
+        where TScene : Scene;
 
-        /// <summary>
-        /// Loads and activates a scene with optional transition and loading screen.
-        /// </summary>
-        /// <typeparam name="TScene">The scene type to load.</typeparam>
-        /// <param name="transition">Optional transition effect to play during scene change.</param>
-        /// <param name="cancellationToken">Optional cancellation token.</param>
-        Task LoadSceneAsync<TScene>(
-            ISceneTransition? transition = null,
-            CancellationToken cancellationToken = default)
-            where TScene : Scene;
+    /// <summary>
+    /// Loads a scene with a loading screen displayed during the transition.
+    /// </summary>
+    Task LoadSceneAsync<TScene, TLoadingScene>(
+        ISceneTransition? transition = null,
+        CancellationToken cancellationToken = default)
+        where TScene : Scene
+        where TLoadingScene : LoadingScene;
 
-        /// <summary>
-        /// Loads and activates a scene with optional transition and loading screen.
-        /// </summary>
-        /// <typeparam name="TScene">The scene type to load.</typeparam>
-        /// <typeparam name="TLoadingScene">The loading screen type to display while loading.</typeparam>
-        /// <param name="transition">Optional transition effect to play during scene change.</param>
-        /// <param name="cancellationToken">Optional cancellation token.</param>
-        Task LoadSceneAsync<TScene, TLoadingScene>(
-            ISceneTransition? transition = null,
-            CancellationToken cancellationToken = default)
-            where TScene : Scene
-            where TLoadingScene : LoadingScene;
-
-        /// <summary>
-        /// Loads and activates a scene by type with optional transition and loading screen.
-        /// </summary>
-        /// <param name="sceneType">The scene type to load.</param>
-        /// <param name="transition">Optional transition effect to play during scene change.</param>
-        /// <param name="loadingScreen">Optional loading screen to display while loading.</param>
-        /// <param name="cancellationToken">Optional cancellation token.</param>
-        Task LoadSceneAsync(
-            Type sceneType,
-            ISceneTransition? transition = null,
-            LoadingScene? loadingScreen = null,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// Loads a scene using a custom factory function.
-        /// </summary>
-        /// <typeparam name="TScene">The scene type to load.</typeparam>
-        /// <param name="sceneFactory">Factory function to create the scene.</param>
-        /// <param name="transition">Optional transition effect.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        Task LoadSceneAsync<TScene>(
-            Func<IServiceProvider, TScene> sceneFactory,
-            ISceneTransition? transition = null,
-            CancellationToken cancellationToken = default)
-            where TScene : Scene;
-
-        /// <summary>
-        /// Updates the current scene.
-        /// </summary>
-        void Update(GameTime gameTime);
-
-        /// <summary>
-        /// Renders the current scene.
-        /// </summary>
-        void Render(GameTime gameTime);
-
-        /// <summary>
-        /// Loads a sequence of scenes with transitions between them.
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// var chain = new SceneChain()
-        ///     .Then&lt;IntroScene&gt;()
-        ///     .Then&lt;GameScene&gt;();
-        /// 
-        /// await sceneManager.LoadSceneChainAsync(chain);
-        /// </code>
-        /// </example>
-        Task LoadSceneChainAsync(
-            SceneChain chain,
-            CancellationToken cancellationToken = default);
-    }
+    /// <summary>
+    /// Loads a scene using a factory function.
+    /// Use when you need to pass runtime data that DI alone cannot provide
+    /// (e.g., level number, save data, session info).
+    /// </summary>
+    Task LoadSceneAsync<TScene>(
+        Func<IServiceProvider, TScene> sceneFactory,
+        ISceneTransition? transition = null,
+        LoadingScene? loadingScreen = null,
+        CancellationToken cancellationToken = default)
+        where TScene : Scene;
 }

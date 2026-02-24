@@ -6,10 +6,8 @@ using Brine2D.Input;
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
-using Brine2D.ECS.Systems;
 using Brine2D.Systems.Rendering;
 using Brine2D.Engine;
-using Brine2D.Engine.Systems;
 using Brine2D.Performance;
 using Brine2D.Systems.Physics;
 
@@ -24,7 +22,6 @@ namespace FeatureDemos.Scenes.Performance;
 public class SpriteBenchmarkScene : DemoSceneBase
 {
     private readonly IAssetLoader _assetLoader;
-    private readonly DebugRenderer? _debugRenderer;
     private readonly ICamera? _camera;
     private ITexture? _sharedTexture;
     private int _spriteCount = 100;
@@ -38,12 +35,10 @@ public class SpriteBenchmarkScene : DemoSceneBase
         ISceneManager sceneManager,
         IGameContext gameContext,
         PerformanceOverlay? perfOverlay,
-        DebugRenderer? debugRenderer,
         ICamera? camera)
         : base(input, sceneManager, gameContext, perfOverlay)
     {
         _assetLoader = assetLoader;
-        _debugRenderer = debugRenderer;
         _camera = camera;
     }
 
@@ -81,16 +76,6 @@ public class SpriteBenchmarkScene : DemoSceneBase
             PerfOverlay.ShowDetailedStats = true;
         }
 
-        // Disable debug rendering
-        if (_debugRenderer != null)
-        {
-            _debugRenderer.ShowEntityNames = false;
-            _debugRenderer.ShowColliders = false;
-            _debugRenderer.ShowVelocities = false;
-            _debugRenderer.ShowAIDebug = false;
-            Logger.LogInformation("Debug rendering disabled for benchmark");
-        }
-
         try
         {
             Logger.LogInformation("Loading shared sprite texture...");
@@ -108,6 +93,14 @@ public class SpriteBenchmarkScene : DemoSceneBase
 
         // Spawn sprites
         SpawnSprites(_spriteCount);
+    }
+
+    protected override void OnEnter()
+    {
+        World.GetSystem<DebugRenderer>()!.IsEnabled = false; // Ensure debug renderer is disabled for benchmark
+        
+        Logger.LogInformation("Systems added to world");
+        Logger.LogInformation("Debug rendering disabled for benchmark");
     }
     
     private void ApplyTextureToAllSprites()
@@ -409,11 +402,5 @@ public class SpriteBenchmarkScene : DemoSceneBase
         }
         
         _spriteCount = 0;
-    }
-
-    protected override void ConfigureSystems(ISystemConfigurator systems)
-    {
-        // TEMPORARILY DISABLE to test
-        // systems.AddUpdateSystem<BenchmarkSystem>();
     }
 }

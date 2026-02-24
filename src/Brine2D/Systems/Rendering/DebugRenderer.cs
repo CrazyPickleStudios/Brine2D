@@ -14,7 +14,7 @@ namespace Brine2D.Systems.Rendering;
 /// Renders debug visualization for entities (colliders, velocities, AI paths, etc.).
 /// Lives in Brine2D.Rendering.ECS because it's the bridge between ECS and Rendering.
 /// </summary>
-public class DebugRenderer : IRenderSystem
+public class DebugRenderer : RenderSystemBase
 {
     public string Name => "DebugRenderer"; 
     public int RenderOrder => 1000;
@@ -28,7 +28,7 @@ public class DebugRenderer : IRenderSystem
     {
     }
 
-    public void Render(IRenderer renderer, IEntityWorld world)
+    public override void Render(IEntityWorld world, IRenderer renderer)
     {
         var entities = world.Entities;
 

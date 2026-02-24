@@ -7,7 +7,7 @@ using System.Numerics;
 
 namespace FeatureDemos.Scenes.Performance;
 
-public class BenchmarkSystem : IUpdateSystem
+public class BenchmarkSystem : UpdateSystemBase
 {
     public string Name => "BenchmarkSystem";
     public int UpdateOrder => 50;
@@ -16,11 +16,11 @@ public class BenchmarkSystem : IUpdateSystem
     {
     }
     
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
         var deltaTime = (float)gameTime.DeltaTime;
         
-        // Heavy CPU workload - now it will show in F4!
+        // Intentional CPU load; shows up in the F4 system profiler
         world.Query()
             .With<TransformComponent>()
             .With<VelocityComponent>()

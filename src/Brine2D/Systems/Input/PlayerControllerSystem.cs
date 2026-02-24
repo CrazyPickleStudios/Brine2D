@@ -9,13 +9,9 @@ namespace Brine2D.Systems.Input;
 
 /// <summary>
 /// System that processes player input and applies it to entities.
-/// Lives in Brine2D.Input.ECS because it's the bridge between ECS and Input.
 /// </summary>
-public class PlayerControllerSystem : IUpdateSystem
+public class PlayerControllerSystem : UpdateSystemBase
 {
-    public string Name => "PlayerControllerSystem"; 
-    public int UpdateOrder => 10; 
-
     private readonly IInputContext _input;
 
     public PlayerControllerSystem(IInputContext input)
@@ -23,7 +19,7 @@ public class PlayerControllerSystem : IUpdateSystem
         _input = input;
     }
 
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
         var players = world.GetEntitiesWithComponent<PlayerControllerComponent>(); 
 

@@ -21,7 +21,7 @@ public class SpriteRenderingSystemTests : TestBase
         mockTexture.Width.Returns(32);
         mockTexture.Height.Returns(32);
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 50))
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
 
@@ -30,11 +30,10 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
 
-        // Assert - System uses batching, so we verify stats instead
-        var stats = system.GetBatchStats();
-        Assert.Equal(1, stats.RenderedCount);
+        // Assert
+        Assert.Equal(1, system.GetBatchStats().RenderedCount);
     }
 
     [Fact]
@@ -48,15 +47,15 @@ public class SpriteRenderingSystemTests : TestBase
         mockTexture.Width.Returns(32);
         mockTexture.Height.Returns(32);
 
-        var entity1 = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
 
-        var entity2 = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
 
-        var entity3 = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
 
@@ -65,11 +64,10 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
 
         // Assert
-        var stats = system.GetBatchStats();
-        Assert.Equal(3, stats.RenderedCount);
+        Assert.Equal(3, system.GetBatchStats().RenderedCount);
     }
 
     [Fact]
@@ -81,20 +79,18 @@ public class SpriteRenderingSystemTests : TestBase
         var mockTextureLoader = Substitute.For<ITextureLoader>();
         var mockTexture = Substitute.For<ITexture>();
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
-        // No TransformComponent
 
         world.Flush();
 
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
 
-        // Assert - Should be culled (no transform)
-        var stats = system.GetBatchStats();
-        Assert.Equal(0, stats.RenderedCount);
+        // Assert
+        Assert.Equal(0, system.GetBatchStats().RenderedCount);
         Assert.Equal(1, system.GetTotalSpriteCount());
     }
 
@@ -106,7 +102,7 @@ public class SpriteRenderingSystemTests : TestBase
         var mockRenderer = Substitute.For<IRenderer>();
         var mockTextureLoader = Substitute.For<ITextureLoader>();
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<SpriteComponent>(s => s.Texture = null);
 
@@ -115,9 +111,9 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
 
-        // Assert - No texture means not added to batch
+        // Assert
         Assert.Equal(0, system.GetTotalSpriteCount());
     }
 
@@ -130,23 +126,22 @@ public class SpriteRenderingSystemTests : TestBase
         var mockTextureLoader = Substitute.For<ITextureLoader>();
         var mockTexture = Substitute.For<ITexture>();
 
-        var entity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
 
         world.Flush();
 
-        var sprite = entity.GetComponent<SpriteComponent>()!;
-        sprite.IsEnabled = false;
+        var entity = world.Entities[0];
+        entity.GetComponent<SpriteComponent>()!.IsEnabled = false;
 
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
 
-        // Assert - Disabled components are culled
-        var stats = system.GetBatchStats();
-        Assert.Equal(0, stats.RenderedCount);
+        // Assert
+        Assert.Equal(0, system.GetBatchStats().RenderedCount);
         Assert.Equal(1, system.GetTotalSpriteCount());
     }
 
@@ -162,19 +157,16 @@ public class SpriteRenderingSystemTests : TestBase
         mockTexture.Width.Returns(32);
         mockTexture.Height.Returns(32);
 
-        // Camera at (0,0) with viewport 800x600, zoom 1
         mockCamera.Position.Returns(Vector2.Zero);
         mockCamera.ViewportWidth.Returns(800);
         mockCamera.ViewportHeight.Returns(600);
         mockCamera.Zoom.Returns(1f);
 
-        // Sprite way off screen
-        var offscreenEntity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(10000, 10000))
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
 
-        // Sprite on screen
-        var onscreenEntity = world.CreateEntity()
+        world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0, 0))
             .AddComponent<SpriteComponent>(s => s.Texture = mockTexture);
 
@@ -183,12 +175,11 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader, mockCamera);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
 
-        // Assert - Only onscreen sprite rendered
-        var stats = system.GetBatchStats();
-        Assert.Equal(1, stats.RenderedCount); // 1 visible
-        Assert.Equal(2, system.GetTotalSpriteCount()); // 2 total
+        // Assert
+        Assert.Equal(1, system.GetBatchStats().RenderedCount);
+        Assert.Equal(2, system.GetTotalSpriteCount());
     }
 
     [Fact]
@@ -198,16 +189,16 @@ public class SpriteRenderingSystemTests : TestBase
         var world = CreateTestWorld();
         var mockTextureLoader = Substitute.For<ITextureLoader>();
         var mockTexture = Substitute.For<ITexture>();
-        
+
         mockTextureLoader.LoadTextureAsync("sprite.png", Arg.Any<TextureScaleMode>(), Arg.Any<CancellationToken>())
             .Returns(mockTexture);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<SpriteComponent>(s => 
+            .AddComponent<SpriteComponent>(s =>
             {
                 s.TexturePath = "sprite.png";
-                s.Texture = null; // Not loaded yet
+                s.Texture = null;
             });
 
         world.Flush();
@@ -217,14 +208,13 @@ public class SpriteRenderingSystemTests : TestBase
         // Act
         await system.LoadTexturesAsync(world);
 
-        // Assert - Texture should be loaded
+        // Assert
         await mockTextureLoader.Received(1).LoadTextureAsync(
-            "sprite.png", 
-            TextureScaleMode.Nearest, 
+            "sprite.png",
+            TextureScaleMode.Nearest,
             Arg.Any<CancellationToken>());
-        
-        var sprite = entity.GetComponent<SpriteComponent>()!;
-        Assert.Equal(mockTexture, sprite.Texture);
+
+        Assert.Equal(mockTexture, entity.GetComponent<SpriteComponent>()!.Texture);
     }
 
     [Fact]
@@ -234,11 +224,10 @@ public class SpriteRenderingSystemTests : TestBase
         var world = CreateTestWorld();
         var mockTextureLoader = Substitute.For<ITextureLoader>();
         var mockTexture = Substitute.For<ITexture>();
-        
+
         mockTextureLoader.LoadTextureAsync("shared.png", Arg.Any<TextureScaleMode>(), Arg.Any<CancellationToken>())
             .Returns(mockTexture);
 
-        // Two entities sharing same texture path
         var entity1 = world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<SpriteComponent>(s => s.TexturePath = "shared.png");
@@ -254,17 +243,17 @@ public class SpriteRenderingSystemTests : TestBase
         // Act
         await system.LoadTexturesAsync(world);
 
-        // Assert - Texture loaded only once, reused for both sprites
+        // Assert
         await mockTextureLoader.Received(1).LoadTextureAsync(
-            "shared.png", 
-            Arg.Any<TextureScaleMode>(), 
+            "shared.png",
+            Arg.Any<TextureScaleMode>(),
             Arg.Any<CancellationToken>());
-        
+
         var sprite1 = entity1.GetComponent<SpriteComponent>()!;
         var sprite2 = entity2.GetComponent<SpriteComponent>()!;
         Assert.Equal(mockTexture, sprite1.Texture);
         Assert.Equal(mockTexture, sprite2.Texture);
-        Assert.Same(sprite1.Texture, sprite2.Texture); // Same instance
+        Assert.Same(sprite1.Texture, sprite2.Texture);
     }
 
     [Fact]
@@ -290,12 +279,12 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
         var stats = system.GetBatchStats();
 
         // Assert
         Assert.Equal(5, stats.RenderedCount);
-        Assert.True(stats.DrawCalls > 0); // At least one draw call
+        Assert.True(stats.DrawCalls > 0);
     }
 
     [Fact]
@@ -319,7 +308,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(mockRenderer, world);
+        system.Render(world, mockRenderer);
 
         // Assert
         Assert.Equal(10, system.GetTotalSpriteCount());
@@ -328,22 +317,14 @@ public class SpriteRenderingSystemTests : TestBase
     [Fact]
     public void RenderOrder_IsCorrect()
     {
-        // Arrange
-        var mockTextureLoader = Substitute.For<ITextureLoader>();
-        var system = new SpriteRenderingSystem(mockTextureLoader);
-
-        // Act & Assert
+        var system = new SpriteRenderingSystem(Substitute.For<ITextureLoader>());
         Assert.Equal(0, system.RenderOrder);
     }
 
     [Fact]
     public void Name_IsCorrect()
     {
-        // Arrange
-        var mockTextureLoader = Substitute.For<ITextureLoader>();
-        var system = new SpriteRenderingSystem(mockTextureLoader);
-
-        // Act & Assert
+        var system = new SpriteRenderingSystem(Substitute.For<ITextureLoader>());
         Assert.Equal("SpriteRenderingSystem", system.Name);
     }
 }

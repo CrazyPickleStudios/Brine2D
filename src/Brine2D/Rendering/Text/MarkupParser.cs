@@ -252,7 +252,7 @@ public sealed class MarkupParser
     private record struct StyleState
     {
         public Color Color;
-        public IFont? Font;
+        public Font? Font;
         public float FontSize;
         public TextStyle Style;
     }

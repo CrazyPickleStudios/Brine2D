@@ -14,8 +14,6 @@ namespace FeatureDemos.Scenes.ECS;
 
 /// <summary>
 /// Demo scene showcasing the enhanced particle system with textures, rotation, and trails.
-/// Notice: NO manual pipeline calls - they execute automatically!
-/// Notice: NO frame management - SceneManager handles it!
 /// </summary>
 public class ParticleDemoScene : DemoSceneBase
 {
@@ -56,7 +54,7 @@ public class ParticleDemoScene : DemoSceneBase
         _textureLoader = textureLoader;
         _atlasBuilder = atlasBuilder;
     }
-
+    
     protected override async Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Logger.LogInformation("=== Enhanced Particle Demo Scene ===");
@@ -492,11 +490,9 @@ public class ParticleDemoScene : DemoSceneBase
         
         entity.AddComponent<TransformComponent>();
         entity.AddComponent<ParticleEmitterComponent>();
-        entity.AddComponent<LifetimeComponent>();
         
         var transform = entity.GetComponent<TransformComponent>()!;
         var emitter = entity.GetComponent<ParticleEmitterComponent>()!;
-        var lifetime = entity.GetComponent<LifetimeComponent>()!;
         
         // Configure transform
         transform.Position = position;
@@ -554,9 +550,5 @@ public class ParticleDemoScene : DemoSceneBase
                 emitter.ParticleAtlasRegion = _particleAtlas.GetRegion("particle");
             }
         }
-        
-        // Configure lifetime for auto-cleanup
-        lifetime.Lifetime = 0.5f;
-        lifetime.AutoDestroy = true;
     }
 }

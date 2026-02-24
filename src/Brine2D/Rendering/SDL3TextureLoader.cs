@@ -3,7 +3,7 @@ using Brine2D.Threading;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 public class SDL3TextureLoader : ITextureLoader
 {

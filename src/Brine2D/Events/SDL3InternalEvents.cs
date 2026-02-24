@@ -1,4 +1,4 @@
-namespace Brine2D.SDL.Events;
+namespace Brine2D.Events;
 
 /// <summary>
 /// Internal SDL3 events - not exposed to user code.

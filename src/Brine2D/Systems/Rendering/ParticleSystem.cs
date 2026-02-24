@@ -20,6 +20,8 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
     public int UpdateOrder => 250; 
     public int RenderOrder => 100;
 
+    public bool IsEnabled { get; set; } = true;
+
     private readonly Random _random = new();
     private readonly ObjectPool<Particle> _particlePool;
 
@@ -29,7 +31,7 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
         _particlePool = poolProvider.Create(new PoolableObjectPolicy<Particle>());
     }
 
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public void Update(IEntityWorld world, GameTime gameTime)
     {
         var deltaTime = (float)gameTime.DeltaTime;
         
@@ -218,7 +220,7 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
             MathF.Sin(angle) * distance);
     }
 
-    public void Render(IRenderer renderer, IEntityWorld world)
+    public void Render(IEntityWorld world, IRenderer renderer)
     {
         var emitters = world.GetEntitiesWithComponent<ParticleEmitterComponent>();
 

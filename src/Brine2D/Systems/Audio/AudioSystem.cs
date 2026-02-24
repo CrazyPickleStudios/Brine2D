@@ -1,10 +1,10 @@
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
-using Brine2D.ECS.Systems;
 using System.Collections.Concurrent;
 using System.Numerics;
 using Brine2D.Audio;
+using Brine2D.ECS.Systems;
 
 namespace Brine2D.Systems.Audio;
 
@@ -12,12 +12,9 @@ namespace Brine2D.Systems.Audio;
 /// System that processes audio components with 2D spatial audio support.
 /// Tracks component state to properly stop sounds when disabled.
 /// </summary>
-public class AudioSystem : IUpdateSystem
+public class AudioSystem : UpdateSystemBase
 {
-    public string Name => "AudioSystem";
-    public int UpdateOrder => 400;
-
-    private readonly IAudioService _audio;
+    private readonly AudioService _audio;
     
     // Thread-safe queue for audio events from SDL thread
     private readonly ConcurrentQueue<AudioEvent> _audioEvents = new();
@@ -28,7 +25,7 @@ public class AudioSystem : IUpdateSystem
     // Track previous enabled state to detect changes
     private readonly Dictionary<Entity, bool> _previousEnabledState = new();
 
-    public AudioSystem(IAudioService audio)
+    public AudioSystem(AudioService audio)
     {
         _audio = audio;
         
@@ -45,7 +42,7 @@ public class AudioSystem : IUpdateSystem
         });
     }
 
-    public void Update(GameTime gameTime, IEntityWorld world)
+    public override void Update(IEntityWorld world, GameTime gameTime)
     {
         // Process audio events from SDL thread (thread-safe)
         ProcessAudioEvents();

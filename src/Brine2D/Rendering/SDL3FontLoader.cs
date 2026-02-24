@@ -1,7 +1,7 @@
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 
-namespace Brine2D.SDL.Rendering;
+namespace Brine2D.Rendering;
 
 /// <summary>
 /// SDL_ttf implementation of font loader.
@@ -10,7 +10,7 @@ public class SDL3FontLoader : IFontLoader, IDisposable
 {
     private readonly ILogger<SDL3FontLoader> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly List<SDL3Font> _loadedFonts = new();
+    private readonly List<Font> _loadedFonts = new();
     private bool _initialized;
     private bool _disposed;
 
@@ -39,12 +39,12 @@ public class SDL3FontLoader : IFontLoader, IDisposable
         _logger.LogInformation("SDL_ttf initialized successfully");
     }
 
-    public async Task<IFont> LoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
+    public async Task<Font> LoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
     {
         return await Task.Run(() => LoadFont(path, size), cancellationToken);
     }
 
-    private IFont LoadFont(string path, int size)
+    private Font LoadFont(string path, int size)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Path cannot be null or empty", nameof(path));
@@ -66,16 +66,16 @@ public class SDL3FontLoader : IFontLoader, IDisposable
             throw new InvalidOperationException($"Failed to load font: {error}");
         }
 
-        var font = new SDL3Font(path, size, fontHandle, _loggerFactory.CreateLogger<SDL3Font>());
+        var font = new Font(path, size, fontHandle, _loggerFactory.CreateLogger<Font>());
         _loadedFonts.Add(font);
 
         _logger.LogDebug("Font loaded: {Path} at {Size}pt", path, size);
         return font;
     }
 
-    public void UnloadFont(IFont font)
+    public void UnloadFont(Font font)
     {
-        if (font is SDL3Font sdlFont)
+        if (font is Font sdlFont)
         {
             _loadedFonts.Remove(sdlFont);
             sdlFont.Dispose();

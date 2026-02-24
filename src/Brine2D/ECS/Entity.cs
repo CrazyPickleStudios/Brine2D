@@ -1,9 +1,7 @@
-﻿using System.Buffers;
-using System.Numerics;
-using Brine2D.Core;
+﻿using Brine2D.Core;
 using Brine2D.ECS.Components;
 using Microsoft.Extensions.Logging;
-using Brine2D.Rendering;
+using System.Threading;
 
 namespace Brine2D.ECS;
 
@@ -15,33 +13,55 @@ namespace Brine2D.ECS;
 public class Entity
 {
     private readonly ILogger<Entity>? _logger;
-    private readonly Dictionary<Type, Component> _components = new();
     private readonly HashSet<string> _tags = new();
-    
+
     // Hierarchy support
     private Entity? _parent;
     private readonly List<Entity> _children = new();
+    private readonly List<EntityBehavior> _behaviors = new();
 
-    public Guid Id { get; } = Guid.NewGuid();
+    // Concrete type for internal use, interface for public API
+    private EntityWorld? _world;
+
+    private static int _nextId;
+
+    /// <summary>
+    /// Unique integer ID for this entity. Assigned atomically at creation.
+    /// IDs start at 1; 0 is reserved as an invalid/null sentinel.
+    /// </summary>
+    public int Id { get; } = Interlocked.Increment(ref _nextId);
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
-    public IEntityWorld? World { get; internal set; }
-    
+
+    /// <summary>
+    /// The entity world this entity belongs to, or null if not yet added to a world.
+    /// </summary>
+    public IEntityWorld? World => _world;
+
+    /// <summary>
+    /// Sets the world this entity belongs to.
+    /// Internal - only called by EntityWorld and SceneManager.
+    /// </summary>
+    internal void SetWorld(EntityWorld? world)
+    {
+        _world = world;
+    }
+
     /// <summary>
     /// Gets the tags collection for this entity.
     /// </summary>
     public HashSet<string> Tags => _tags;
-    
+
     /// <summary>
     /// Gets the parent entity, or null if this is a root entity.
     /// </summary>
     public Entity? Parent => _parent;
-    
+
     /// <summary>
     /// Gets the read-only collection of child entities.
     /// </summary>
     public IReadOnlyList<Entity> Children => _children.AsReadOnly();
-    
+
     /// <summary>
     /// Gets whether this entity is a root entity (has no parent).
     /// </summary>
@@ -63,73 +83,48 @@ public class Entity
     /// </summary>
     public virtual void OnInitialize()
     {
-        // Override in derived classes
-    }
-
-    /// <summary>
-    /// Called every frame during the update phase.
-    /// Override to implement per-frame logic.
-    /// </summary>
-    public virtual void OnUpdate(GameTime gameTime)
-    {
-        // Override in derived classes
-        
-        // Update all enabled components
-        foreach (var component in _components.Values)
-        {
-            if (component.IsEnabled)
-            {
-                component.OnUpdate(gameTime);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Called every frame during the render phase.
-    /// Override to implement custom rendering logic.
-    /// </summary>
-    public virtual void OnRender(IRenderer renderer)
-    {
-        // Override in derived classes
-        
-        // Render all enabled components
-        foreach (var component in _components.Values)
-        {
-            if (component.IsEnabled)
-            {
-                component.OnRender(renderer);
-            }
-        }
     }
 
     /// <summary>
     /// Called once when the entity is destroyed and removed from the world.
-    /// Override to implement cleanup logic.
+    /// Override to implement custom cleanup logic.
     /// </summary>
+    /// <remarks>
+    /// Always call base.OnDestroy() when overriding to ensure behaviors are detached
+    /// and components are removed from pools.
+    /// Note: Component.OnRemoved() is intentionally NOT called here for performance.
+    /// Entity destruction is final. If you need OnRemoved callbacks, call
+    /// RemoveComponent&lt;T&gt;() explicitly before destroying the entity.
+    /// </remarks>
     public virtual void OnDestroy()
     {
-        // Override in derived classes
-        
-        // Destroy all children first (cascade destruction)
-        foreach (var child in _children.ToList()) // ToList to avoid modification during iteration
+        // Cascade destruction to children.
+        // Use array snapshot since DestroyEntity modifies _children via child.SetParent(null).
+        if (_children.Count > 0)
         {
-            World?.DestroyEntity(child);
+            var childSnapshot = _children.ToArray();
+            foreach (var child in childSnapshot)
+                _world?.DestroyEntity(child);
         }
-        
-        // Remove from parent
+
+        // Detach from parent
         if (_parent != null)
         {
             _parent._children.Remove(this);
             _parent = null;
         }
-        
-        // Notify all components they're being removed
-        foreach (var component in _components.Values.ToList())
+
+        // Detach all behaviors; give them a chance to clean up
+        foreach (var behavior in _behaviors)
         {
-            component.OnRemoved();
+            behavior.OnDetached();
+            _world?.NotifyBehaviorRemoved(this, behavior);
         }
-        
-        _components.Clear();
+        _behaviors.Clear();
+
+        // Remove all components from pools via world (encapsulated, single lock)
+        (_world as EntityWorld)?.RemoveEntityFromAllPools(Id);
+
         _children.Clear();
     }
 
@@ -140,67 +135,43 @@ public class Entity
     /// <summary>
     /// Sets the parent of this entity.
     /// </summary>
-    /// <param name="newParent">The new parent entity, or null to make this a root entity.</param>
-    /// <returns>This entity for method chaining.</returns>
-    /// <remarks>
-    /// Changing parent affects transform hierarchy if TransformComponent is present.
-    /// </remarks>
-    /// <example>
-    /// <code>
-    /// var weapon = World.CreateEntity("Sword");
-    /// weapon.SetParent(player); // Weapon follows player
-    /// </code>
-    /// </example>
     public Entity SetParent(Entity? newParent)
     {
-        // Don't parent to self
         if (newParent == this)
         {
             _logger?.LogWarning("Cannot set entity {Name} as its own parent", Name);
             return this;
         }
-        
-        // Don't create circular references
+
         if (newParent != null && newParent.IsDescendantOf(this))
         {
             _logger?.LogWarning("Cannot set parent - would create circular reference");
             return this;
         }
-        
-        // Remove from old parent
+
         if (_parent != null)
-        {
             _parent._children.Remove(this);
-        }
-        
-        // Set new parent
+
         _parent = newParent;
-        
-        // Add to new parent's children
+
         if (_parent != null)
-        {
             _parent._children.Add(this);
-        }
-        
+
         return this;
     }
-    
+
     /// <summary>
     /// Adds a child entity to this entity.
     /// </summary>
-    /// <param name="child">The entity to add as a child.</param>
-    /// <returns>This entity for method chaining.</returns>
     public Entity AddChild(Entity child)
     {
         child.SetParent(this);
         return this;
     }
-    
+
     /// <summary>
     /// Removes a child entity from this entity (makes it a root entity).
     /// </summary>
-    /// <param name="child">The child entity to remove.</param>
-    /// <returns>True if the child was removed, false if it wasn't a child of this entity.</returns>
     public bool RemoveChild(Entity child)
     {
         if (_children.Remove(child))
@@ -210,10 +181,7 @@ public class Entity
         }
         return false;
     }
-    
-    /// <summary>
-    /// Checks if this entity is a descendant of the specified entity.
-    /// </summary>
+
     private bool IsDescendantOf(Entity potentialAncestor)
     {
         var current = _parent;
@@ -229,65 +197,36 @@ public class Entity
     /// <summary>
     /// Gets all descendant entities (children, grandchildren, etc.) recursively.
     /// </summary>
-    /// <returns>All descendants of this entity.</returns>
-    /// <example>
-    /// <code>
-    /// // Disable all descendants
-    /// foreach (var descendant in entity.GetDescendants())
-    /// {
-    ///     descendant.IsActive = false;
-    /// }
-    /// </code>
-    /// </example>
     public IEnumerable<Entity> GetDescendants()
     {
         foreach (var child in _children)
         {
             yield return child;
-
             foreach (var descendant in child.GetDescendants())
-            {
                 yield return descendant;
-            }
         }
     }
 
     /// <summary>
     /// Finds the first descendant entity with the specified name.
     /// </summary>
-    /// <param name="name">The name to search for.</param>
-    /// <returns>The first descendant with matching name, or null if not found.</returns>
-    /// <example>
-    /// <code>
-    /// var leftWheel = car.FindDescendant("LeftWheel");
-    /// </code>
-    /// </example>
     public Entity? FindDescendant(string name)
     {
         foreach (var child in _children)
         {
             if (child.Name == name)
                 return child;
-            
+
             var found = child.FindDescendant(name);
             if (found != null)
                 return found;
         }
-        
         return null;
     }
 
     /// <summary>
     /// Gets all descendants with the specified tag.
     /// </summary>
-    /// <param name="tag">The tag to filter by.</param>
-    /// <returns>All descendant entities with the specified tag.</returns>
-    /// <example>
-    /// <code>
-    /// // Find all "Weapon" tagged children of player
-    /// var weapons = player.GetDescendantsWithTag("Weapon");
-    /// </code>
-    /// </example>
     public IEnumerable<Entity> GetDescendantsWithTag(string tag)
     {
         foreach (var descendant in GetDescendants())
@@ -300,7 +239,6 @@ public class Entity
     /// <summary>
     /// Gets the depth of this entity in the hierarchy (0 = root).
     /// </summary>
-    /// <returns>The depth level, where 0 is a root entity.</returns>
     public int GetDepth()
     {
         int depth = 0;
@@ -316,23 +254,16 @@ public class Entity
     /// <summary>
     /// Detaches this entity from its parent, making it a root entity.
     /// </summary>
-    /// <returns>This entity for method chaining.</returns>
-    public Entity DetachFromParent()
-    {
-        return SetParent(null);
-    }
+    public Entity DetachFromParent() => SetParent(null);
 
     /// <summary>
     /// Gets the root entity of this hierarchy.
     /// </summary>
-    /// <returns>The root entity (entity with no parent).</returns>
     public Entity GetRoot()
     {
         var current = this;
         while (current._parent != null)
-        {
             current = current._parent;
-        }
         return current;
     }
 
@@ -342,18 +273,7 @@ public class Entity
 
     /// <summary>
     /// Creates and adds a component of the specified type.
-    /// If a component of this type already exists, does nothing.
     /// </summary>
-    /// <returns>This entity for method chaining.</returns>
-    /// <example>
-    /// <code>
-    /// var player = World.CreateEntity("Player")
-    ///     .AddComponent&lt;TransformComponent&gt;()
-    ///     .AddComponent&lt;SpriteRenderer&gt;()
-    ///     .AddComponent&lt;PlayerController&gt;()
-    ///     .AddTag("Player");
-    /// </code>
-    /// </example>
     public Entity AddComponent<T>() where T : Component, new()
     {
         AddComponent(new T());
@@ -361,169 +281,106 @@ public class Entity
     }
 
     /// <summary>
-    /// Creates and adds a component of the specified type with inline configuration.
-    /// If a component of this type already exists, does nothing.
+    /// Creates and adds a component with inline configuration.
+    /// If the entity already has this component type, the configure action is applied to the existing one.
     /// </summary>
-    /// <param name="configure">Optional action to configure the component after creation.</param>
-    /// <returns>This entity for method chaining.</returns>
-    /// <example>
-    /// <code>
-    /// var player = World.CreateEntity("Player")
-    ///     .AddComponent&lt;TransformComponent&gt;(t => t.LocalPosition = new Vector2(100, 100))
-    ///     .AddComponent&lt;SpriteComponent&gt;(s => {
-    ///         s.TexturePath = "player.png";
-    ///         s.Tint = Color.Red;
-    ///         s.Layer = 10;
-    ///     })
-    ///     .AddComponent&lt;VelocityComponent&gt;(v => v.MaxSpeed = 200f);
-    /// </code>
-    /// </example>
     public Entity AddComponent<T>(Action<T>? configure) where T : Component, new()
     {
-        var type = typeof(T);
-
-        // Check for existing component
-        if (_components.TryGetValue(type, out var existing))
+        if (HasComponent<T>())
         {
-            _logger?.LogDebug("Entity {Name} ({Id}) already has component {Type}, skipping", 
-                Name, Id, type.Name);
-            
-            // Still apply configuration to existing component if provided
-            configure?.Invoke((T)existing);
+            _logger?.LogDebug("Entity {Name} ({Id}) already has component {Type}, applying configuration",
+                Name, Id, typeof(T).Name);
+            configure?.Invoke(GetComponent<T>()!);
             return this;
         }
 
-        // Create and configure new component
         var component = new T();
         configure?.Invoke(component);
-        
-        // Add component
         AddComponent(component);
         return this;
     }
 
     /// <summary>
     /// Adds an existing component instance to this entity.
-    /// If a component of this type already exists, does nothing.
     /// </summary>
-    /// <returns>This entity for method chaining.</returns>
     public Entity AddComponent<T>(T component) where T : Component
     {
-        var type = typeof(T);
-
-        // Check for existing component
-        if (_components.TryGetValue(type, out var existing))
+        if (HasComponent<T>())
         {
-            _logger?.LogDebug("Entity {Name} ({Id}) already has component {Type}, skipping", 
-                Name, Id, type.Name);
+            _logger?.LogDebug("Entity {Name} ({Id}) already has component {Type}, skipping",
+                Name, Id, typeof(T).Name);
             return this;
         }
 
-        // Add new component
-        _components[type] = component;
         component.Entity = this;
-        
-        // Notify world (for cached queries, etc.)
-        if (World is EntityWorld world)
-        {
-            world.NotifyComponentAdded(this, component);
-        }
-        
-        // Trigger lifecycle
+        _world?.AddComponentToPool(this.Id, component);
+        _world?.NotifyComponentAdded(this, component);
         component.OnAdded();
 
         return this;
     }
 
     public T? GetComponent<T>() where T : Component
-    {
-        var type = typeof(T);
-        return _components.TryGetValue(type, out var component) ? component as T : null;
-    }
+        => _world?.GetComponentFromPool<T>(this.Id);
+
+    public bool HasComponent<T>() where T : Component
+        => _world?.HasComponentInPool<T>(this.Id) ?? false;
 
     /// <summary>
-    /// Gets a required component, throwing if not present (ASP.NET GetRequiredService pattern).
+    /// Checks if this entity has a component of the specified type (non-generic version).
+    /// Used internally by EntityQuery for dynamic type checking.
     /// </summary>
+    internal bool HasComponent(Type componentType)
+        => _world?.HasComponentOfType(Id, componentType) ?? false;
+
+    public bool RemoveComponent<T>() where T : Component
+    {
+        var component = GetComponent<T>();
+        if (component == null)
+            return false;
+
+        component.OnRemoved();
+        component.Entity = null;
+
+        var removed = _world?.RemoveComponentFromPool<T>(this.Id) ?? false;
+        if (removed)
+            _world?.NotifyComponentRemoved(this, component);
+
+        return removed;
+    }
+
     public T GetRequiredComponent<T>() where T : Component
     {
         var component = GetComponent<T>();
         if (component == null)
         {
             throw new InvalidOperationException(
-                $"Entity '{Name}' ({Id}) does not have required component '{typeof(T).Name}'. " +
-                $"Did you forget to add it?");
+                $"Entity '{Name}' ({Id}) does not have required component '{typeof(T).Name}'." + Environment.NewLine +
+                Environment.NewLine +
+                "Fix: Add the component before accessing it:" + Environment.NewLine +
+                $"  entity.AddComponent<{typeof(T).Name}>();" + Environment.NewLine +
+                Environment.NewLine +
+                $"Available components: {string.Join(", ", GetAllComponents().Select(c => c.GetType().Name))}");
         }
         return component;
     }
 
-    public bool HasComponent<T>() where T : Component
-    {
-        return _components.ContainsKey(typeof(T));
-    }
-
-    public bool HasComponent(Type componentType)
-    {
-        return _components.ContainsKey(componentType);
-    }
-
-    /// <summary>
-    /// Removes a component of the specified type from this entity.
-    /// </summary>
-    /// <returns>True if a component was removed, false if no component of that type existed.</returns>
-    public bool RemoveComponent<T>() where T : Component
-    {
-        return RemoveComponent(typeof(T));
-    }
-
-    /// <summary>
-    /// Removes a component by type.
-    /// </summary>
-    /// <returns>True if a component was removed, false if no component of that type existed.</returns>
-    public bool RemoveComponent(Type componentType)
-    {
-        if (_components.TryGetValue(componentType, out var component))
-        {
-            _components.Remove(componentType);
-            
-            // Trigger lifecycle
-            component.OnRemoved();
-            component.Entity = null;
-            
-            // Notify world (for cached queries, etc.)
-            if (World is EntityWorld world)
-            {
-                world.NotifyComponentRemoved(this, component);
-            }
-            
-            return true;
-        }
-
-        return false;
-    }
-
     public IEnumerable<Component> GetAllComponents()
-    {
-        return _components.Values;
-    }
+        => _world?.GetAllComponentsFromPool(this.Id) ?? Enumerable.Empty<Component>();
 
     /// <summary>
-    /// Gets a component in this entity or any of its children (recursive search).
+    /// Gets a component on this entity or any of its children (depth-first recursive search).
     /// </summary>
-    /// <returns>The first matching component found, or null if none found.</returns>
-    /// <example>
-    /// <code>
-    /// // Find a Rigidbody component in player or any child (like equipped weapon)
-    /// var rb = player.GetComponentInChildren&lt;Rigidbody&gt;();
-    /// </code>
-    /// </example>
+    /// <remarks>
+    /// Useful for equipment hierarchies, scene graphs, and bone structures.
+    /// This is O(depth x children). Avoid calling on hot paths or deep hierarchies.
+    /// </remarks>
     public T? GetComponentInChildren<T>() where T : Component
     {
-        // Check this entity first
         var component = GetComponent<T>();
         if (component != null)
             return component;
 
-        // Search children recursively (depth-first)
         foreach (var child in _children)
         {
             component = child.GetComponentInChildren<T>();
@@ -535,59 +392,37 @@ public class Entity
     }
 
     /// <summary>
-    /// Gets a component in this entity or any of its ancestors.
+    /// Gets a component on this entity or any of its ancestors.
     /// </summary>
-    /// <returns>The first matching component found walking up the hierarchy, or null if none found.</returns>
-    /// <example>
-    /// <code>
-    /// // Find a Canvas component in this UI element or any parent
-    /// var canvas = uiElement.GetComponentInParent&lt;Canvas&gt;();
-    /// </code>
-    /// </example>
+    /// <remarks>
+    /// This is O(depth). Avoid calling on hot paths or deep hierarchies.
+    /// </remarks>
     public T? GetComponentInParent<T>() where T : Component
     {
-        // Check this entity first
         var component = GetComponent<T>();
         if (component != null)
             return component;
 
-        // Walk up parent chain
         return _parent?.GetComponentInParent<T>();
     }
 
     /// <summary>
     /// Destroys this entity, removing it from the world.
-    /// The destruction will be deferred if called during frame processing.
-    /// Children are also destroyed (cascade destruction).
     /// </summary>
     public void Destroy()
     {
-        if (World == null)
+        if (_world == null)
         {
             _logger?.LogWarning("Cannot destroy entity {Id} - not attached to a world", Id);
             return;
         }
-
-        World.DestroyEntity(this);
+        _world.DestroyEntity(this);
     }
 
     #endregion
 
     #region Tag Management
 
-    /// <summary>
-    /// Adds a tag to this entity.
-    /// </summary>
-    /// <param name="tag">The tag to add.</param>
-    /// <returns>This entity for method chaining.</returns>
-    /// <example>
-    /// <code>
-    /// var enemy = World.CreateEntity("Goblin")
-    ///     .AddComponent&lt;TransformComponent&gt;()
-    ///     .AddTag("Enemy")
-    ///     .AddTag("Melee");
-    /// </code>
-    /// </example>
     public Entity AddTag(string tag)
     {
         if (string.IsNullOrWhiteSpace(tag))
@@ -595,79 +430,32 @@ public class Entity
             _logger?.LogWarning("Attempted to add null or empty tag to entity {Name}", Name);
             return this;
         }
-        
         _tags.Add(tag);
         return this;
     }
 
-    /// <summary>
-    /// Adds multiple tags to this entity.
-    /// </summary>
-    /// <param name="tags">The tags to add.</param>
-    /// <returns>This entity for method chaining.</returns>
-    /// <example>
-    /// <code>
-    /// var boss = World.CreateEntity("Dragon")
-    ///     .AddTags("Enemy", "Boss", "Flying", "FireBreathing");
-    /// </code>
-    /// </example>
     public Entity AddTags(params string[] tags)
     {
         foreach (var tag in tags)
         {
             if (!string.IsNullOrWhiteSpace(tag))
-            {
                 _tags.Add(tag);
-            }
         }
         return this;
     }
 
-    /// <summary>
-    /// Removes a tag from this entity.
-    /// </summary>
-    /// <param name="tag">The tag to remove.</param>
-    /// <returns>This entity for method chaining.</returns>
     public Entity RemoveTag(string tag)
     {
         _tags.Remove(tag);
         return this;
     }
 
-    /// <summary>
-    /// Checks if this entity has the specified tag.
-    /// </summary>
-    /// <param name="tag">The tag to check for.</param>
-    /// <returns>True if the entity has the tag, false otherwise.</returns>
-    public bool HasTag(string tag)
-    {
-        return _tags.Contains(tag);
-    }
+    public bool HasTag(string tag) => _tags.Contains(tag);
 
-    /// <summary>
-    /// Checks if this entity has all of the specified tags.
-    /// </summary>
-    /// <param name="tags">Tags to check for.</param>
-    /// <returns>True if the entity has all tags, false otherwise.</returns>
-    public bool HasAllTags(params string[] tags)
-    {
-        return tags.All(tag => _tags.Contains(tag));
-    }
+    public bool HasAllTags(params string[] tags) => tags.All(t => _tags.Contains(t));
 
-    /// <summary>
-    /// Checks if this entity has any of the specified tags.
-    /// </summary>
-    /// <param name="tags">Tags to check for.</param>
-    /// <returns>True if the entity has at least one tag, false otherwise.</returns>
-    public bool HasAnyTag(params string[] tags)
-    {
-        return tags.Any(tag => _tags.Contains(tag));
-    }
+    public bool HasAnyTag(params string[] tags) => tags.Any(t => _tags.Contains(t));
 
-    /// <summary>
-    /// Clears all tags from this entity.
-    /// </summary>
-    /// <returns>This entity for method chaining.</returns>
     public Entity ClearTags()
     {
         _tags.Clear();
@@ -676,10 +464,79 @@ public class Entity
 
     #endregion
 
+    #region Behaviors
+
+    /// <summary>
+    /// Adds a behavior to this entity with automatic dependency injection.
+    /// </summary>
+    /// <typeparam name="T">The behavior type.</typeparam>
+    /// <returns>This entity for method chaining.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if entity is not in a world.</exception>
+    /// <example>
+    /// <code>
+    /// entity.AddBehavior&lt;PlayerMovementBehavior&gt;()
+    ///       .AddBehavior&lt;PlayerShootingBehavior&gt;();
+    /// </code>
+    /// </example>
+    public Entity AddBehavior<T>() where T : EntityBehavior
+    {
+        if (_world == null)
+            throw new InvalidOperationException("Cannot add behavior - entity is not in a world");
+
+        // Duplicate guard, matches AddSystem<T>() pattern
+        if (_behaviors.Any(b => b is T))
+        {
+            _logger?.LogWarning("Entity {Name} already has behavior {Type}, skipping", Name, typeof(T).Name);
+            return this;
+        }
+
+        // Behavior creation is the world's responsibility; keeps IServiceProvider private to EntityWorld
+        var behavior = _world.CreateBehavior<T>();
+
+        behavior.Entity = this;
+        _behaviors.Add(behavior);
+        behavior.OnAttached();
+
+        _world.NotifyBehaviorAdded(this, behavior);
+        _logger?.LogDebug("Entity {Name} added behavior {Behavior}", Name, typeof(T).Name);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Gets a behavior of the specified type attached to this entity.
+    /// </summary>
+    public T? GetBehavior<T>() where T : EntityBehavior
+        => _behaviors.OfType<T>().FirstOrDefault();
+
+    /// <summary>
+    /// Removes a behavior from this entity.
+    /// </summary>
+    public bool RemoveBehavior<T>() where T : EntityBehavior
+    {
+        var behavior = GetBehavior<T>();
+        if (behavior == null)
+            return false;
+
+        _behaviors.Remove(behavior);
+        behavior.OnDetached();
+        _world?.NotifyBehaviorRemoved(this, behavior);
+        _logger?.LogDebug("Entity {Name} removed behavior {Behavior}", Name, typeof(T).Name);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Gets all behaviors attached to this entity.
+    /// </summary>
+    public IEnumerable<EntityBehavior> GetAllBehaviors() => _behaviors;
+
+    #endregion
+
     public override string ToString()
     {
         var parentInfo = _parent != null ? $", Parent: {_parent.Name}" : "";
         var childrenInfo = _children.Count > 0 ? $", Children: {_children.Count}" : "";
-        return $"Entity {Name} ({Id}) - Active: {IsActive}, Components: {_components.Count}, Tags: {_tags.Count}{parentInfo}{childrenInfo}";
+        return $"Entity {Name} ({Id}) - Active: {IsActive}, Tags: {_tags.Count}{parentInfo}{childrenInfo}";
     }
 }
