@@ -24,7 +24,7 @@ public abstract class Scene
     private IEntityWorld? _world;
     private IRenderer? _renderer;
     private IInputContext? _input;
-    private AudioService? _audio;
+    private IAudioService? _audio;
     private IGameContext? _game;
 
     private static InvalidOperationException NotReady(string name) => new(
@@ -61,7 +61,7 @@ public abstract class Scene
     }
 
     /// <summary>Audio service for this scene. Available from OnLoadAsync onwards.</summary>
-    protected internal AudioService Audio
+    protected internal IAudioService Audio
     {
         get => _audio ?? throw NotReady(nameof(Audio));
         internal set => _audio = value;

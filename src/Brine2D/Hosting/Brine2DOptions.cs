@@ -1,61 +1,68 @@
+using System.ComponentModel.DataAnnotations;
 using Brine2D.Audio;
 using Brine2D.ECS;
-using Brine2D.Input;
 using Brine2D.Rendering;
-using System.ComponentModel.DataAnnotations;
 
 namespace Brine2D.Hosting;
 
 /// <summary>
-/// Configuration options for Brine2D game engine.
+///     Configuration options for Brine2D game engine.
 /// </summary>
 public sealed class Brine2DOptions
 {
-    /// <summary>Window configuration.</summary>
+    /// <summary>Audio configuration.</summary>
     [Required]
-    public WindowOptions Window { get; set; } = new();
-
-    /// <summary>Rendering configuration.</summary>
-    [Required]
-    public RenderingOptions Rendering { get; set; } = new();
+    public AudioOptions Audio { get; set; } = new();
 
     /// <summary>ECS configuration.</summary>
     [Required]
     public ECSOptions ECS { get; set; } = new();
 
     /// <summary>
-    /// Run in headless mode (no window, input, audio, or rendering).
-    /// Useful for dedicated servers or automated testing.
+    ///     Run in headless mode (no window, input, audio, or rendering).
+    ///     Useful for dedicated servers or automated testing.
     /// </summary>
     public bool Headless { get; set; } = false;
 
     /// <summary>
-    /// Minimum time in milliseconds a loading screen stays visible after the scene is ready.
-    /// Prevents loading screens from flashing imperceptibly for very fast loads. Default: 200.
-    /// Set to 0 to disable.
+    ///     Minimum time in milliseconds a loading screen stays visible after the scene is ready.
+    ///     Prevents loading screens from flashing imperceptibly for very fast loads. Default: 200.
+    ///     Set to 0 to disable.
     /// </summary>
+    [Range(0, int.MaxValue, ErrorMessage = "LoadingScreenMinimumDisplayMs must be 0 or greater.")]
     public int LoadingScreenMinimumDisplayMs { get; set; } = 200;
 
+    /// <summary>Rendering configuration.</summary>
+    [Required]
+    public RenderingOptions Rendering { get; set; } = new();
+
+    /// <summary>Window configuration.</summary>
+    [Required]
+    public WindowOptions Window { get; set; } = new();
+
     /// <summary>
-    /// Validates all options using DataAnnotations (ASP.NET Core pattern).
-    /// Called automatically by GameApplicationBuilder.Build().
+    ///     Validates all options using DataAnnotations (ASP.NET Core pattern).
+    ///     Called automatically by GameApplicationBuilder.Build().
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// Thrown if validation fails with detailed error messages.
+    ///     Thrown if validation fails with detailed error messages.
     /// </exception>
     public void Validate()
     {
         var allErrors = new List<string>();
 
         var errors = new List<ValidationResult>();
-        var context = new ValidationContext(this, serviceProvider: null, items: null);
+        var context = new ValidationContext(this, null, null);
 
-        if (!Validator.TryValidateObject(this, context, errors, validateAllProperties: true))
+        if (!Validator.TryValidateObject(this, context, errors, true))
+        {
             allErrors.AddRange(errors.Select(e => e.ErrorMessage ?? "Unknown validation error"));
+        }
 
         ValidateNested(Window, "Window", allErrors);
         ValidateNested(Rendering, "Rendering", allErrors);
         ValidateNested(ECS, "ECS", allErrors);
+        ValidateNested(Audio, "Audio", allErrors);
 
         if (allErrors.Any())
         {
@@ -70,12 +77,14 @@ public sealed class Brine2DOptions
     private static void ValidateNested(object obj, string propertyName, List<string> allErrors)
     {
         var errors = new List<ValidationResult>();
-        var context = new ValidationContext(obj, serviceProvider: null, items: null);
+        var context = new ValidationContext(obj, null, null);
 
-        if (!Validator.TryValidateObject(obj, context, errors, validateAllProperties: true))
+        if (!Validator.TryValidateObject(obj, context, errors, true))
         {
             foreach (var error in errors)
+            {
                 allErrors.Add($"{propertyName}: {error.ErrorMessage}");
+            }
         }
     }
 }

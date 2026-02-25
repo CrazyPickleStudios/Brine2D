@@ -1,29 +1,32 @@
+using System.Diagnostics.CodeAnalysis;
 using Brine2D.Events;
 using Brine2D.Hosting;
-using Brine2D.Common;
-using Brine2D.Events;
-using Microsoft.Extensions.Hosting; // Use Microsoft's interface
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SDL3;
 
 namespace Brine2D;
 
 /// <summary>
-/// Central SDL3 event processing service.
-/// Polls SDL events and routes them to appropriate event buses.
-/// Similar to ASP.NET's event pipeline - single source of truth for platform events.
+///     Central SDL3 event processing service.
+///     Polls SDL events and routes them to appropriate event buses.
+///     Similar to ASP.NET's event pipeline; single source of truth for platform events.
 /// </summary>
-public class SDL3EventPump : IEventPump
+[ExcludeFromCodeCoverage(Justification = "Requires a live SDL3 event loop; covered by manual/hardware testing.")]
+internal class SDL3EventPump : IEventPump
 {
-    private readonly ILogger<SDL3EventPump> _logger;
-    private readonly EventBus _publicEventBus;
     private readonly EventBus _internalEventBus;
     private readonly IHostApplicationLifetime _lifetime;
+    private readonly ILogger<SDL3EventPump> _logger;
+    private readonly EventBus _publicEventBus;
 
-    public SDL3EventPump(
+    public SDL3EventPump
+    (
         ILogger<SDL3EventPump> logger,
         EventBus publicEventBus,
         EventBus internalEventBus,
-        IHostApplicationLifetime lifetime)
+        IHostApplicationLifetime lifetime
+    )
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _publicEventBus = publicEventBus ?? throw new ArgumentNullException(nameof(publicEventBus));
@@ -32,95 +35,14 @@ public class SDL3EventPump : IEventPump
     }
 
     /// <summary>
-    /// Processes all pending SDL events for this frame.
-    /// Should be called once per frame, early in the game loop.
+    ///     Processes all pending SDL events for this frame.
+    ///     Should be called once per frame, early in the game loop.
     /// </summary>
     public void ProcessEvents()
     {
-        while (SDL3.SDL.PollEvent(out var evt))
+        while (SDL.PollEvent(out var evt))
         {
             RouteEvent(evt);
-        }
-    }
-
-    private void RouteEvent(SDL3.SDL.Event evt)
-    {
-        switch ((SDL3.SDL.EventType)evt.Type)
-        {
-            // ===== LIFECYCLE EVENTS (Public) =====
-            case SDL3.SDL.EventType.Quit:
-                HandleQuit();
-                break;
-
-            case SDL3.SDL.EventType.WindowResized:
-                _publicEventBus.Publish(new WindowResizedEvent(evt.Window.Data1, evt.Window.Data2));
-                _logger.LogDebug("Window resized to {Width}x{Height}", evt.Window.Data1, evt.Window.Data2);
-                break;
-
-            case SDL3.SDL.EventType.WindowMinimized:
-                _publicEventBus.Publish(new WindowMinimizedEvent());
-                _logger.LogDebug("Window minimized");
-                break;
-
-            case SDL3.SDL.EventType.WindowRestored:
-                _publicEventBus.Publish(new WindowRestoredEvent());
-                _logger.LogDebug("Window restored");
-                break;
-
-            case SDL3.SDL.EventType.WindowFocusGained:
-                _publicEventBus.Publish(new WindowFocusGainedEvent());
-                _logger.LogDebug("Window focus gained");
-                break;
-
-            case SDL3.SDL.EventType.WindowFocusLost:
-                _publicEventBus.Publish(new WindowFocusLostEvent());
-                _logger.LogDebug("Window focus lost");
-                break;
-
-            // ===== INPUT EVENTS (Internal SDL events only) =====
-            case SDL3.SDL.EventType.KeyDown:
-                _internalEventBus.Publish(new SDL3KeyDownEvent(evt.Key));
-                break;
-
-            case SDL3.SDL.EventType.KeyUp:
-                _internalEventBus.Publish(new SDL3KeyUpEvent(evt.Key));
-                break;
-
-            case SDL3.SDL.EventType.MouseButtonDown:
-                _internalEventBus.Publish(new SDL3MouseButtonDownEvent(evt.Button));
-                break;
-
-            case SDL3.SDL.EventType.MouseButtonUp:
-                _internalEventBus.Publish(new SDL3MouseButtonUpEvent(evt.Button));
-                break;
-
-            case SDL3.SDL.EventType.MouseWheel:
-                _internalEventBus.Publish(new SDL3MouseWheelEvent(evt.Wheel));
-                break;
-
-            case SDL3.SDL.EventType.MouseMotion:
-                _internalEventBus.Publish(new SDL3MouseMotionEvent(evt.Motion));
-                break;
-
-            case SDL3.SDL.EventType.TextInput:
-                _internalEventBus.Publish(new SDL3TextInputEvent(evt.Text));
-                break;
-
-            case SDL3.SDL.EventType.GamepadButtonDown:
-                _internalEventBus.Publish(new SDL3GamepadButtonDownEvent(evt.GButton));
-                break;
-
-            case SDL3.SDL.EventType.GamepadButtonUp:
-                _internalEventBus.Publish(new SDL3GamepadButtonUpEvent(evt.GButton));
-                break;
-
-            case SDL3.SDL.EventType.GamepadAdded:
-                _internalEventBus.Publish(new SDL3GamepadAddedEvent(evt.GDevice));
-                break;
-
-            case SDL3.SDL.EventType.GamepadRemoved:
-                _internalEventBus.Publish(new SDL3GamepadRemovedEvent(evt.GDevice));
-                break;
         }
     }
 
@@ -129,5 +51,84 @@ public class SDL3EventPump : IEventPump
         _lifetime.StopApplication();
         _publicEventBus.Publish(new ApplicationQuitRequestedEvent());
         _logger.LogInformation("Application quit requested");
+    }
+
+    private void RouteEvent(SDL.Event evt)
+    {
+        switch ((SDL.EventType)evt.Type)
+        {
+            case SDL.EventType.Quit:
+                HandleQuit();
+                break;
+
+            case SDL.EventType.WindowResized:
+                _publicEventBus.Publish(new WindowResizedEvent(evt.Window.Data1, evt.Window.Data2));
+                _logger.LogDebug("Window resized to {Width}x{Height}", evt.Window.Data1, evt.Window.Data2);
+                break;
+
+            case SDL.EventType.WindowMinimized:
+                _publicEventBus.Publish(new WindowMinimizedEvent());
+                _logger.LogDebug("Window minimized");
+                break;
+
+            case SDL.EventType.WindowRestored:
+                _publicEventBus.Publish(new WindowRestoredEvent());
+                _logger.LogDebug("Window restored");
+                break;
+
+            case SDL.EventType.WindowFocusGained:
+                _publicEventBus.Publish(new WindowFocusGainedEvent());
+                _logger.LogDebug("Window focus gained");
+                break;
+
+            case SDL.EventType.WindowFocusLost:
+                _publicEventBus.Publish(new WindowFocusLostEvent());
+                _logger.LogDebug("Window focus lost");
+                break;
+
+            case SDL.EventType.KeyDown:
+                _internalEventBus.Publish(new SDL3KeyDownEvent(evt.Key));
+                break;
+
+            case SDL.EventType.KeyUp:
+                _internalEventBus.Publish(new SDL3KeyUpEvent(evt.Key));
+                break;
+
+            case SDL.EventType.MouseButtonDown:
+                _internalEventBus.Publish(new SDL3MouseButtonDownEvent(evt.Button));
+                break;
+
+            case SDL.EventType.MouseButtonUp:
+                _internalEventBus.Publish(new SDL3MouseButtonUpEvent(evt.Button));
+                break;
+
+            case SDL.EventType.MouseWheel:
+                _internalEventBus.Publish(new SDL3MouseWheelEvent(evt.Wheel));
+                break;
+
+            case SDL.EventType.MouseMotion:
+                _internalEventBus.Publish(new SDL3MouseMotionEvent(evt.Motion));
+                break;
+
+            case SDL.EventType.TextInput:
+                _internalEventBus.Publish(new SDL3TextInputEvent(evt.Text));
+                break;
+
+            case SDL.EventType.GamepadButtonDown:
+                _internalEventBus.Publish(new SDL3GamepadButtonDownEvent(evt.GButton));
+                break;
+
+            case SDL.EventType.GamepadButtonUp:
+                _internalEventBus.Publish(new SDL3GamepadButtonUpEvent(evt.GButton));
+                break;
+
+            case SDL.EventType.GamepadAdded:
+                _internalEventBus.Publish(new SDL3GamepadAddedEvent(evt.GDevice));
+                break;
+
+            case SDL.EventType.GamepadRemoved:
+                _internalEventBus.Publish(new SDL3GamepadRemovedEvent(evt.GDevice));
+                break;
+        }
     }
 }

@@ -14,40 +14,31 @@ namespace Brine2D.Systems.Audio;
 /// </summary>
 public class AudioSystem : UpdateSystemBase
 {
-    private readonly AudioService _audio;
-    
-    // Thread-safe queue for audio events from SDL thread
+    private readonly IAudioService _audio;
     private readonly ConcurrentQueue<AudioEvent> _audioEvents = new();
-    
-    // Track which entity owns which track handle
     private readonly Dictionary<Entity, nint> _entityTracks = new();
-    
-    // Track previous enabled state to detect changes
     private readonly Dictionary<Entity, bool> _previousEnabledState = new();
 
-    public AudioSystem(AudioService audio)
+    public AudioSystem(IAudioService audio)
     {
         _audio = audio;
-        
         _audio.OnTrackStopped += OnTrackStopped;
     }
 
     private void OnTrackStopped(nint track)
     {
-        // Called from SDL audio thread - queue event for game thread
-        _audioEvents.Enqueue(new AudioEvent 
-        { 
-            Type = AudioEventType.TrackStopped, 
-            Track = track 
+        // Called from the SDL audio thread — queue for processing on the game thread.
+        _audioEvents.Enqueue(new AudioEvent
+        {
+            Type = AudioEventType.TrackStopped,
+            Track = track
         });
     }
 
     public override void Update(IEntityWorld world, GameTime gameTime)
     {
-        // Process audio events from SDL thread (thread-safe)
         ProcessAudioEvents();
-        
-        // Find the active audio listener
+
         var listener = FindActiveListener(world);
 
         var audioSources = world.GetEntitiesWithComponent<AudioSourceComponent>();

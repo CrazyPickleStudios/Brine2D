@@ -17,7 +17,7 @@ namespace Brine2D.Audio;
 /// <item>Proper resource disposal and cleanup</item>
 /// </list>
 /// </remarks>
-public class AudioService
+internal class AudioService : IAudioService
 {
     /// <summary>
     /// Logger instance for audio service operations.
@@ -235,7 +235,7 @@ public class AudioService
     /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="path"/> does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when SDL fails to load the audio file.</exception>
-    public async Task<SoundEffect> LoadSoundAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ISoundEffect> LoadSoundAsync(string path, CancellationToken cancellationToken = default)
     {
         return await Task.Run(() => LoadSound(path), cancellationToken);
     }
@@ -284,7 +284,7 @@ public class AudioService
     /// <remarks>
     /// This method calls <see cref="PlaySoundWithTrack"/> internally but does not return the track handle.
     /// </remarks>
-    public void PlaySound(SoundEffect sound, float? volume = null, int loops = 0, float pan = 0f)
+    public void PlaySound(ISoundEffect sound, float? volume = null, int loops = 0, float pan = 0f)
     {
         PlaySoundWithTrack(sound, volume, loops, pan);
     }
@@ -491,7 +491,7 @@ public class AudioService
     /// If the sound is an SDL3SoundEffect, it is removed from the loaded sounds list
     /// and disposed. No action is taken if the sound is not an SDL3SoundEffect.
     /// </remarks>
-    public void UnloadSound(SoundEffect sound)
+    public void UnloadSound(ISoundEffect sound)
     {
         if (sound is SoundEffect sdlSound)
         {
@@ -510,7 +510,7 @@ public class AudioService
     /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="path"/> does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when SDL fails to load the audio file.</exception>
-    public async Task<Music> LoadMusicAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<IMusic> LoadMusicAsync(string path, CancellationToken cancellationToken = default)
     {
         return await Task.Run(() => LoadMusic(path), cancellationToken);
     }
@@ -682,7 +682,7 @@ public class AudioService
     /// If the music is an SDL3Music instance, it is removed from the loaded music list
     /// and disposed. No action is taken if the music is not an SDL3Music instance.
     /// </remarks>
-    public void UnloadMusic(Music music)
+    public void UnloadMusic(IMusic music)
     {
         if (music is Music sdlMusic)
         {

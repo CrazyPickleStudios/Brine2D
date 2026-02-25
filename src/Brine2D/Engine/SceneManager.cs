@@ -190,7 +190,7 @@ namespace Brine2D.Engine
             loadingScene.Logger = loggerFactory.CreateLogger(loadingScene.GetType());
             loadingScene.Renderer = _serviceProvider.GetRequiredService<IRenderer>();
             loadingScene.Input = _serviceProvider.GetRequiredService<IInputContext>();
-            loadingScene.Audio = _serviceProvider.GetRequiredService<AudioService>();
+            loadingScene.Audio = _serviceProvider.GetRequiredService<IAudioService>();
             loadingScene.Game = _serviceProvider.GetRequiredService<IGameContext>();
         }
 
@@ -222,7 +222,7 @@ namespace Brine2D.Engine
             scene.World = world;
             scene.Renderer = _serviceProvider.GetRequiredService<IRenderer>();
             scene.Input = _serviceProvider.GetRequiredService<IInputContext>();
-            scene.Audio = _serviceProvider.GetRequiredService<AudioService>();
+            scene.Audio = _serviceProvider.GetRequiredService<IAudioService>();
             scene.Game = _serviceProvider.GetRequiredService<IGameContext>();
         }
 

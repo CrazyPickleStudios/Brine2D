@@ -19,10 +19,9 @@ namespace Brine2D.Hosting;
 public class GameApplicationBuilder
 {
     private readonly HostApplicationBuilder _hostBuilder;
-    private Brine2DOptions _options = new();
+    private readonly Brine2DOptions _options = new();
     private bool _built = false;
     private readonly HashSet<Type> _registeredScenes = new();
-    private readonly List<Type> _scenesToValidate = new();
 
     internal GameApplicationBuilder(string[] args, HostApplicationBuilderSettings? settings = null)
     {
@@ -72,9 +71,8 @@ public class GameApplicationBuilder
     {
         EnsureNotBuilt();
         var sceneType = typeof(T);
-        _registeredScenes.Add(sceneType);
-        Services.AddTransient<T>();
-        _scenesToValidate.Add(sceneType);
+        if (_registeredScenes.Add(sceneType))
+            Services.AddTransient<T>();
         return this;
     }
 
@@ -123,14 +121,14 @@ public class GameApplicationBuilder
     public GameApplication Build()
     {
         EnsureNotBuilt();
-        _built = true;
 
         // Register scene tracking set, options, and project-level scene configuration
-        Services.AddSingleton(_registeredScenes);
+        Services.AddSingleton<IReadOnlySet<Type>>(_registeredScenes);
         Services.AddSingleton(_options);
         Services.AddSingleton(_options.Window);
         Services.AddSingleton(_options.Rendering);
         Services.AddSingleton(_options.ECS);
+        Services.AddSingleton(_options.Audio);
         Services.AddSingleton(new SceneWorldConfiguration(_sceneConfiguration));
 
         // Register Brine2D core services
@@ -147,22 +145,21 @@ public class GameApplicationBuilder
         else
         {
             Services.AddSingleton<IRenderer, HeadlessRenderer>();
+            Services.AddSingleton<ITextureLoader, HeadlessTextureLoader>();
             Services.AddSingleton<IInputContext, HeadlessInputContext>();
             Services.AddSingleton<IAudioService, HeadlessAudioService>();
             Services.AddSingleton<IEventPump, HeadlessEventPump>();
         }
 
-        // 1. Validate option values via DataAnnotations
         _options.Validate();
-
-        // 2. Validate all required services are registered
         ValidateServiceRegistrations();
 
-        // 3. Validate scene dependencies; runs after all services are registered
-        foreach (var sceneType in _scenesToValidate)
+        foreach (var sceneType in _registeredScenes)
             ValidateSceneDependencies(sceneType);
 
         var host = _hostBuilder.Build();
+        _built = true;
+
         return new GameApplication(host);
     }
 

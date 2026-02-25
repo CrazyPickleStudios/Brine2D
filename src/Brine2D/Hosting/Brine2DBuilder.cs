@@ -3,13 +3,19 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Brine2D.Hosting;
 
 /// <summary>
-/// Builder for configuring Brine2D with platform backends.
+/// Builder for configuring Brine2D with optional platform extensions.
+/// Returned by <see cref="Brine2DServiceCollectionExtensions.AddBrine2D"/> to allow
+/// fluent chaining of optional subsystems, e.g.:
+/// <code>
+/// services.AddBrine2D()
+///         .UseNetworking()
+///         .UseDebugOverlay();
+/// </code>
+/// Extension methods on this type are the approved extension point for optional
+/// subsystems. Prefer a named <c>Use*()</c> method over adding registrations
+/// directly to <see cref="Services"/> at call sites.
 /// </summary>
-/// <remarks>
-/// This builder is returned by <see cref="Brine2DServiceCollectionExtensions.AddBrine2D"/>
-/// and allows chaining backend configuration methods like <c>.UseSDL()</c>.
-/// </remarks>
-public class Brine2DBuilder
+public sealed class Brine2DBuilder
 {
     /// <summary>
     /// Gets the service collection being configured.

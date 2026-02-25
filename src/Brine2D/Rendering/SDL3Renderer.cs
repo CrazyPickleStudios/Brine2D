@@ -1,13 +1,14 @@
-﻿using Brine2D.Core;
-using Brine2D.Rendering.Text;
-using Brine2D.Rendering.PostProcessing;
-using Brine2D.Rendering.SDL.PostProcessing;
-using Brine2D.Common;
-using Microsoft.Extensions.Logging;
-using System.Numerics;
-using System.Runtime.InteropServices;
+﻿using Brine2D.Common;
+using Brine2D.Core;
 using Brine2D.Events;
 using Brine2D.Rendering;
+using Brine2D.Rendering.PostProcessing;
+using Brine2D.Rendering.SDL.PostProcessing;
+using Brine2D.Rendering.Text;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Brine2D.Rendering;
 
@@ -15,6 +16,7 @@ namespace Brine2D.Rendering;
 /// SDL3 GPU API implementation of the renderer.
 /// Modern, shader-based renderer with cross-platform support including texture and text rendering.
 /// </summary>
+[ExcludeFromCodeCoverage(Justification = "Requires a live SDL3 GPU context; covered by manual/hardware testing.")]
 public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 {
     private readonly ILogger<SDL3Renderer> _logger;

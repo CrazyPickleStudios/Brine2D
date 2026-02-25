@@ -8,8 +8,8 @@ public static class SDL3AudioServiceCollectionExtensions
 {
     public static IServiceCollection AddSDL3Audio(this IServiceCollection services)
     {
-        services.TryAddSingleton<AudioService>();
-        
+        services.TryAddSingleton<IAudioService, AudioService>();
+
         return services;
     }
 }

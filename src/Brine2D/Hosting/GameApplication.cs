@@ -10,12 +10,11 @@ namespace Brine2D.Hosting;
 /// </summary>
 /// <example>
 /// <code>
-/// // Recommended: Automatic disposal
+/// // Recommended: automatic disposal
 /// await using var game = builder.Build();
 /// await game.RunAsync&lt;MainScene&gt;();
-/// // Automatically disposed here
-/// 
-/// // Alternative: Manual disposal
+///
+/// // Alternative: manual disposal
 /// var game = builder.Build();
 /// try
 /// {
@@ -61,7 +60,7 @@ public sealed class GameApplication : IAsyncDisposable
     /// <typeparam name="TScene">The initial scene type to load.</typeparam>
     /// <param name="cancellationToken">Token to cancel the game execution.</param>
     /// <remarks>
-    /// This method runs the game on a dedicated thread to ensure all SDL3 operations
+    /// The game runs on a dedicated thread to ensure all SDL3 operations
     /// (window creation, rendering, and event polling) occur on the same thread.
     /// SDL3 window events are posted to the thread that created the window and must
     /// be polled from that same thread.
@@ -69,27 +68,18 @@ public sealed class GameApplication : IAsyncDisposable
     /// <exception cref="InvalidOperationException">Thrown if the game is already running.</exception>
     public Task RunAsync<TScene>(CancellationToken cancellationToken = default)
         where TScene : Scene
-        => RunOnGameThread(token =>
-        {
-            var engine = Services.GetRequiredService<GameEngine>();
-            engine.InitializeAsync(token).GetAwaiter().GetResult();
-
-            Services.GetRequiredService<ISceneManager>()
-                .LoadSceneAsync<TScene>(cancellationToken: token)
-                .GetAwaiter().GetResult();
-
-            _logger.LogInformation("Game initialized on thread {ThreadId}, starting event loop...",
-                Environment.CurrentManagedThreadId);
-
-            Services.GetRequiredService<GameLoop>().Run(token);
-        }, cancellationToken);
+        => RunAsync<TScene>(sceneFactory: null, cancellationToken);
 
     /// <summary>
     /// Starts the game application with a custom scene factory.
     /// Use this when you need to pass runtime data to the initial scene that DI alone cannot provide.
+    /// Pass <see langword="null"/> for <paramref name="sceneFactory"/> to use standard DI resolution.
     /// </summary>
     /// <typeparam name="TScene">The initial scene type to load.</typeparam>
-    /// <param name="sceneFactory">Factory function to create the scene with custom parameters.</param>
+    /// <param name="sceneFactory">
+    /// Factory function to create the scene with custom parameters,
+    /// or <see langword="null"/> to resolve via DI.
+    /// </param>
     /// <param name="cancellationToken">Token to cancel the game execution.</param>
     /// <example>
     /// <code>
@@ -98,18 +88,18 @@ public sealed class GameApplication : IAsyncDisposable
     /// </code>
     /// </example>
     public Task RunAsync<TScene>(
-        Func<IServiceProvider, TScene> sceneFactory,
+        Func<IServiceProvider, TScene>? sceneFactory,
         CancellationToken cancellationToken = default)
         where TScene : Scene
-    {
-        ArgumentNullException.ThrowIfNull(sceneFactory);
-        return RunOnGameThread(token =>
+        => RunOnGameThread(token =>
         {
-            var engine = Services.GetRequiredService<GameEngine>();
-            engine.InitializeAsync(token).GetAwaiter().GetResult();
+            Services.GetRequiredService<GameEngine>()
+                .InitializeAsync(token).GetAwaiter().GetResult();
 
-            Services.GetRequiredService<ISceneManager>()
-                .LoadSceneAsync(sceneFactory, cancellationToken: token)
+            var sceneManager = Services.GetRequiredService<ISceneManager>();
+            (sceneFactory is null
+                ? sceneManager.LoadSceneAsync<TScene>(cancellationToken: token)
+                : sceneManager.LoadSceneAsync(sceneFactory, cancellationToken: token))
                 .GetAwaiter().GetResult();
 
             _logger.LogInformation("Game initialized on thread {ThreadId}, starting event loop...",
@@ -117,61 +107,6 @@ public sealed class GameApplication : IAsyncDisposable
 
             Services.GetRequiredService<GameLoop>().Run(token);
         }, cancellationToken);
-    }
-
-    /// <summary>
-    /// Starts the game application with the specified initial scene.
-    /// Blocks the calling thread; all SDL operations run on it directly.
-    /// </summary>
-    /// <remarks>
-    /// For most scenarios, prefer <see cref="RunAsync{TScene}"/> which runs
-    /// the game on a dedicated thread without blocking the caller.
-    /// </remarks>
-    public void Run<TScene>(CancellationToken cancellationToken = default)
-        where TScene : Scene
-    {
-        var threadId = Environment.CurrentManagedThreadId;
-        _logger.LogInformation("Starting Brine2D on calling thread {ThreadId} (blocking mode)", threadId);
-
-        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _applicationLifetime.ApplicationStopping);
-
-        try
-        {
-            var linkedToken = linkedCts.Token;
-
-            _host.StartAsync(linkedToken).GetAwaiter().GetResult();
-
-            var engine = Services.GetRequiredService<GameEngine>();
-            engine.InitializeAsync(linkedToken).GetAwaiter().GetResult();
-
-            Services.GetRequiredService<ISceneManager>()
-                .LoadSceneAsync<TScene>(cancellationToken: linkedToken)
-                .GetAwaiter().GetResult();
-
-            _logger.LogInformation("Game initialized on thread {ThreadId}, starting event loop...", threadId);
-
-            Services.GetRequiredService<GameLoop>().Run(linkedToken);
-
-            _logger.LogInformation("Game loop exited normally on thread {ThreadId}", threadId);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("Game cancelled on thread {ThreadId}", threadId);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Fatal error in game application on thread {ThreadId}", threadId);
-            throw;
-        }
-        finally
-        {
-            _host.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
-            linkedCts.Dispose();
-        }
-    }
 
     /// <summary>
     /// Shared thread scaffolding for all <see cref="RunAsync{TScene}"/> overloads.
@@ -193,28 +128,52 @@ public sealed class GameApplication : IAsyncDisposable
         _gameThread = new Thread(() =>
         {
             var threadId = Environment.CurrentManagedThreadId;
+
+            // Capture outcome so we can signal the TCS *after* stopping the host,
+            // ensuring DisposeAsync never races _host.Dispose() against StopAsync.
+            Exception? fatalException = null;
+            bool cancelled = false;
+
             try
             {
                 _logger.LogInformation("Starting Brine2D on dedicated game thread {ThreadId}", threadId);
                 _host.StartAsync(linkedToken).GetAwaiter().GetResult();
                 work(linkedToken);
-                _logger.LogInformation("Game loop exited normally on thread {ThreadId}", threadId);
-                _gameThreadTcs.SetResult();
+
+                if (linkedToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Game cancelled on thread {ThreadId}", threadId);
+                    cancelled = true;
+                }
+                else
+                {
+                    _logger.LogInformation("Game loop exited normally on thread {ThreadId}", threadId);
+                }
             }
             catch (OperationCanceledException)
             {
                 _logger.LogInformation("Game cancelled on thread {ThreadId}", threadId);
-                _gameThreadTcs.TrySetCanceled(linkedToken);
+                cancelled = true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Fatal error in game application on thread {ThreadId}", threadId);
-                _gameThreadTcs.TrySetException(ex);
+                fatalException = ex;
             }
             finally
             {
+                // Stop the host before signalling the TCS. This guarantees that when
+                // DisposeAsync sees the task as complete it is safe to call _host.Dispose()
+                // without racing a concurrent StopAsync still running on this thread.
                 try { _host.StopAsync(CancellationToken.None).GetAwaiter().GetResult(); }
                 catch (Exception ex) { _logger.LogError(ex, "Error stopping host on thread {ThreadId}", threadId); }
+
+                if (fatalException != null)
+                    _gameThreadTcs.TrySetException(fatalException);
+                else if (cancelled)
+                    _gameThreadTcs.TrySetCanceled(linkedToken);
+                else
+                    _gameThreadTcs.SetResult();
             }
         })
         {
@@ -253,14 +212,22 @@ public sealed class GameApplication : IAsyncDisposable
                 _logger.LogWarning("Game thread did not exit within timeout. Forcing shutdown.");
                 _applicationLifetime.StopApplication();
             }
+
+            // The game thread's finally block calls _host.StopAsync before signalling the TCS,
+            // so by the time we reach here the host is already stopped. Don't call it again.
+        }
+        else
+        {
+            // Game was built but RunAsync was never called — host was never started,
+            // so StopAsync is a no-op, but calling it is still the correct shutdown sequence.
+            await _host.StopAsync(CancellationToken.None);
         }
 
         _gameThreadCts?.Dispose();
         _gameThreadCts = null;
+        _gameThread = null;
 
-        await _host.StopAsync(CancellationToken.None);
         _host.Dispose();
-
         _logger.LogInformation("Game application disposed.");
     }
 }
