@@ -1,95 +1,143 @@
-﻿using Brine2D.Audio;
+﻿using Brine2D.Assets;
+using Brine2D.Audio;
 using Brine2D.ECS;
 using Brine2D.Engine;
+using Brine2D.Events;
 using Brine2D.Input;
 using Brine2D.Rendering;
-using Brine2D.Rendering.SDL;
 using Brine2D.Threading;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Collections.Frozen;
 using System.Reflection;
-using Brine2D.Events;
 
 namespace Brine2D.Hosting;
 
 /// <summary>
 /// Builder for configuring and creating a game application.
 /// </summary>
-public class GameApplicationBuilder
+/// <remarks>
+/// Default logging is Console at <see cref="LogLevel.Information"/>; all providers added by
+/// <see cref="Host.CreateApplicationBuilder"/> are cleared so the engine starts from a known baseline.
+/// Override via <see cref="Logging"/> before calling <see cref="Build"/>.
+/// </remarks>
+public sealed class GameApplicationBuilder
 {
+    // Container-synthesized generic collection types; always resolvable without explicit registration.
+    private static readonly FrozenSet<Type> _synthesizedCollectionTypes = new HashSet<Type>
+    {
+        typeof(IEnumerable<>),
+        typeof(IReadOnlyList<>),
+        typeof(IReadOnlyCollection<>),
+        typeof(IList<>),
+        typeof(ICollection<>),
+    }.ToFrozenSet();
+
     private readonly HostApplicationBuilder _hostBuilder;
     private readonly Brine2DOptions _options = new();
-    private bool _built = false;
     private readonly HashSet<Type> _registeredScenes = new();
+    private readonly List<Action<IEntityWorld>> _sceneConfigurations = [];
+    private readonly List<Action<Brine2DBuilder>> _brineConfigurations = [];
+    private bool _built;
 
-    internal GameApplicationBuilder(string[] args, HostApplicationBuilderSettings? settings = null)
+    internal GameApplicationBuilder(string[] args)
     {
-        _hostBuilder = settings != null
-            ? Host.CreateApplicationBuilder(settings)
-            : Host.CreateApplicationBuilder(args);
-
+        _hostBuilder = Host.CreateApplicationBuilder(args);
+        Logging.ClearProviders();
         Logging.AddConsole();
         Logging.SetMinimumLevel(LogLevel.Information);
     }
 
-    /// <summary>
-    /// Gets the service collection.
-    /// </summary>
+    /// <summary>Gets the service collection.</summary>
     public IServiceCollection Services => _hostBuilder.Services;
 
-    /// <summary>
-    /// Gets the logging builder.
-    /// </summary>
+    /// <summary>Gets the logging builder.</summary>
     public ILoggingBuilder Logging => _hostBuilder.Logging;
 
     /// <summary>
-    /// Gets the host environment.
+    /// Gets the host environment. Use this to branch behaviour between
+    /// <c>Development</c> and <c>Production</c> at startup.
     /// </summary>
     public IHostEnvironment HostEnvironment => _hostBuilder.Environment;
 
     /// <summary>
     /// Configures Brine2D options.
     /// </summary>
+    /// <remarks>
+    /// Sub-option properties are <see langword="init"/>-only; mutate existing instances rather than replacing them.
+    /// <code>
+    /// builder.Configure(o => o.Rendering.TargetFps = 60);
+    /// </code>
+    /// </remarks>
     public GameApplicationBuilder Configure(Action<Brine2DOptions> configure)
     {
         EnsureNotBuilt();
+        ArgumentNullException.ThrowIfNull(configure);
         configure(_options);
         return this;
     }
 
     /// <summary>
-    /// Registers a scene and defers dependency validation to <see cref="Build"/>,
-    /// ensuring all engine services are visible when validation runs.
+    /// Registers a scene and defers dependency validation to <see cref="Build"/>.
+    /// Registration is optional; unregistered scenes can still be loaded via ActivatorUtilities.
     /// </summary>
-    /// <remarks>
-    /// Registration is optional; scenes can be loaded without it via ActivatorUtilities.
-    /// Registering provides startup-time dependency validation and slightly better
-    /// DI resolution performance.
-    /// </remarks>
     public GameApplicationBuilder AddScene<T>() where T : Scene
+        => AddScene(typeof(T));
+
+    /// <summary>
+    /// Registers a scene by runtime type. Used internally by <see cref="SceneBuilder.AddRange"/>.
+    /// Prefer <see cref="AddScene{T}"/> for compile-time type safety.
+    /// </summary>
+    internal GameApplicationBuilder AddScene(Type sceneType)
     {
+        ArgumentNullException.ThrowIfNull(sceneType);
         EnsureNotBuilt();
-        var sceneType = typeof(T);
+
+        if (!typeof(Scene).IsAssignableFrom(sceneType))
+            throw new ArgumentException(
+                $"Type '{sceneType.Name}' does not inherit from Scene.", nameof(sceneType));
+
         if (_registeredScenes.Add(sceneType))
-            Services.AddTransient<T>();
+            Services.AddTransient(sceneType, sceneType);
+
         return this;
     }
 
-    private Action<IEntityWorld>? _sceneConfiguration;
+    /// <summary>
+    /// Configures scenes using a fluent builder.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// builder.AddScenes(scenes => scenes
+    ///     .Add&lt;MenuScene&gt;()
+    ///     .Add&lt;GameScene&gt;()
+    ///     .Add&lt;SettingsScene&gt;());
+    /// </code>
+    /// </example>
+    public GameApplicationBuilder AddScenes(Action<SceneBuilder> configure)
+    {
+        EnsureNotBuilt();
+        ArgumentNullException.ThrowIfNull(configure);
+        configure(new SceneBuilder(this));
+        return this;
+    }
 
     /// <summary>
     /// Configures the entity world for every scene loaded during this game's lifetime.
     /// Called after default systems are added, so you can disable, replace, or extend them.
     /// Can be called multiple times; delegates are additive.
     /// </summary>
+    /// <remarks>
+    /// All registered delegates are always invoked, even if an earlier one throws.
+    /// Exceptions are collected and re-thrown as a <see cref="GameConfigurationException"/>.
+    /// </remarks>
     /// <example>
     /// <code>
-    /// // Disable a default system project-wide
     /// builder.ConfigureScene(world =>
     ///     world.GetSystem&lt;ParticleSystem&gt;()!.IsEnabled = false);
     ///
-    /// // Add a custom system to every scene
     /// builder.ConfigureScene(world =>
     ///     world.AddSystem&lt;MyDebugOverlaySystem&gt;());
     /// </code>
@@ -97,44 +145,94 @@ public class GameApplicationBuilder
     public GameApplicationBuilder ConfigureScene(Action<IEntityWorld> configure)
     {
         EnsureNotBuilt();
-        _sceneConfiguration += configure;
+        ArgumentNullException.ThrowIfNull(configure);
+        _sceneConfigurations.Add(configure);
         return this;
     }
 
     /// <summary>
-    /// Builds the game application.
-    /// This method can only be called once per builder instance.
-    /// For multiple game instances (e.g., dedicated server), create separate builders.
+    /// Configures optional Brine2D subsystems via <see cref="Brine2DBuilder"/>.
+    /// Can be called multiple times; delegates are additive.
     /// </summary>
     /// <example>
     /// <code>
-    /// // This will fail
-    /// var builder = GameApplication.CreateBuilder();
-    /// var game1 = builder.Build();
-    /// var game2 = builder.Build(); // InvalidOperationException
-    ///
-    /// // Do this instead
-    /// var game1 = GameApplication.CreateBuilder().Configure(...).Build();
-    /// var game2 = GameApplication.CreateBuilder().Configure(...).Build();
+    /// builder.ConfigureBrine2D(b => b
+    ///     .UseNetworking()
+    ///     .UseDebugOverlay());
     /// </code>
     /// </example>
+    public GameApplicationBuilder ConfigureBrine2D(Action<Brine2DBuilder> configure)
+    {
+        EnsureNotBuilt();
+        ArgumentNullException.ThrowIfNull(configure);
+        _brineConfigurations.Add(configure);
+        return this;
+    }
+
+    /// <summary>
+    /// Builds the game application. Can only be called once per builder instance.
+    /// </summary>
     public GameApplication Build()
     {
         EnsureNotBuilt();
 
-        // Register scene tracking set, options, and project-level scene configuration
-        Services.AddSingleton<IReadOnlySet<Type>>(_registeredScenes);
+        Services.AddSingleton(new RegisteredSceneRegistry(new HashSet<Type>(_registeredScenes)));
+
         Services.AddSingleton(_options);
         Services.AddSingleton(_options.Window);
         Services.AddSingleton(_options.Rendering);
         Services.AddSingleton(_options.ECS);
         Services.AddSingleton(_options.Audio);
-        Services.AddSingleton(new SceneWorldConfiguration(_sceneConfiguration));
 
-        // Register Brine2D core services
-        Services.AddBrine2D();
+        var configurations = _sceneConfigurations.ToArray();
+        Action<IEntityWorld>? compositeConfig = configurations.Length > 0
+            ? world =>
+            {
+                List<Exception>? exceptions = null;
+                foreach (var configure in configurations)
+                {
+                    try { configure(world); }
+                    catch (Exception ex) { (exceptions ??= []).Add(ex); }
+                }
+                if (exceptions is { Count: > 0 })
+                {
+                    var inner = exceptions.Count == 1
+                        ? exceptions[0]
+                        : new AggregateException(
+                            "One or more ConfigureScene delegates threw an exception.", exceptions);
+                    throw new GameConfigurationException(
+                        $"{exceptions.Count} builder.ConfigureScene() delegate(s) threw an exception." +
+                        Environment.NewLine +
+                        "Fix: Check your ConfigureScene delegates in Program.cs.",
+                        inner);
+                }
+            }
+            : null;
+        Services.AddSingleton(new SceneWorldConfiguration(compositeConfig));
 
-        // Register backend services
+        var brine2DBuilder = Services.AddBrine2D();
+        if (_brineConfigurations.Count > 0)
+        {
+            List<Exception>? brineExceptions = null;
+            foreach (var configure in _brineConfigurations)
+            {
+                try { configure(brine2DBuilder); }
+                catch (Exception ex) { (brineExceptions ??= []).Add(ex); }
+            }
+            if (brineExceptions is { Count: > 0 })
+            {
+                var inner = brineExceptions.Count == 1
+                    ? brineExceptions[0]
+                    : new AggregateException(
+                        "One or more ConfigureBrine2D delegates threw an exception.", brineExceptions);
+                throw new GameConfigurationException(
+                    $"{brineExceptions.Count} builder.ConfigureBrine2D() delegate(s) threw an exception." +
+                    Environment.NewLine +
+                    "Fix: Check your ConfigureBrine2D delegates in Program.cs.",
+                    inner);
+            }
+        }
+
         if (!_options.Headless)
         {
             Services.AddSDL3EventPump();
@@ -144,108 +242,157 @@ public class GameApplicationBuilder
         }
         else
         {
-            Services.AddSingleton<IRenderer, HeadlessRenderer>();
-            Services.AddSingleton<ITextureLoader, HeadlessTextureLoader>();
-            Services.AddSingleton<IInputContext, HeadlessInputContext>();
-            Services.AddSingleton<IAudioService, HeadlessAudioService>();
-            Services.AddSingleton<IEventPump, HeadlessEventPump>();
+            Services.TryAddSingleton<IRenderer, HeadlessRenderer>();
+            Services.TryAddSingleton<ITextureLoader, HeadlessTextureLoader>();
+            Services.TryAddSingleton<IInputContext, HeadlessInputContext>();
+            Services.TryAddSingleton<IAudioService, HeadlessAudioService>();
+            Services.TryAddSingleton<IEventPump, HeadlessEventPump>();
+        }
+
+        var registeredExact = new HashSet<Type>();
+        var registeredOpenGeneric = new HashSet<Type>();
+        foreach (var descriptor in Services)
+        {
+            registeredExact.Add(descriptor.ServiceType);
+            if (descriptor.ServiceType.IsGenericTypeDefinition)
+                registeredOpenGeneric.Add(descriptor.ServiceType);
         }
 
         _options.Validate();
-        ValidateServiceRegistrations();
+        ValidateServiceRegistrations(registeredExact);
 
         foreach (var sceneType in _registeredScenes)
-            ValidateSceneDependencies(sceneType);
+            ValidateSceneDependencies(sceneType, registeredExact, registeredOpenGeneric);
 
-        var host = _hostBuilder.Build();
         _built = true;
+        var host = _hostBuilder.Build();
+
+        var configWarnings = GetConfigurationWarnings();
+        if (configWarnings.Count > 0)
+        {
+            var logger = host.Services.GetRequiredService<ILogger<GameApplicationBuilder>>();
+            foreach (var warning in configWarnings)
+                logger.LogWarning("{ConfigWarning}", warning);
+        }
 
         return new GameApplication(host);
     }
 
-    /// <summary>
-    /// Validates a scene's constructor dependencies against the fully-populated service collection.
-    /// Respects <see cref="ActivatorUtilitiesConstructorAttribute"/> for constructor selection,
-    /// matching the behavior of <see cref="ActivatorUtilities"/>.
-    /// </summary>
-    private void ValidateSceneDependencies(Type sceneType)
+    private List<string> GetConfigurationWarnings()
+    {
+        var warnings = new List<string>();
+
+        if (_options.Headless)
+        {
+            if (_options.Window.Fullscreen)
+                warnings.Add("Window.Fullscreen is true but Headless mode is enabled; window settings are ignored in headless mode.");
+            if (_options.Window.Maximized)
+                warnings.Add("Window.Maximized is true but Headless mode is enabled; window settings are ignored in headless mode.");
+            if (_options.Window.Borderless)
+                warnings.Add("Window.Borderless is true but Headless mode is enabled; window settings are ignored in headless mode.");
+        }
+
+        foreach (var sceneType in _registeredScenes)
+        {
+            var constructors = sceneType.GetConstructors();
+            if (constructors.Length > 1 &&
+                !constructors.Any(c => c.GetCustomAttribute<ActivatorUtilitiesConstructorAttribute>() != null))
+            {
+                warnings.Add(
+                    $"Scene '{sceneType.Name}' has {constructors.Length} constructors with no " +
+                    $"[ActivatorUtilitiesConstructor] attribute. Startup-time dependency validation used " +
+                    $"the first declared constructor as a heuristic; annotate the intended constructor " +
+                    $"to ensure accurate validation.");
+            }
+        }
+
+        return warnings;
+    }
+
+    private static void ValidateSceneDependencies(
+        Type sceneType,
+        HashSet<Type> registeredExact,
+        HashSet<Type> registeredOpenGeneric)
     {
         var constructors = sceneType.GetConstructors();
         if (constructors.Length == 0) return;
 
+        // Prefer [ActivatorUtilitiesConstructor]; fall back to the first declared constructor.
         var constructor =
             constructors.FirstOrDefault(c => c.GetCustomAttribute<ActivatorUtilitiesConstructorAttribute>() != null)
-            // Fallback: pick the first declared constructor, matching ActivatorUtilities' own behavior
-            // for the common single-constructor case. For types with multiple constructors and no
-            // [ActivatorUtilitiesConstructor] attribute, ActivatorUtilities actually picks the one
-            // whose parameters are most satisfiable, but that requires a full resolution attempt.
-            // The first-declared heuristic is correct for virtually all scenes and avoids that cost.
-            // If validation false-positives on a multi-constructor scene, add [ActivatorUtilitiesConstructor].
             ?? constructors[0];
 
         var parameters = constructor.GetParameters();
+        if (parameters.Length == 0) return;
+
         var errors = new List<string>();
 
         foreach (var param in parameters)
         {
+            if (param.HasDefaultValue) continue;
+
             var paramType = param.ParameterType;
-            if (!Services.Any(d => d.ServiceType == paramType))
+
+            bool isRegistered =
+                registeredExact.Contains(paramType) ||
+                (paramType.IsGenericType && _synthesizedCollectionTypes.Contains(paramType.GetGenericTypeDefinition())) ||
+                (paramType.IsGenericType && registeredOpenGeneric.Contains(paramType.GetGenericTypeDefinition())) ||
+                param.GetCustomAttribute<FromKeyedServicesAttribute>() != null;
+
+            if (!isRegistered)
             {
                 errors.Add(
-                    $"  • {param.Name} ({paramType.Name}) - not registered. " +
+                    $"  • {param.Name} ({paramType.Name}): not registered. " +
                     $"Add it via builder.Services.Add...() before calling Build().");
             }
         }
 
         if (errors.Count > 0)
         {
-            throw new InvalidOperationException(
-                $"Scene {sceneType.Name} has missing dependencies:" + Environment.NewLine +
-                string.Join(Environment.NewLine, errors) + Environment.NewLine +
-                Environment.NewLine +
-                $"Fix: Register missing services in Program.cs before calling Build()");
+            var multiCtorNote = constructors.Length > 1
+                ? Environment.NewLine +
+                  $"Note: '{sceneType.Name}' has {constructors.Length} constructors; validation targeted " +
+                  $"the first declared constructor as a heuristic. Annotate the intended one with " +
+                  $"[ActivatorUtilitiesConstructor] to ensure accurate validation."
+                : string.Empty;
+
+            throw new GameConfigurationException(
+                $"Scene '{sceneType.Name}' has unresolvable constructor dependencies:" + Environment.NewLine +
+                string.Join(Environment.NewLine, errors) + Environment.NewLine + Environment.NewLine +
+                $"Fix: Register missing services in Program.cs before calling Build()." +
+                multiCtorNote);
         }
     }
 
-    /// <summary>
-    /// Validates that all required framework services are registered.
-    /// Both SDL3 and headless backends register all four interfaces,
-    /// so these checks apply unconditionally.
-    /// </summary>
-    private void ValidateServiceRegistrations()
+    private static void ValidateServiceRegistrations(HashSet<Type> registered)
     {
         var errors = new List<string>();
-        bool HasService<T>() => Services.Any(d => d.ServiceType == typeof(T));
+        bool HasService<T>() => registered.Contains(typeof(T));
 
         // Core engine services
-        if (!HasService<GameEngine>())
-            errors.Add("GameEngine is not registered. This should not happen; please report this bug.");
-        if (!HasService<GameLoop>())
-            errors.Add("GameLoop is not registered. This should not happen; please report this bug.");
-        if (!HasService<ISceneManager>())
-            errors.Add("ISceneManager is not registered. This should not happen; please report this bug.");
-        if (!HasService<IEntityWorld>())
-            errors.Add("IEntityWorld is not registered. This should not happen; please report this bug.");
+        if (!HasService<GameEngine>())            errors.Add("GameEngine is not registered.");
+        if (!HasService<GameLoop>())              errors.Add("GameLoop is not registered.");
+        if (!HasService<ISceneManager>())         errors.Add("ISceneManager is not registered.");
+        if (!HasService<IEntityWorld>())          errors.Add("IEntityWorld is not registered.");
+        if (!HasService<IMainThreadDispatcher>()) errors.Add("IMainThreadDispatcher is not registered.");
+        if (!HasService<IEventBus>())             errors.Add("IEventBus is not registered.");
+        if (!HasService<IGameContext>())          errors.Add("IGameContext is not registered.");
+        if (!HasService<IAssetLoader>())          errors.Add("IAssetLoader is not registered.");
 
-        // Backend services; both SDL3 and headless modes register all four
-        if (!HasService<IRenderer>())
-            errors.Add("IRenderer is not registered. SDL3 or headless backend should be auto-registered.");
-        if (!HasService<IInputContext>())
-            errors.Add("IInputContext is not registered. SDL3 or headless backend should be auto-registered.");
-        if (!HasService<IEventPump>())
-            errors.Add("IEventPump is not registered. SDL3 or headless backend should be auto-registered.");
-        if (!HasService<IMainThreadDispatcher>())
-            errors.Add("IMainThreadDispatcher is not registered. SDL3 or headless backend should be auto-registered.");
+        // Backend services
+        if (!HasService<IRenderer>())      errors.Add("IRenderer is not registered.");
+        if (!HasService<ITextureLoader>()) errors.Add("ITextureLoader is not registered.");
+        if (!HasService<IInputContext>())  errors.Add("IInputContext is not registered.");
+        if (!HasService<IEventPump>())     errors.Add("IEventPump is not registered.");
+        if (!HasService<IAudioService>())  errors.Add("IAudioService is not registered.");
 
-        // Services required by default scene systems
-        if (!HasService<ICameraManager>())
-            errors.Add("ICameraManager is not registered. This should not happen; please report this bug.");
-        if (!HasService<ICamera>())
-            errors.Add("ICamera is not registered. This should not happen; please report this bug.");
+        // Default scene system services
+        if (!HasService<ICameraManager>()) errors.Add("ICameraManager is not registered.");
+        if (!HasService<ICamera>())        errors.Add("ICamera is not registered.");
 
         if (errors.Count > 0)
         {
-            throw new InvalidOperationException(
+            throw new GameConfigurationException(
                 "Game application service registration validation failed:" + Environment.NewLine +
                 string.Join(Environment.NewLine, errors.Select(e => $"  • {e}")) + Environment.NewLine +
                 Environment.NewLine +

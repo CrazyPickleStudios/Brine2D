@@ -1,10 +1,11 @@
 ﻿using Brine2D.Core;
 using Brine2D.Hosting;
 using Brine2D.Input;
+using Brine2D.Rendering;
 using Brine2D.Threading;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 
 namespace Brine2D.Engine;
 
@@ -15,79 +16,74 @@ namespace Brine2D.Engine;
 internal sealed class GameLoop
 {
     private readonly ILogger<GameLoop> _logger;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly IGameContext _gameContext;
     private readonly SceneManager _sceneManager;
     private readonly IInputContext _inputService;
+    private readonly IMainThreadDispatcher _mainThreadDispatcher;
+    private readonly IEventPump _eventPump;
     private readonly InputLayerManager? _inputLayerManager;
-    private readonly IHostApplicationLifetime _applicationLifetime;
-    private readonly IEventPump? _eventPump;
-    private readonly IMainThreadDispatcher? _mainThreadDispatcher;
     private readonly Stopwatch _stopwatch;
     private CancellationTokenSource? _cancellationTokenSource;
 
-    private ulong _frameCount = 0;
+    private ulong _frameCount;
 
-    public int TargetFramesPerSecond { get; set; } = 60;
+    // Sleeps FrameSleepHeadroomMs short of the target deadline; spin-wait closes the sub-millisecond gap.
+    private const int FrameSleepHeadroomMs = 2;
 
     /// <summary>
-    /// Maximum allowed delta time per frame. Clamps runaway deltas caused by debugger pauses,
-    /// OS preemption, or battery-saver throttling. Default: 100ms (10fps floor).
-    /// Without this, a 2-second pause produces a single 2-second deltaTime that teleports
-    /// entities, tunnels physics, and corrupts audio timing.
+    /// Target frames per second. 0 = uncapped (VSync or no frame limit).
+    /// Initialized from <see cref="RenderingOptions.TargetFPS"/>; can be changed at runtime.
     /// </summary>
-    public TimeSpan MaxDeltaTime { get; set; } = TimeSpan.FromSeconds(0.1);
+    public int TargetFramesPerSecond { get; set; }
+
+    /// <summary>
+    /// Maximum delta time per frame. Clamps large spikes caused by pauses or debugger breaks.
+    /// Initialized from <see cref="RenderingOptions.MaxDeltaTimeMs"/>; can be changed at runtime.
+    /// </summary>
+    public TimeSpan MaxDeltaTime { get; set; }
 
     public GameLoop(
         ILogger<GameLoop> logger,
-        ILoggerFactory loggerFactory,
         IGameContext gameContext,
         SceneManager sceneManager,
         IInputContext inputService,
-        IHostApplicationLifetime applicationLifetime,
-        InputLayerManager? inputLayerManager = null,
-        IEventPump? eventPump = null,
-        IMainThreadDispatcher? mainThreadDispatcher = null)
+        IEventPump eventPump,
+        IMainThreadDispatcher mainThreadDispatcher,
+        RenderingOptions renderingOptions,
+        InputLayerManager? inputLayerManager = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _gameContext = gameContext ?? throw new ArgumentNullException(nameof(gameContext));
         _sceneManager = sceneManager ?? throw new ArgumentNullException(nameof(sceneManager));
         _inputService = inputService ?? throw new ArgumentNullException(nameof(inputService));
-        _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
+        _eventPump = eventPump ?? throw new ArgumentNullException(nameof(eventPump));
+        _mainThreadDispatcher = mainThreadDispatcher ?? throw new ArgumentNullException(nameof(mainThreadDispatcher));
         _inputLayerManager = inputLayerManager;
-        _eventPump = eventPump;
-        _mainThreadDispatcher = mainThreadDispatcher;
         _stopwatch = new Stopwatch();
+
+        var options = renderingOptions ?? throw new ArgumentNullException(nameof(renderingOptions));
+        TargetFramesPerSecond = options.TargetFPS;
+        MaxDeltaTime = TimeSpan.FromMilliseconds(options.MaxDeltaTimeMs);
     }
 
     /// <summary>
     /// Starts the game loop on the current thread. Blocks until the loop exits.
-    /// Named Run rather than RunAsync intentionally. SDL3 requires all window and event
-    /// operations on a single thread, so this must be synchronous.
+    /// Named <c>Run</c> rather than <c>RunAsync</c> intentionally: SDL3 requires all window
+    /// and event operations on a single thread, so this must be synchronous.
     /// </summary>
     public void Run(CancellationToken cancellationToken = default)
     {
         if (_cancellationTokenSource != null && !_cancellationTokenSource.Token.IsCancellationRequested)
-        {
-            _logger.LogWarning("Game loop is already running");
-            return;
-        }
+            throw new InvalidOperationException("Game loop is already running.");
 
         RunGameLoopSync(cancellationToken);
     }
 
-    /// <summary>
-    /// The actual synchronous game loop.
-    /// Processes the main thread work queue for GPU operations from async loading.
-    /// Loading screens keep rendering while transitions happen in the background.
-    /// </summary>
     private void RunGameLoopSync(CancellationToken cancellationToken)
     {
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var token = _cancellationTokenSource.Token;
 
-        var targetFrameTime = TimeSpan.FromSeconds(1.0 / TargetFramesPerSecond);
         var totalTime = TimeSpan.Zero;
         _stopwatch.Start();
         var lastFrameTime = _stopwatch.Elapsed;
@@ -100,32 +96,37 @@ internal sealed class GameLoop
             {
                 var frameStartTime = _stopwatch.Elapsed;
 
-                // 1. Process main thread work queue
-                _mainThreadDispatcher?.ProcessQueue();
+                _mainThreadDispatcher.ProcessQueue();
 
-                // 2. Check if scene transition completed
                 if (pendingSceneTransition?.IsCompleted == true)
                 {
                     if (pendingSceneTransition.IsFaulted)
-                        _logger.LogError(pendingSceneTransition.Exception, "Scene transition failed");
+                    {
+                        var innerEx = pendingSceneTransition.Exception?.InnerException
+                                      ?? pendingSceneTransition.Exception!;
+
+                        // Cancellation from our token is expected shutdown; anything else is fatal.
+                        if (innerEx is OperationCanceledException oce && oce.CancellationToken == token)
+                            _cancellationTokenSource.Cancel();
+                        else
+                        {
+                            _logger.LogError(innerEx, "Scene transition failed");
+                            ExceptionDispatchInfo.Capture(innerEx).Throw();
+                        }
+                    }
                     pendingSceneTransition = null;
                 }
 
-                // 3. Update input
                 _inputService.Update();
-
-                // 4. Process events
-                _eventPump?.ProcessEvents();
-
-                // 5. Process input layers
+                _eventPump.ProcessEvents();
                 _inputLayerManager?.ProcessInput();
 
-                // 6. Calculate time; clamp delta to prevent runaway updates after pauses
+                // Clamp delta time to prevent runaway updates after pauses or debugger breaks.
                 var currentTime = _stopwatch.Elapsed;
                 var elapsedTime = currentTime - lastFrameTime;
                 if (elapsedTime > MaxDeltaTime)
                 {
-                    _logger.LogDebug("Delta time clamped: {Actual:F1}ms → {Max:F1}ms",
+                    _logger.LogDebug("Delta time clamped: {Actual:F1}ms -> {Max:F1}ms",
                         elapsedTime.TotalMilliseconds, MaxDeltaTime.TotalMilliseconds);
                     elapsedTime = MaxDeltaTime;
                 }
@@ -133,35 +134,30 @@ internal sealed class GameLoop
                 totalTime += elapsedTime;
                 var gameTime = new GameTime(totalTime, elapsedTime, _frameCount++);
 
-                // 7. Update game context
-                if (_gameContext is GameContext context)
-                    context.GameTime = gameTime;
+                _gameContext.UpdateGameTime(gameTime);
 
-                // 8. Begin frame
                 _sceneManager.BeginFrame();
-
-                // 9. Update scene (or loading screen if transitioning)
                 _sceneManager.Update(gameTime);
-
-                // 10. Render scene (or loading screen if transitioning)
                 _sceneManager.Render(gameTime);
 
-                // 11. Fire-and-forget scene transition (deferred, non-blocking)
+                // Deferred; runs in the background while the current frame finishes.
                 pendingSceneTransition ??= _sceneManager.ProcessDeferredTransitionsAsync(token);
 
-                // 12. Frame pacing: coarse sleep to yield the CPU, then spin for sub-millisecond precision.
-                // Thread.Sleep alone has ~15ms OS resolution on Windows; spinning closes the gap cleanly.
-                var frameTime = _stopwatch.Elapsed - frameStartTime;
-                var sleepTime = targetFrameTime - frameTime;
-                if (sleepTime > TimeSpan.Zero)
+                // Frame pacing: 0 = uncapped; re-read each frame so runtime changes take effect immediately.
+                if (TargetFramesPerSecond > 0)
                 {
-                    var sleepMs = (int)(sleepTime.TotalMilliseconds) - 2;
-                    if (sleepMs > 0)
-                        Thread.Sleep(sleepMs);
+                    var targetFrameTime = TimeSpan.FromSeconds(1.0 / TargetFramesPerSecond);
+                    var sleepTime = targetFrameTime - (_stopwatch.Elapsed - frameStartTime);
+                    if (sleepTime > TimeSpan.Zero)
+                    {
+                        var sleepMs = (int)(sleepTime.TotalMilliseconds) - FrameSleepHeadroomMs;
+                        if (sleepMs > 0)
+                            Thread.Sleep(sleepMs);
 
-                    var targetTime = frameStartTime + targetFrameTime;
-                    while (_stopwatch.Elapsed < targetTime)
-                        Thread.SpinWait(20);
+                        var targetTime = frameStartTime + targetFrameTime;
+                        while (_stopwatch.Elapsed < targetTime)
+                            Thread.SpinWait(20);
+                    }
                 }
             }
 
@@ -173,6 +169,9 @@ internal sealed class GameLoop
         }
         finally
         {
+            if (pendingSceneTransition is { IsCompleted: false })
+                _logger.LogDebug("A scene transition was in-flight when the game loop exited; it has been abandoned.");
+
             _stopwatch.Stop();
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = null;

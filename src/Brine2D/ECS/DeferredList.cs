@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace Brine2D.ECS;
 
 /// <summary>
@@ -12,6 +14,10 @@ namespace Brine2D.ECS;
 ///   preserving deferred semantics and preventing infinite recursion
 ///
 /// Contains() is O(1) via a HashSet mirror of the committed list.
+/// Add() is idempotent: duplicate queuing is silently dropped to preserve the
+/// _items/_itemSet mirror invariant (List allows duplicates, HashSet does not).
+/// IsQueuedForRemoval() checks both the pending and active-processing buffers so
+/// callers inside a removal callback cannot accidentally re-queue the same item.
 /// </remarks>
 /// <typeparam name="T">The type of items in the list.</typeparam>
 internal class DeferredList<T>
@@ -24,14 +30,26 @@ internal class DeferredList<T>
     private HashSet<T> _pending = new();
     private HashSet<T> _processing = new();
 
+    // Cached read-only wrapper; reflects live _items without re-allocating on each access.
+    private ReadOnlyCollection<T>? _readOnlyView;
+
     /// <summary>Gets the current count (excluding pending changes).</summary>
     public int Count => _items.Count;
 
     /// <summary>Gets whether there are pending changes.</summary>
     public bool HasPendingChanges => _itemsToAdd.Count > 0 || _pending.Count > 0;
 
-    /// <summary>Queues an item to be added.</summary>
-    public void Add(T item) => _itemsToAdd.Add(item);
+    /// <summary>
+    /// Queues an item to be added. No-op if the item is already committed or already queued,
+    /// preventing duplicate entries that would break the _items/_itemSet mirror invariant.
+    /// The pending-add check is O(n) on _itemsToAdd; acceptable since per-frame spawn counts
+    /// are small. If bulk spawning ever becomes a bottleneck, add a HashSet mirror of _itemsToAdd.
+    /// </summary>
+    public void Add(T item)
+    {
+        if (!_itemSet.Contains(item) && !_itemsToAdd.Contains(item))
+            _itemsToAdd.Add(item);
+    }
 
     /// <summary>Queues an item to be removed. O(1) amortized.</summary>
     public void Remove(T item) => _pending.Add(item);
@@ -41,8 +59,12 @@ internal class DeferredList<T>
     /// </summary>
     public bool Contains(T item) => _itemSet.Contains(item);
 
-    /// <summary>Checks if an item is queued for removal. O(1).</summary>
-    public bool IsQueuedForRemoval(T item) => _pending.Contains(item);
+    /// <summary>
+    /// Checks if an item is queued for removal or is actively being removed. O(1).
+    /// Checks both the pending buffer and the active-processing buffer so callers inside
+    /// a removal callback (e.g., Entity.OnDestroy) cannot accidentally re-queue the same item.
+    /// </summary>
+    public bool IsQueuedForRemoval(T item) => _pending.Contains(item) || _processing.Contains(item);
 
     /// <summary>
     /// Processes all queued changes: adds first, then removes.
@@ -115,8 +137,11 @@ internal class DeferredList<T>
     /// </summary>
     public List<T>.Enumerator GetEnumerator() => _items.GetEnumerator();
 
-    /// <summary>Gets a read-only view of the current committed items.</summary>
-    public IReadOnlyList<T> AsReadOnly() => _items.AsReadOnly();
+    /// <summary>
+    /// Gets a read-only view of the current committed items.
+    /// The wrapper is created once and cached; it reflects all live changes to the list.
+    /// </summary>
+    public IReadOnlyList<T> AsReadOnly() => _readOnlyView ??= _items.AsReadOnly();
 
     /// <summary>Clears all items and pending changes.</summary>
     public void Clear()
@@ -126,5 +151,6 @@ internal class DeferredList<T>
         _itemsToAdd.Clear();
         _pending.Clear();
         _processing.Clear();
+        _readOnlyView = null; // Invalidate; next AsReadOnly() creates a fresh wrapper
     }
 }

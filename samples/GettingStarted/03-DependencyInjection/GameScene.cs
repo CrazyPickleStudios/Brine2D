@@ -70,7 +70,7 @@ public class GameScene : Scene
         if (Input.IsKeyPressed(Key.Escape))
         {
             Logger.LogInformation("Exiting with final score: {Score}", _scoreService.GetScore());
-            Environment.Exit(0);
+            Game.RequestExit();
         }
     }
 }

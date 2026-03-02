@@ -6,7 +6,7 @@ namespace Brine2D.Rendering;
 /// <summary>
 /// A 2D camera for viewing and navigating the game world.
 /// </summary>
-public class Camera2D : ICamera, IDisposable
+public class Camera2D : ICamera, ITrackableCamera, IDisposable
 {
     private Vector2 _position;
     private float _zoom = 1.0f;
@@ -201,7 +201,7 @@ public class Camera2D : ICamera, IDisposable
             (_shakeRng.NextSingle() * 2f - 1f) * magnitude);
     }
 
-    internal void TrackRegistration(ICameraManager manager, string name)
+    public void TrackRegistration(ICameraManager manager, string name)
     {
         _manager = manager;
         _registeredName = name;

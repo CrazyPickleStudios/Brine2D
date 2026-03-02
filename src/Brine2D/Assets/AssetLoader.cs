@@ -72,17 +72,23 @@ public class AssetLoader : IAssetLoader, IDisposable
     private readonly IAudioService _audioService;
     private readonly IFontLoader _fontLoader;
 
-    // Per-type thread-safe caches
-    private readonly ConcurrentDictionary<string, ITexture>         _textureCache = new();
-    private readonly ConcurrentDictionary<string, Task<ITexture>>   _loadingTextures = new();
-    private readonly ConcurrentDictionary<string, ISoundEffect>      _soundCache = new();
-    private readonly ConcurrentDictionary<string, Task<ISoundEffect>> _loadingSounds = new();
-    private readonly ConcurrentDictionary<string, IMusic>            _musicCache = new();
-    private readonly ConcurrentDictionary<string, Task<IMusic>>      _loadingMusic = new();
-    private readonly ConcurrentDictionary<string, Font>              _fontCache = new();
-    private readonly ConcurrentDictionary<string, Task<Font>>        _loadingFonts = new();
+    // Per-type completed-asset caches (keyed by path or "path:size" for fonts)
+    private readonly ConcurrentDictionary<string, ITexture>    _textureCache = new();
+    private readonly ConcurrentDictionary<string, ISoundEffect> _soundCache   = new();
+    private readonly ConcurrentDictionary<string, IMusic>       _musicCache   = new();
+    private readonly ConcurrentDictionary<string, Font>         _fontCache    = new();
 
-    private bool _disposed;
+    // In-flight load deduplication. Lazy<Task<T>> guarantees the load factory is invoked
+    // exactly once per key even when multiple concurrent callers race on the same path —
+    // ConcurrentDictionary.GetOrAdd does NOT guarantee a single factory invocation.
+    private readonly ConcurrentDictionary<string, Lazy<Task<ITexture>>>    _loadingTextures = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<ISoundEffect>>> _loadingSounds   = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<IMusic>>>       _loadingMusic    = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<Font>>>         _loadingFonts    = new();
+
+    // 0 = live, 1 = disposed. Interlocked ensures the check-and-set is atomic so two
+    // concurrent Dispose() calls cannot both pass the guard and double-free native resources.
+    private int _disposed;
 
     public AssetLoader(
         ILogger<AssetLoader> logger,
@@ -118,11 +124,18 @@ public class AssetLoader : IAssetLoader, IDisposable
     public Task<ITexture> GetOrLoadTextureAsync(string path, CancellationToken cancellationToken = default)
     {
         if (_textureCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
-        return _loadingTextures.GetOrAdd(path, _ => LoadAndCache(
-            path,
-            ct => LoadTextureAsync(path, cancellationToken: ct),
-            _textureCache, _loadingTextures,
-            cancellationToken));
+        // The Lazy factory always runs with CancellationToken.None so the underlying load
+        // completes and caches regardless of which caller started it. Concurrent callers
+        // waiting on the same Lazy are therefore never cancelled by proxy when an unrelated
+        // caller cancels its own token.
+        var task = _loadingTextures.GetOrAdd(path, _ => new Lazy<Task<ITexture>>(
+            () => LoadAndCache(
+                path,
+                ct => LoadTextureAsync(path, cancellationToken: ct),
+                _textureCache, _loadingTextures,
+                CancellationToken.None))).Value;
+        // Apply the caller's token as a wait-deadline only; it does not cancel the load itself.
+        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
 
     // ---- Audio ----
@@ -130,21 +143,25 @@ public class AssetLoader : IAssetLoader, IDisposable
     public Task<ISoundEffect> GetOrLoadSoundAsync(string path, CancellationToken cancellationToken = default)
     {
         if (_soundCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
-        return _loadingSounds.GetOrAdd(path, _ => LoadAndCache(
-            path,
-            ct => _audioService.LoadSoundAsync(path, ct),
-            _soundCache, _loadingSounds,
-            cancellationToken));
+        var task = _loadingSounds.GetOrAdd(path, _ => new Lazy<Task<ISoundEffect>>(
+            () => LoadAndCache(
+                path,
+                ct => _audioService.LoadSoundAsync(path, ct),
+                _soundCache, _loadingSounds,
+                CancellationToken.None))).Value;
+        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
 
     public Task<IMusic> GetOrLoadMusicAsync(string path, CancellationToken cancellationToken = default)
     {
         if (_musicCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
-        return _loadingMusic.GetOrAdd(path, _ => LoadAndCache(
-            path,
-            ct => _audioService.LoadMusicAsync(path, ct),
-            _musicCache, _loadingMusic,
-            cancellationToken));
+        var task = _loadingMusic.GetOrAdd(path, _ => new Lazy<Task<IMusic>>(
+            () => LoadAndCache(
+                path,
+                ct => _audioService.LoadMusicAsync(path, ct),
+                _musicCache, _loadingMusic,
+                CancellationToken.None))).Value;
+        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
 
     // ---- Fonts ----
@@ -153,11 +170,13 @@ public class AssetLoader : IAssetLoader, IDisposable
     {
         var key = $"{path}:{size}";
         if (_fontCache.TryGetValue(key, out var cached)) return Task.FromResult(cached);
-        return _loadingFonts.GetOrAdd(key, _ => LoadAndCache(
-            key,
-            ct => _fontLoader.LoadFontAsync(path, size, ct),
-            _fontCache, _loadingFonts,
-            cancellationToken));
+        var task = _loadingFonts.GetOrAdd(key, _ => new Lazy<Task<Font>>(
+            () => LoadAndCache(
+                key,
+                ct => _fontLoader.LoadFontAsync(path, size, ct),
+                _fontCache, _loadingFonts,
+                CancellationToken.None))).Value;
+        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
 
     // ---- Manifest preloading ----
@@ -182,6 +201,8 @@ public class AssetLoader : IAssetLoader, IDisposable
         IProgress<AssetLoadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(assets);
+
         var list = assets.ToList();
         await RunParallelPreload(
             list.Count,
@@ -237,20 +258,38 @@ public class AssetLoader : IAssetLoader, IDisposable
 
     private Task LoadDescriptorAsync(AssetDescriptor asset, CancellationToken ct) => asset.Type switch
     {
-        AssetType.Texture  => GetOrLoadTextureAsync(asset.Path, ct),
-        AssetType.Audio    => GetOrLoadSoundAsync(asset.Path, ct),
-        AssetType.Music    => GetOrLoadMusicAsync(asset.Path, ct),
-        AssetType.Font     => Task.CompletedTask, // fonts need a size; use AssetManifest or GetOrLoadFontAsync directly
-        _                  => Task.CompletedTask
+        AssetType.Texture => GetOrLoadTextureAsync(asset.Path, ct),
+        AssetType.Audio   => GetOrLoadSoundAsync(asset.Path, ct),
+        AssetType.Music   => GetOrLoadMusicAsync(asset.Path, ct),
+        AssetType.Font    => WarnSkipFont(asset.Path),
+        _                 => Task.CompletedTask
     };
+
+    /// <summary>
+    /// Fonts require a size parameter and cannot be described by path alone.
+    /// Logs a warning so the caller is informed rather than silently skipping.
+    /// </summary>
+    private Task WarnSkipFont(string path)
+    {
+        _logger.LogWarning(
+            "Skipping preload of font '{Path}': fonts require a size parameter. " +
+            "Use AssetManifest or call GetOrLoadFontAsync(path, size) directly.", path);
+        return Task.CompletedTask;
+    }
 
     // ---- Generic cache helper ----
 
+    /// <summary>
+    /// Loads an asset, writes it to <paramref name="cache"/>, and removes the in-flight
+    /// entry from <paramref name="inflight"/> so future callers hit the completed cache directly.
+    /// Always called with <see cref="CancellationToken.None"/>; cancellation is applied
+    /// externally per-caller via <see cref="Task.WaitAsync(CancellationToken)"/>.
+    /// </summary>
     private static async Task<T> LoadAndCache<T>(
         string key,
         Func<CancellationToken, Task<T>> load,
         ConcurrentDictionary<string, T> cache,
-        ConcurrentDictionary<string, Task<T>> inflight,
+        ConcurrentDictionary<string, Lazy<Task<T>>> inflight,
         CancellationToken ct)
     {
         try
@@ -261,6 +300,8 @@ public class AssetLoader : IAssetLoader, IDisposable
         }
         finally
         {
+            // Remove the Lazy wrapper once the load is settled (success or failure) so
+            // subsequent callers skip the inflight dict and either hit the cache or retry.
             inflight.TryRemove(key, out _);
         }
     }
@@ -282,9 +323,8 @@ public class AssetLoader : IAssetLoader, IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
         UnloadAll();
-        _disposed = true;
         GC.SuppressFinalize(this);
     }
 }

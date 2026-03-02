@@ -1,6 +1,7 @@
 ﻿using Brine2D.Core;
 using Brine2D.ECS.Components;
 using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
 using System.Threading;
 
 namespace Brine2D.ECS;
@@ -18,11 +19,15 @@ public class Entity
     // Hierarchy support
     private Entity? _parent;
     private readonly List<Entity> _children = new();
+    // Cached read-only wrapper; reflects live _children without re-allocating on each access.
+    private ReadOnlyCollection<Entity>? _readOnlyChildren;
     private readonly List<EntityBehavior> _behaviors = new();
 
     // Concrete type for internal use, interface for public API
     private EntityWorld? _world;
 
+    // Global counter across all EntityWorld instances — IDs are intentionally unique
+    // process-wide, not per-world. In tests, avoid asserting specific ID values.
     private static int _nextId;
 
     /// <summary>
@@ -48,9 +53,11 @@ public class Entity
     }
 
     /// <summary>
-    /// Gets the tags collection for this entity.
+    /// Gets the tags for this entity as a read-only set.
+    /// Use <see cref="AddTag"/>, <see cref="RemoveTag"/>, and <see cref="ClearTags"/>
+    /// to modify tags so that validation and logging are applied consistently.
     /// </summary>
-    public HashSet<string> Tags => _tags;
+    public IReadOnlySet<string> Tags => _tags;
 
     /// <summary>
     /// Gets the parent entity, or null if this is a root entity.
@@ -59,8 +66,9 @@ public class Entity
 
     /// <summary>
     /// Gets the read-only collection of child entities.
+    /// The wrapper is created once and cached; it reflects live changes to the child list.
     /// </summary>
-    public IReadOnlyList<Entity> Children => _children.AsReadOnly();
+    public IReadOnlyList<Entity> Children => _readOnlyChildren ??= _children.AsReadOnly();
 
     /// <summary>
     /// Gets whether this entity is a root entity (has no parent).
@@ -171,15 +179,14 @@ public class Entity
 
     /// <summary>
     /// Removes a child entity from this entity (makes it a root entity).
+    /// Delegates to <see cref="SetParent"/> so any future side effects added there
+    /// (events, transform propagation, etc.) apply through this path too.
     /// </summary>
     public bool RemoveChild(Entity child)
     {
-        if (_children.Remove(child))
-        {
-            child._parent = null;
-            return true;
-        }
-        return false;
+        if (!_children.Contains(child)) return false;
+        child.SetParent(null);
+        return true;
     }
 
     private bool IsDescendantOf(Entity potentialAncestor)

@@ -66,7 +66,7 @@ public class EntityPrefab
         // Apply tags
         foreach (var tag in Tags)
         {
-            entity.Tags.Add(tag);
+            entity.AddTag(tag);
         }
 
         // Add and configure components

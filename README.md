@@ -267,7 +267,7 @@ public class PlayerMovementBehavior : EntityBehavior
     private readonly IInputContext _input;
     private TransformComponent _transform = null!;
 
-    public PlayerMovementBehavior(IInputContext input) => _this.input = input;
+    public PlayerMovementBehavior(IInputContext input) => _input = input;
 
     protected override void OnAttached()
         => _transform = Entity.GetRequiredComponent<TransformComponent>();
@@ -599,15 +599,13 @@ builder.Services.AddSingleton<IPlayerService, PlayerService>();
 builder.Services.AddSingleton<ISaveSystem, LocalSaveSystem>();
 
 // Optional features
+builder.Services.AddBrine2D().UseInputLayers(); // context-sensitive input routing
 builder.Services.AddPostProcessing();
 builder.Services.AddTextureAtlasing();
 builder.Services.AddTilemapServices();
 builder.Services.AddCollisionSystem();
 builder.Services.AddUICanvas();
 builder.Services.AddPerformanceMonitoring();
-
-// Microsoft.Extensions.Logging works as expected
-builder.Logging.SetMinimumLevel(LogLevel.Debug);
 ~~~
 
 ---
@@ -632,6 +630,12 @@ public async Task Player_TakingDamage_Dies_At_Zero_HP()
     game.Services.GetRequiredService<GameLoop>().Stop();
     await runTask;
 }
+~~~
+
+~~~csharp
+// Shutdown behaviour (useful for test environments)
+options.ShutdownTimeoutSeconds           = 5;   // wait before forcing shutdown
+options.ForceShutdownGracePeriodSeconds  = 2;   // grace period after forced stop
 ~~~
 
 ---

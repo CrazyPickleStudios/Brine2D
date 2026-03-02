@@ -127,7 +127,7 @@ var sfx  = await _assets.GetOrLoadSoundAsync(Assets.Audio.Jump);
 var font = await _assets.GetOrLoadFontAsync(Assets.Fonts.Ui, size: 16);
 ~~~
 
-**Typed manifest (recommended for parallel load with progress tracking):**
+**Typed manifest (recommended for parallel load):**
 ~~~csharp
 public class LevelAssets : AssetManifest
 {
@@ -144,8 +144,10 @@ private readonly LevelAssets _manifest = new();
 
 protected override async Task OnLoadAsync(CancellationToken ct)
 {
-    // All assets loaded in parallel, progress reported to loading screen
-    await _assets.PreloadAsync(_manifest, progress: loadingScreen.Progress, ct);
+    // All assets loaded in parallel. SceneManager updates loading screen progress
+    // at its own waypoints; pass an IProgress<AssetLoadProgress> here for finer
+    // reporting (e.g., updating a custom progress bar inside your scene logic).
+    await _assets.PreloadAsync(_manifest, cancellationToken: ct);
 }
 
 protected override void OnEnter()

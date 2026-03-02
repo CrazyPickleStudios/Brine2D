@@ -7,27 +7,29 @@ namespace Brine2D.Engine;
 /// <summary>
 /// Default implementation of game context.
 /// </summary>
-/// /// TODO: Think about getting rid of this.
 internal sealed class GameContext : IGameContext
 {
     private readonly ILogger<GameContext> _logger;
     private readonly IHostApplicationLifetime _lifetime;
 
-    public IServiceProvider Services { get; }
-    public GameTime GameTime { get; internal set; } = new GameTime(TimeSpan.Zero, TimeSpan.Zero);
-    public bool IsRunning { get; private set; }
+    public GameTime GameTime { get; private set; } = new GameTime(TimeSpan.Zero, TimeSpan.Zero);
+    private volatile bool _isRunning = true;
+    public bool IsRunning => _isRunning;
 
-    public GameContext(ILogger<GameContext> logger, IServiceProvider services, IHostApplicationLifetime lifetime)
+    public GameContext(ILogger<GameContext> logger, IHostApplicationLifetime lifetime)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        Services = services ?? throw new ArgumentNullException(nameof(services));
-        _lifetime = lifetime;
-        IsRunning = true;
+        _lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
+
+        _lifetime.ApplicationStopping.Register(() => _isRunning = false);
     }
 
     public void RequestExit()
     {
         _logger.LogInformation("Exit requested");
+        _isRunning = false;
         _lifetime.StopApplication();
     }
+
+    void IGameContext.UpdateGameTime(GameTime gameTime) => GameTime = gameTime;
 }

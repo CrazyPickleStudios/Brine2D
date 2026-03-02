@@ -22,9 +22,11 @@ namespace Brine2D.Input;
 internal sealed class InputContext : IInputContext, IDisposable
 {
     private readonly ILogger<InputContext> _logger;
-    private readonly EventBus _publicEventBus;
-    private readonly EventBus _internalEventBus;
+    private readonly IEventBus _publicEventBus;
+    private readonly IEventBus _internalEventBus;
     private readonly ISDL3WindowProvider? _windowProvider;
+
+    private readonly List<IDisposable> _subscriptions = [];
 
     // ── Keyboard state ───────────────────────────────────────────────────────
     private readonly HashSet<Key> _keysDown           = new();
@@ -60,14 +62,14 @@ internal sealed class InputContext : IInputContext, IDisposable
 
     public InputContext(
         ILogger<InputContext> logger,
-        EventBus publicEventBus,
-        EventBus internalEventBus,
+        IEventBus publicEventBus,
+        IEventBus internalEventBus,
         ISDL3WindowProvider? windowProvider = null)
     {
-        _logger          = logger          ?? throw new ArgumentNullException(nameof(logger));
-        _publicEventBus  = publicEventBus  ?? throw new ArgumentNullException(nameof(publicEventBus));
+        _logger           = logger           ?? throw new ArgumentNullException(nameof(logger));
+        _publicEventBus   = publicEventBus   ?? throw new ArgumentNullException(nameof(publicEventBus));
         _internalEventBus = internalEventBus ?? throw new ArgumentNullException(nameof(internalEventBus));
-        _windowProvider  = windowProvider;
+        _windowProvider   = windowProvider;
 
         SubscribeToInternalEvents();
         EnumerateGamepads();
@@ -117,17 +119,17 @@ internal sealed class InputContext : IInputContext, IDisposable
 
     private void SubscribeToInternalEvents()
     {
-        _internalEventBus.Subscribe<SDL3KeyDownEvent>(OnKeyDown);
-        _internalEventBus.Subscribe<SDL3KeyUpEvent>(OnKeyUp);
-        _internalEventBus.Subscribe<SDL3MouseButtonDownEvent>(OnMouseButtonDown);
-        _internalEventBus.Subscribe<SDL3MouseButtonUpEvent>(OnMouseButtonUp);
-        _internalEventBus.Subscribe<SDL3MouseWheelEvent>(OnMouseWheel);
-        _internalEventBus.Subscribe<SDL3MouseMotionEvent>(OnMouseMotion);
-        _internalEventBus.Subscribe<SDL3TextInputEvent>(OnTextInput);
-        _internalEventBus.Subscribe<SDL3GamepadButtonDownEvent>(OnGamepadButtonDown);
-        _internalEventBus.Subscribe<SDL3GamepadButtonUpEvent>(OnGamepadButtonUp);
-        _internalEventBus.Subscribe<SDL3GamepadAddedEvent>(OnGamepadAdded);
-        _internalEventBus.Subscribe<SDL3GamepadRemovedEvent>(OnGamepadRemoved);
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3KeyDownEvent>(OnKeyDown));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3KeyUpEvent>(OnKeyUp));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3MouseButtonDownEvent>(OnMouseButtonDown));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3MouseButtonUpEvent>(OnMouseButtonUp));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3MouseWheelEvent>(OnMouseWheel));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3MouseMotionEvent>(OnMouseMotion));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3TextInputEvent>(OnTextInput));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3GamepadButtonDownEvent>(OnGamepadButtonDown));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3GamepadButtonUpEvent>(OnGamepadButtonUp));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3GamepadAddedEvent>(OnGamepadAdded));
+        _subscriptions.Add(_internalEventBus.Subscribe<SDL3GamepadRemovedEvent>(OnGamepadRemoved));
     }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad subsystem.")]
@@ -401,6 +403,10 @@ internal sealed class InputContext : IInputContext, IDisposable
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad subsystem.")]
     public void Dispose()
     {
+        foreach (var subscription in _subscriptions)
+            subscription.Dispose();
+        _subscriptions.Clear();
+
         foreach (var gamepad in _gamepads.Values)
             SDL3.SDL.CloseGamepad(gamepad);
         _gamepads.Clear();

@@ -15,16 +15,18 @@ namespace Brine2D;
 [ExcludeFromCodeCoverage(Justification = "Requires a live SDL3 event loop; covered by manual/hardware testing.")]
 internal class SDL3EventPump : IEventPump
 {
-    private readonly EventBus _internalEventBus;
+    // The internal bus is the concrete EventBus because it is an SDL3-private channel,
+    // registered as a keyed singleton and never surfaced through IEventBus.
+    private readonly IEventBus _internalEventBus;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<SDL3EventPump> _logger;
-    private readonly EventBus _publicEventBus;
+    private readonly IEventBus _publicEventBus;
 
     public SDL3EventPump
     (
         ILogger<SDL3EventPump> logger,
-        EventBus publicEventBus,
-        EventBus internalEventBus,
+        IEventBus publicEventBus,
+        IEventBus internalEventBus,
         IHostApplicationLifetime lifetime
     )
     {

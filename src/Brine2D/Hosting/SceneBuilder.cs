@@ -1,11 +1,9 @@
 using Brine2D.Engine;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Brine2D.Hosting;
 
 /// <summary>
-/// Builder for configuring scenes.
+/// Fluent builder for registering scenes.
 /// </summary>
 /// <remarks>
 /// Scene registration is optional. Scenes can be loaded without explicit registration,
@@ -14,51 +12,38 @@ namespace Brine2D.Hosting;
 /// - Startup validation (ensures scenes can be resolved)
 /// - Slightly better performance (DI container caches type info)
 /// </remarks>
-public class SceneBuilder
+public sealed class SceneBuilder
 {
-    private readonly IServiceCollection _services;
+    private readonly GameApplicationBuilder _appBuilder;
 
-    internal SceneBuilder(IServiceCollection services)
+    internal SceneBuilder(GameApplicationBuilder appBuilder)
     {
-        _services = services ?? throw new ArgumentNullException(nameof(services));
+        _appBuilder = appBuilder ?? throw new ArgumentNullException(nameof(appBuilder));
     }
 
     /// <summary>
-    /// Registers a scene in the service collection.
+    /// Registers a scene, including startup-time dependency validation.
     /// </summary>
-    /// <typeparam name="TScene">The scene type to register.</typeparam>
-    /// <returns>The scene builder for chaining.</returns>
-    /// <remarks>
-    /// Scenes are registered as transient services, meaning a new instance
-    /// is created each time the scene is loaded.
-    /// 
-    /// Registration is optional - scenes can be loaded without it via ActivatorUtilities.
-    /// However, explicit registration is recommended for documentation and validation.
-    /// </remarks>
     public SceneBuilder Add<TScene>() where TScene : Scene
     {
-        _services.TryAddTransient<TScene>();
+        _appBuilder.AddScene<TScene>();
         return this;
     }
 
     /// <summary>
     /// Registers multiple scenes by type.
     /// </summary>
-    /// <param name="sceneTypes">Scene types to register.</param>
-    /// <returns>The scene builder for chaining.</returns>
-    public SceneBuilder AddRange(params Type[] sceneTypes)
+    public SceneBuilder AddRange(params ReadOnlySpan<Type> sceneTypes)
     {
         foreach (var sceneType in sceneTypes)
         {
+            ArgumentNullException.ThrowIfNull(sceneType, nameof(sceneTypes));
             if (!typeof(Scene).IsAssignableFrom(sceneType))
-            {
-                throw new ArgumentException(
-                    $"Type {sceneType.Name} does not inherit from Scene",
-                    nameof(sceneTypes));
-            }
-
-            _services.TryAdd(new ServiceDescriptor(sceneType, sceneType, ServiceLifetime.Transient));
+                throw new ArgumentException($"Type {sceneType.Name} does not inherit from Scene", nameof(sceneTypes));
         }
+
+        foreach (var sceneType in sceneTypes)
+            _appBuilder.AddScene(sceneType);
 
         return this;
     }

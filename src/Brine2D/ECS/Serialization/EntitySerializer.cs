@@ -181,7 +181,7 @@ public class EntitySerializer
         // Restore tags
         foreach (var tag in snapshot.Tags)
         {
-            entity.Tags.Add(tag);
+            entity.AddTag(tag);
         }
 
         // Restore components

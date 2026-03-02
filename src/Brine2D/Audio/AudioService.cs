@@ -52,7 +52,7 @@ internal class AudioService : IAudioService
     /// <summary>
     /// Indicates whether this instance has been disposed.
     /// </summary>
-    private bool _disposed;
+    private int _disposed;
 
     /// <summary>
     /// Internal storage for sound effect volume level.
@@ -268,7 +268,10 @@ internal class AudioService : IAudioService
         }
 
         var sound = new SoundEffect(path, audio, _loggerFactory.CreateLogger<SoundEffect>());
-        _loadedSounds.Add(sound);
+        lock (_assetLock)
+        {
+            _loadedSounds.Add(sound);
+        }
 
         _logger.LogDebug("Sound loaded: {Path}", path);
         return sound;
@@ -320,7 +323,6 @@ internal class AudioService : IAudioService
         var finalVolume = (volume ?? 1.0f) * _soundVolume;
         pan = Math.Clamp(pan, -1.0f, 1.0f);
 
-        // Create a new track for this sound
         var track = SDL3.Mixer.CreateTrack(_mixer);
         if (track == IntPtr.Zero)
         {
@@ -328,21 +330,15 @@ internal class AudioService : IAudioService
             return nint.Zero;
         }
 
-        _tracks.Add(track);
-
-        // Set track gain (volume)
         SDL3.Mixer.SetTrackGain(track, finalVolume);
 
-        // Set track audio source
         if (!SDL3.Mixer.SetTrackAudio(track, sdlSound.Handle))
         {
             _logger.LogWarning("Failed to set track audio for sound {Name}", sound.Name);
             SDL3.Mixer.DestroyTrack(track);
-            _tracks.Remove(track);
             return nint.Zero;
         }
 
-        // Apply spatial audio (stereo panning) if needed
         if (Math.Abs(pan) > 0.001f)
         {
             float leftGain = (1.0f - Math.Max(0, pan));
@@ -361,27 +357,35 @@ internal class AudioService : IAudioService
         }
 
         var callback = new TrackStoppedCallback((userdata) => OnTrackStoppedNative(userdata));
-        _trackCallbacks[track] = new TrackCallbackData { Callback = callback, Track = track };
+        var callbackPtr = Marshal.GetFunctionPointerForDelegate(callback);
 
         var props = SDL3.SDL.CreateProperties();
         SDL3.SDL.SetNumberProperty(props, "SDL_mixer.play.loops", loops);
-
-        var callbackPtr = Marshal.GetFunctionPointerForDelegate(callback);
         SDL3.SDL.SetPointerProperty(props, "SDL_mixer.play.stopped_callback", callbackPtr);
         SDL3.SDL.SetPointerProperty(props, "SDL_mixer.play.stopped_userdata", track);
+
+        // Register tracking data BEFORE PlayTrack so the completion callback
+        // always finds valid entries even if the sound finishes immediately.
+        lock (_tracksLock)
+        {
+            _tracks.Add(track);
+            _trackCallbacks[track] = new TrackCallbackData { Callback = callback, Track = track };
+        }
 
         if (!SDL3.Mixer.PlayTrack(track, props))
         {
             _logger.LogWarning("Failed to play sound {Name}: {Error}", sound.Name, SDL3.SDL.GetError());
+            lock (_tracksLock)
+            {
+                _tracks.Remove(track);
+                _trackCallbacks.Remove(track);
+            }
             SDL3.Mixer.DestroyTrack(track);
-            _tracks.Remove(track);
-            _trackCallbacks.Remove(track);
             SDL3.SDL.DestroyProperties(props);
             return nint.Zero;
         }
 
         SDL3.SDL.DestroyProperties(props);
-
         _logger.LogDebug("Playing sound {Name} on track {Track} with callback", sound.Name, track);
         return track;
     }
@@ -396,9 +400,27 @@ internal class AudioService : IAudioService
     /// </remarks>
     private void OnTrackStoppedNative(nint track)
     {
-        _logger.LogDebug("Track {Track} stopped (audio thread callback)", track);
-        _trackCallbacks.Remove(track);
-        OnTrackStopped?.Invoke(track);
+        bool removed;
+        lock (_tracksLock)
+        {
+            removed = _tracks.Remove(track);  // ← was missing; prevented stale handle cleanup
+            _trackCallbacks.Remove(track);
+
+            if (removed && track == _currentMusicTrack)
+            {
+                _currentMusicTrack = IntPtr.Zero;
+                IsMusicPlaying = false;   // ← was never reset on natural completion
+                IsMusicPaused = false;
+            }
+        }
+
+        // Raise outside the lock — a subscriber re-entering any AudioService method
+        // while we hold _tracksLock would deadlock.
+        if (removed)
+        {
+            _logger.LogDebug("Track {Track} stopped (audio thread callback)", track);
+            OnTrackStopped?.Invoke(track);
+        }
     }
 
     /// <summary>
@@ -412,13 +434,24 @@ internal class AudioService : IAudioService
     /// </remarks>
     public void StopTrack(nint track)
     {
-        if (_tracks.Contains(track))
+        bool removed;
+        lock (_tracksLock)
+        {
+            removed = _tracks.Remove(track);
+            _trackCallbacks.Remove(track);
+
+            if (removed && track == _currentMusicTrack)
+            {
+                _currentMusicTrack = IntPtr.Zero;
+                IsMusicPlaying = false;
+                IsMusicPaused = false;
+            }
+        }
+
+        if (removed)
         {
             SDL3.Mixer.StopTrack(track, 0);
             SDL3.Mixer.DestroyTrack(track);
-            _tracks.Remove(track);
-            _trackCallbacks.Remove(track);
-
             OnTrackStopped?.Invoke(track);
         }
     }
@@ -435,13 +468,14 @@ internal class AudioService : IAudioService
     /// </remarks>
     public void UpdateTrackSpatialAudio(nint track, float volume, float pan)
     {
-        if (!_tracks.Contains(track))
-            return;
+        lock (_tracksLock)
+        {
+            if (!_tracks.Contains(track))
+                return;
+        }
 
-        // Update volume
         SDL3.Mixer.SetTrackGain(track, volume);
 
-        // Update panning
         if (Math.Abs(pan) > 0.001f)
         {
             float leftGain = (1.0f - Math.Max(0, pan));
@@ -469,15 +503,21 @@ internal class AudioService : IAudioService
     /// </remarks>
     public void StopAllSounds()
     {
-        foreach (var track in _tracks.ToList())
+        List<nint> toStop;
+        lock (_tracksLock)
         {
-            if (track != _currentMusicTrack)
+            toStop = _tracks.Where(t => t != _currentMusicTrack).ToList();
+            foreach (var track in toStop)
             {
-                SDL3.Mixer.StopTrack(track, 0);
-                SDL3.Mixer.DestroyTrack(track);
                 _tracks.Remove(track);
                 _trackCallbacks.Remove(track);
             }
+        }
+
+        foreach (var track in toStop)
+        {
+            SDL3.Mixer.StopTrack(track, 0);
+            SDL3.Mixer.DestroyTrack(track);
         }
 
         _logger.LogDebug("Stopped all sound effects");
@@ -495,7 +535,10 @@ internal class AudioService : IAudioService
     {
         if (sound is SoundEffect sdlSound)
         {
-            _loadedSounds.Remove(sdlSound);
+            lock (_assetLock)
+            {
+                _loadedSounds.Remove(sdlSound);
+            }
             sdlSound.Dispose();
             _logger.LogDebug("Sound unloaded: {Name}", sound.Name);
         }
@@ -545,7 +588,10 @@ internal class AudioService : IAudioService
         }
 
         var musicObj = new Music(path, audio, _loggerFactory.CreateLogger<Music>());
-        _loadedMusic.Add(musicObj);
+        lock (_assetLock)
+        {
+            _loadedMusic.Add(musicObj);
+        }
 
         _logger.LogDebug("Music loaded: {Path}", path);
         return musicObj;
@@ -571,50 +617,87 @@ internal class AudioService : IAudioService
         if (!sdlMusic.IsLoaded)
             throw new InvalidOperationException("Music is not loaded");
 
-        if (_currentMusicTrack != IntPtr.Zero)
+        // Capture and evict the previous track under lock; SDL calls happen after the lock.
+        nint oldTrack;
+        lock (_tracksLock)
         {
-            SDL3.Mixer.StopTrack(_currentMusicTrack, 0);
-            SDL3.Mixer.DestroyTrack(_currentMusicTrack);
-            _tracks.Remove(_currentMusicTrack);
+            oldTrack = _currentMusicTrack;
+            if (oldTrack != IntPtr.Zero)
+            {
+                _tracks.Remove(oldTrack);
+                _trackCallbacks.Remove(oldTrack);
+                _currentMusicTrack = IntPtr.Zero;
+                IsMusicPlaying = false;
+                IsMusicPaused = false;
+            }
         }
 
-        _currentMusicTrack = SDL3.Mixer.CreateTrack(_mixer);
-        if (_currentMusicTrack == IntPtr.Zero)
+        if (oldTrack != IntPtr.Zero)
+        {
+            SDL3.Mixer.StopTrack(oldTrack, 0);
+            SDL3.Mixer.DestroyTrack(oldTrack);
+        }
+
+        var newTrack = SDL3.Mixer.CreateTrack(_mixer);
+        if (newTrack == IntPtr.Zero)
         {
             _logger.LogWarning("Failed to create track for music {Name}", music.Name);
             return;
         }
 
-        _tracks.Add(_currentMusicTrack);
-        SDL3.Mixer.SetTrackGain(_currentMusicTrack, MusicVolume);
+        SDL3.Mixer.SetTrackGain(newTrack, MusicVolume);
 
-        if (!SDL3.Mixer.SetTrackAudio(_currentMusicTrack, sdlMusic.Handle))
+        if (!SDL3.Mixer.SetTrackAudio(newTrack, sdlMusic.Handle))
         {
             _logger.LogWarning("Failed to set track audio for music {Name}", music.Name);
-            SDL3.Mixer.DestroyTrack(_currentMusicTrack);
-            _tracks.Remove(_currentMusicTrack);
-            _currentMusicTrack = IntPtr.Zero;
+            SDL3.Mixer.DestroyTrack(newTrack);
             return;
         }
 
+        // Register a stopped callback so IsMusicPlaying resets when the track ends naturally.
+        var callback = new TrackStoppedCallback((userdata) => OnTrackStoppedNative(userdata));
+        var callbackPtr = Marshal.GetFunctionPointerForDelegate(callback);
+
         var props = SDL3.SDL.CreateProperties();
         SDL3.SDL.SetNumberProperty(props, "SDL_mixer.play.loops", loops);
+        SDL3.SDL.SetPointerProperty(props, "SDL_mixer.play.stopped_callback", callbackPtr);
+        SDL3.SDL.SetPointerProperty(props, "SDL_mixer.play.stopped_userdata", newTrack);
 
-        if (!SDL3.Mixer.PlayTrack(_currentMusicTrack, props))
+        // Register BEFORE PlayTrack for the same reason as PlaySoundWithTrack.
+        lock (_tracksLock)
+        {
+            _currentMusicTrack = newTrack;
+            _tracks.Add(newTrack);
+            _trackCallbacks[newTrack] = new TrackCallbackData { Callback = callback, Track = newTrack };
+        }
+
+        if (!SDL3.Mixer.PlayTrack(newTrack, props))
         {
             _logger.LogWarning("Failed to play music {Name}", music.Name);
-            SDL3.Mixer.DestroyTrack(_currentMusicTrack);
-            _tracks.Remove(_currentMusicTrack);
-            _currentMusicTrack = IntPtr.Zero;
-        }
-        else
-        {
-            IsMusicPlaying = true;
-            IsMusicPaused = false;
-            _logger.LogInformation("Playing music: {Name}", music.Name);
+            lock (_tracksLock)
+            {
+                _tracks.Remove(newTrack);
+                _trackCallbacks.Remove(newTrack);
+                _currentMusicTrack = IntPtr.Zero;
+            }
+            SDL3.Mixer.DestroyTrack(newTrack);
+            SDL3.SDL.DestroyProperties(props);
+            return;
         }
 
         SDL3.SDL.DestroyProperties(props);
+
+        lock (_tracksLock)
+        {
+            // Guard: callback may have already fired if the track was extremely short.
+            if (_currentMusicTrack == newTrack)
+            {
+                IsMusicPlaying = true;
+                IsMusicPaused = false;
+            }
+        }
+
+        _logger.LogInformation("Playing music: {Name}", music.Name);
     }
 
     /// <summary>
@@ -627,10 +710,17 @@ internal class AudioService : IAudioService
     /// </remarks>
     public void PauseMusic()
     {
-        if (_currentMusicTrack != IntPtr.Zero)
+        nint track;
+        lock (_tracksLock)
         {
-            SDL3.Mixer.PauseTrack(_currentMusicTrack);
-            IsMusicPaused = true;
+            track = _currentMusicTrack;
+            if (track != IntPtr.Zero)
+                IsMusicPaused = true;
+        }
+
+        if (track != IntPtr.Zero)
+        {
+            SDL3.Mixer.PauseTrack(track);
             _logger.LogDebug("Music paused");
         }
     }
@@ -644,10 +734,17 @@ internal class AudioService : IAudioService
     /// </remarks>
     public void ResumeMusic()
     {
-        if (_currentMusicTrack != IntPtr.Zero)
+        nint track;
+        lock (_tracksLock)
         {
-            SDL3.Mixer.ResumeTrack(_currentMusicTrack);
-            IsMusicPaused = false;
+            track = _currentMusicTrack;
+            if (track != IntPtr.Zero)
+                IsMusicPaused = false;
+        }
+
+        if (track != IntPtr.Zero)
+        {
+            SDL3.Mixer.ResumeTrack(track);
             _logger.LogDebug("Music resumed");
         }
     }
@@ -662,14 +759,24 @@ internal class AudioService : IAudioService
     /// </remarks>
     public void StopMusic()
     {
-        if (_currentMusicTrack != IntPtr.Zero)
+        nint track;
+        lock (_tracksLock)
         {
-            SDL3.Mixer.StopTrack(_currentMusicTrack, 0);
-            SDL3.Mixer.DestroyTrack(_currentMusicTrack);
-            _tracks.Remove(_currentMusicTrack);
-            _currentMusicTrack = IntPtr.Zero;
-            IsMusicPlaying = false;
-            IsMusicPaused = false;
+            track = _currentMusicTrack;
+            if (track != IntPtr.Zero)
+            {
+                _tracks.Remove(track);
+                _trackCallbacks.Remove(track);
+                _currentMusicTrack = IntPtr.Zero;
+                IsMusicPlaying = false;
+                IsMusicPaused = false;
+            }
+        }
+
+        if (track != IntPtr.Zero)
+        {
+            SDL3.Mixer.StopTrack(track, 0);
+            SDL3.Mixer.DestroyTrack(track);
             _logger.LogDebug("Music stopped");
         }
     }
@@ -686,7 +793,10 @@ internal class AudioService : IAudioService
     {
         if (music is Music sdlMusic)
         {
-            _loadedMusic.Remove(sdlMusic);
+            lock (_assetLock)
+            {
+                _loadedMusic.Remove(sdlMusic);
+            }
             sdlMusic.Dispose();
             _logger.LogDebug("Music unloaded: {Name}", music.Name);
         }
@@ -709,31 +819,41 @@ internal class AudioService : IAudioService
     /// </remarks>
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
         _logger.LogInformation("Disposing audio service");
 
         StopMusic();
         StopAllSounds();
 
-        foreach (var track in _tracks.ToList())
+        // Final safety sweep — catches any tracks that arrived between StopAllSounds and here.
+        List<nint> remainingTracks;
+        lock (_tracksLock)
         {
+            remainingTracks = [.._tracks];
+            _tracks.Clear();
+            _trackCallbacks.Clear();
+        }
+
+        foreach (var track in remainingTracks)
             SDL3.Mixer.DestroyTrack(track);
-        }
-        _tracks.Clear();
-        _trackCallbacks.Clear();
 
-        foreach (var sound in _loadedSounds.ToList())
+        // Snapshot under lock so a concurrent LoadSoundAsync/LoadMusicAsync can't race the clear.
+        List<SoundEffect> sounds;
+        List<Music> music;
+        lock (_assetLock)
         {
+            sounds = [.._loadedSounds];
+            _loadedSounds.Clear();
+            music = [.._loadedMusic];
+            _loadedMusic.Clear();
+        }
+
+        foreach (var sound in sounds)
             sound.Dispose();
-        }
-        _loadedSounds.Clear();
 
-        foreach (var music in _loadedMusic.ToList())
-        {
-            music.Dispose();
-        }
-        _loadedMusic.Clear();
+        foreach (var m in music)
+            m.Dispose();
 
         if (_mixer != IntPtr.Zero)
         {
@@ -742,7 +862,21 @@ internal class AudioService : IAudioService
         }
 
         SDL3.Mixer.Quit();
-
-        _disposed = true;
     }
+
+    /// <summary>
+    /// Protects <see cref="_tracks"/>, <see cref="_trackCallbacks"/>,
+    /// <see cref="_currentMusicTrack"/>, <see cref="IsMusicPlaying"/>, and
+    /// <see cref="IsMusicPaused"/>. <see cref="OnTrackStoppedNative"/> fires on the SDL audio
+    /// thread; all other callers run on the game thread.
+    /// </summary>
+    private readonly Lock _tracksLock = new();
+
+    /// <summary>
+    /// Protects <see cref="_loadedSounds"/> and <see cref="_loadedMusic"/>.
+    /// <see cref="LoadSoundAsync"/> and <see cref="LoadMusicAsync"/> write from the thread pool;
+    /// Unload and Dispose access the same lists from the game thread.
+    /// Kept separate from <see cref="_tracksLock"/> to avoid stalling callbacks during asset I/O.
+    /// </summary>
+    private readonly Lock _assetLock = new();
 }

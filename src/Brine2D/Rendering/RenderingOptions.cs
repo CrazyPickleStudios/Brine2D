@@ -28,6 +28,14 @@ public sealed class RenderingOptions
     public int TargetFPS { get; set; } = 0;
 
     /// <summary>
+    /// Gets or sets the maximum delta time in milliseconds applied per frame.
+    /// Prevents runaway physics or update logic after a pause, debugger break, or frame spike.
+    /// Default: 100ms. Set higher for games with heavy simulation; lower for tighter physics.
+    /// </summary>
+    [Range(1, 1000, ErrorMessage = "MaxDeltaTimeMs must be between 1 and 1000.")]
+    public int MaxDeltaTimeMs { get; set; } = 100;
+
+    /// <summary>
     /// Gets or sets the clear color used when clearing the screen each frame.
     /// </summary>
     public Color ClearColor { get; set; } = Color.FromArgb(255, 52, 78, 65);

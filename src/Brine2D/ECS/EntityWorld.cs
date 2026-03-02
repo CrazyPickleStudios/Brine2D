@@ -2,7 +2,6 @@
 using Brine2D.ECS.Systems;
 using Brine2D.ECS.Query;
 using Brine2D.Rendering;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.ECS;
@@ -13,7 +12,7 @@ namespace Brine2D.ECS;
 /// during frame execution and applied at frame boundaries.
 /// Targets 1,000-10,000+ entities with a straightforward mental model.
 /// </summary>
-internal class EntityWorld : IEntityWorld
+internal class EntityWorld : IEntityWorld, IDisposable
 {
     // Main entity list (deferred)
     private readonly DeferredList<Entity> _entities = new();
@@ -25,7 +24,7 @@ internal class EntityWorld : IEntityWorld
     private readonly List<IUpdateSystem> _updateSystems = new();
     private readonly List<IRenderSystem> _renderSystems = new();
 
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IActivator _activator;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger<EntityWorld>? _logger;
     private readonly ECSOptions _options;
@@ -44,7 +43,14 @@ internal class EntityWorld : IEntityWorld
     private bool _updateSystemsSorted = false;
     private bool _renderSystemsSorted = false;
 
-    // Component pools (one pool per component type)
+    // Component pools (one pool per component type).
+    // EntityWorld is game-thread-only, so _poolsLock is not strictly required for individual
+    // pool operations — all callers run on the game thread. It is retained for two cases:
+    // 1. GetAllComponentsFromPool iterates the dictionary while OnDestroy callbacks may re-enter
+    //    component pool operations; materialising under the lock and returning a snapshot avoids
+    //    the CS9232 yield-inside-lock warning and any re-entrancy issue.
+    // 2. RemoveEntityFromAllPools performs a bulk iteration; the lock boundary makes the intent
+    //    clear and consistent with GetAllComponentsFromPool.
     private readonly Dictionary<Type, IComponentPool> _componentPools = new();
     private readonly object _poolsLock = new();
 
@@ -55,11 +61,11 @@ internal class EntityWorld : IEntityWorld
     internal ECSOptions Options => _options;
 
     public EntityWorld(
-        IServiceProvider serviceProvider,
+        IActivator activator,
         ILoggerFactory? loggerFactory = null,
         ECSOptions? options = null)
     {
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _activator = activator ?? throw new ArgumentNullException(nameof(activator));
         _loggerFactory = loggerFactory;
         _logger = loggerFactory?.CreateLogger<EntityWorld>();
         _options = options ?? new ECSOptions();
@@ -98,7 +104,7 @@ internal class EntityWorld : IEntityWorld
             return;
         }
 
-        var system = ActivatorUtilities.CreateInstance<T>(_serviceProvider);
+        var system = _activator.CreateInstance<T>();
         configure?.Invoke(system);
 
         bool added = false;
@@ -178,6 +184,8 @@ internal class EntityWorld : IEntityWorld
 
         entity.SetWorld(this);
         _entities.Add(entity);
+        // Populate the lookup immediately so GetEntityById works within the same frame,
+        // before the entity is committed to _entities at the next frame boundary.
         _entityLookup[entity.Id] = entity;
         _logger?.LogDebug("Queued entity creation: {Name} ({Id})", entity.Name, entity.Id);
 
@@ -190,6 +198,8 @@ internal class EntityWorld : IEntityWorld
 
         entity.SetWorld(this);
         _entities.Add(entity);
+        // Populate the lookup immediately so GetEntityById works within the same frame,
+        // before the entity is committed to _entities at the next frame boundary.
         _entityLookup[entity.Id] = entity;
         _logger?.LogDebug("Queued entity creation: {Name} ({Id})", entity.Name, entity.Id);
 
@@ -377,8 +387,9 @@ internal class EntityWorld : IEntityWorld
             entity.IsActive = false;
         }
 
-        _updateSystems.Clear();
-        _renderSystems.Clear();
+        // Dispose systems before clearing so they can release unmanaged resources
+        // (textures, audio handles, native buffers, etc.) while the world is still intact.
+        DisposeAndClearSystems();
 
         _logger?.LogInformation("World cleared: entities and systems removed");
 
@@ -386,6 +397,45 @@ internal class EntityWorld : IEntityWorld
         _isProcessing = false;
         try { ProcessDeferredOperations(); }
         finally { _isProcessing = wasProcessing; }
+    }
+
+    /// <summary>
+    /// Disposes all systems and clears both pipelines. Systems that implement both
+    /// <see cref="IUpdateSystem"/> and <see cref="IRenderSystem"/> are disposed exactly once.
+    /// </summary>
+    private void DisposeAndClearSystems()
+    {
+        // Use ReferenceEqualityComparer to deduplicate systems that implement both pipelines,
+        // ensuring they are disposed exactly once regardless of which list they appear in.
+        var allSystems = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var s in _updateSystems) allSystems.Add(s);
+        foreach (var s in _renderSystems) allSystems.Add(s);
+
+        foreach (var system in allSystems)
+        {
+            if (system is IDisposable disposable)
+            {
+                try { disposable.Dispose(); }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Error disposing system {SystemType}", system.GetType().Name);
+                }
+            }
+        }
+
+        _updateSystems.Clear();
+        _renderSystems.Clear();
+        _updateSystemsSorted = false;
+        _renderSystemsSorted = false;
+    }
+
+    /// <summary>
+    /// Disposes all systems. Called automatically by the DI scope when the scene is unloaded.
+    /// Entities are not explicitly torn down here since the scope disposal handles pool cleanup.
+    /// </summary>
+    public void Dispose()
+    {
+        DisposeAndClearSystems();
     }
 
     #endregion
@@ -422,7 +472,8 @@ internal class EntityWorld : IEntityWorld
     {
         _entities.ProcessAdds(entity =>
         {
-            _entityLookup[entity.Id] = entity;
+            // _entityLookup is populated immediately in CreateEntity for same-frame ID lookups;
+            // OnInitialize() is the only action needed at commit time.
             entity.OnInitialize();
             _logger?.LogDebug("Created entity: {Name} ({Id})", entity.Name, entity.Id);
             // No query invalidation needed; new entities have no components yet.
@@ -445,23 +496,6 @@ internal class EntityWorld : IEntityWorld
             // (e.g., base.OnDestroy() was not called), clear any stragglers.
             RemoveEntityFromAllPools(entity.Id);
         });
-    }
-
-    #endregion
-
-    #region Service Provider (Internal; used by Behaviors)
-
-    public T? GetService<T>() where T : class
-        => _serviceProvider.GetService<T>();
-
-    public T GetRequiredService<T>() where T : class
-    {
-        var service = _serviceProvider.GetService<T>();
-        if (service == null)
-            throw new InvalidOperationException(
-                $"Required service '{typeof(T).Name}' is not registered. " +
-                $"Did you forget to register it in your Program.cs?");
-        return service;
     }
 
     #endregion
@@ -618,7 +652,7 @@ internal class EntityWorld : IEntityWorld
     }
 
     internal T CreateBehavior<T>() where T : EntityBehavior
-        => ActivatorUtilities.CreateInstance<T>(_serviceProvider);
+        => _activator.CreateInstance<T>();
 
     /// <summary>
     /// Removes all components for the specified entity from every pool in a single lock pass.

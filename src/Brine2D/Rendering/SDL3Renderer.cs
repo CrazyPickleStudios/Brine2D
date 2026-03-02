@@ -19,12 +19,14 @@ namespace Brine2D.Rendering;
 [ExcludeFromCodeCoverage(Justification = "Requires a live SDL3 GPU context; covered by manual/hardware testing.")]
 public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 {
+
+
     private readonly ILogger<SDL3Renderer> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly RenderingOptions _renderingOptions;
     private readonly WindowOptions _windowOptions;
     private readonly IFontLoader? _fontLoader;
-    private readonly EventBus? _eventBus;
+    private readonly IEventBus? _eventBus;
 
     private readonly SDL3RenderTargetManager _renderTargetManager;
     private readonly SDL3StateManager _stateManager;
@@ -215,7 +217,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             origin: Vector2.Zero);
     }
 
-    private bool _disposed;
+    private int _disposed = 0;
 
     public nint Window => _window;
     public nint Device => _device;
@@ -238,7 +240,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         PostProcessingOptions? postProcessingOptions = null,
         SDL3PostProcessPipeline? postProcessPipeline = null,
         IFontLoader? fontLoader = null,
-        EventBus? eventBus = null)
+        IEventBus? eventBus = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
@@ -1430,7 +1432,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
 
         _logger.LogInformation("Disposing SDL3 GPU renderer");
 
@@ -1497,7 +1500,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         SDL3.SDL.Quit();
 
         IsInitialized = false;
-        _disposed = true;
     }
 
     private sealed class ViewportState

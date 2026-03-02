@@ -27,6 +27,9 @@ public abstract class Scene
     private IAudioService? _audio;
     private IGameContext? _game;
 
+    // Cached at construction so Name never triggers reflection at runtime.
+    private readonly string _name;
+
     private static InvalidOperationException NotReady(string name) => new(
         $"'{name}' is not available in the Scene constructor. " +
         $"Override {nameof(OnLoadAsync)}() or {nameof(OnEnter)}() to access framework properties. " +
@@ -75,30 +78,19 @@ public abstract class Scene
     }
 
     /// <summary>
-    /// Gets the name of the scene.
+    /// Gets the display name of this scene.
+    /// Defaults to the class name, or the value specified in <see cref="SceneAttribute.Name"/>
+    /// if the class is annotated with <c>[Scene("MyName")]</c>.
+    /// Override to provide a fully dynamic name at runtime.
     /// </summary>
-    public virtual string Name
-    {
-        get
-        {
-            // Check for [Scene] attribute
-            var attribute = GetType().GetCustomAttribute<SceneAttribute>();
-            if (attribute?.Name != null)
-            {
-                return attribute.Name;
-            }
-            
-            // Fallback to class name
-            return GetType().Name;
-        }
-    }
-    
+    public virtual string Name => _name;
+
     /// <summary>
     /// Gets whether frame management (BeginFrame/EndFrame) happens automatically.
     /// Default is true. Set to false for manual control over rendering passes.
     /// </summary>
     public virtual bool EnableAutomaticFrameManagement { get; set; } = true;
-    
+
     /// <summary>
     /// Constructs a scene.
     /// Framework properties (Logger, World, Renderer, Input, Audio, Game) are set automatically by SceneManager.
@@ -106,12 +98,12 @@ public abstract class Scene
     /// </summary>
     protected Scene()
     {
-        // Apply [Scene] attribute settings
+        // Read the [Scene] attribute once at construction. Name and EnableAutomaticFrameManagement
+        // are both cached here so neither property triggers reflection at runtime.
         var attribute = GetType().GetCustomAttribute<SceneAttribute>();
+        _name = attribute?.Name ?? GetType().Name;
         if (attribute != null)
-        {
             EnableAutomaticFrameManagement = attribute.EnableAutomaticFrameManagement;
-        }
     }
 
     #region Lifecycle Methods

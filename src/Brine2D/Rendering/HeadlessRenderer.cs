@@ -16,10 +16,11 @@ namespace Brine2D.Rendering;
 internal sealed class HeadlessRenderer : IRenderer
 {
     // Width/Height are intentionally 0 — there is no window in headless mode.
-    // The camera factory in AddBrineEngine detects this and falls back to 1280×720.
-    public bool IsInitialized => true;
+    // The ICamera factory in AddBrineEngine sees Width: 0, Height: 0 and falls back
+    // to WindowOptions.Width/Height rather than rendering to a zero-size viewport.
     public int Width => 0;
     public int Height => 0;
+    public bool IsInitialized => true;
     public Color ClearColor { get; set; }
     public ICamera? Camera { get; set; }
 

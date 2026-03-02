@@ -17,9 +17,12 @@ internal interface IComponentPool
 }
 
 /// <summary>
-/// Stores all components of a specific type.
-/// Uses regular Dictionary with locks for thread-safety (faster than ConcurrentDictionary).
-/// Provides ArrayPool-based snapshots for zero-allocation parallel iteration.
+/// Stores all components of a specific type for a single scene-scoped EntityWorld.
+/// ComponentPool is accessed exclusively from the game thread via EntityWorld, so individual
+/// Get/Add/Remove/GetTyped/Count operations are lock-free. GetSnapshot() retains its lock
+/// to produce a consistent array copy; if snapshot consumers are ever moved off the game
+/// thread the lock already provides the necessary fence.
+/// Provides ArrayPool-based snapshots for zero-allocation iteration.
 /// </summary>
 /// <typeparam name="T">The component type.</typeparam>
 internal sealed class ComponentPool<T> : IComponentPool where T : Component
@@ -29,29 +32,30 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
 
     public Type ComponentType => typeof(T);
 
-    public int Count
-    {
-        get { lock (_lock) { return _components.Count; } }
-    }
+    // No lock needed — game-thread-only access
+    public int Count => _components.Count;
 
+    // No lock needed — game-thread-only access
     public void Add(int entityId, Component component)
-    {
-        lock (_lock) { _components[entityId] = (T)component; }
-    }
+        => _components[entityId] = (T)component;
 
+    // No lock needed — game-thread-only access
     public Component? Get(int entityId)
-    {
-        lock (_lock) { return _components.TryGetValue(entityId, out var c) ? c : null; }
-    }
+        => _components.TryGetValue(entityId, out var c) ? c : null;
 
+    // No lock needed — game-thread-only access
     public bool Remove(int entityId)
-    {
-        lock (_lock) { return _components.Remove(entityId); }
-    }
+        => _components.Remove(entityId);
+
+    // No lock needed — game-thread-only access
+    public T? GetTyped(int entityId)
+        => _components.TryGetValue(entityId, out var c) ? c : null;
 
     /// <summary>
-    /// Creates a snapshot array for safe parallel iteration.
-    /// MUST call ReturnSnapshot() in a finally block to return to pool.
+    /// Creates an ArrayPool snapshot for iteration.
+    /// The lock is not strictly required today (game-thread-only access), but is retained
+    /// so that if snapshot consumers are ever moved to worker threads the fence is already
+    /// in place. MUST call <see cref="ReturnSnapshot"/> in a finally block.
     /// </summary>
     public (Array Snapshot, int Length) GetSnapshot()
     {
@@ -68,7 +72,7 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
 
     /// <summary>
     /// Returns a snapshot to the ArrayPool.
-    /// MUST be called after GetSnapshot() to prevent memory leaks.
+    /// MUST be called after <see cref="GetSnapshot"/> to prevent memory leaks.
     /// </summary>
     public void ReturnSnapshot(Array snapshot)
     {
@@ -78,8 +82,7 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
 
     /// <summary>
     /// Returns all component entries as a materialized list.
-    /// Uses the snapshot path internally to avoid LINQ allocation overhead.
-    /// For hot-path iteration, prefer GetSnapshot() + ReturnSnapshot() directly.
+    /// For hot-path iteration, prefer <see cref="GetSnapshot"/> + <see cref="ReturnSnapshot"/> directly.
     /// </summary>
     public IEnumerable<(int EntityId, T Component)> All()
     {
@@ -95,17 +98,6 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
         finally
         {
             ReturnSnapshot(snapshot);
-        }
-    }
-
-    /// <summary>
-    /// Gets a strongly-typed component for a specific entity.
-    /// </summary>
-    public T? GetTyped(int entityId)
-    {
-        lock (_lock)
-        {
-            return _components.TryGetValue(entityId, out var c) ? c : null;
         }
     }
 }

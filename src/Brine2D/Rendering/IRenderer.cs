@@ -7,6 +7,13 @@ namespace Brine2D.Rendering;
 /// <summary>
 /// Core rendering interface for Brine2D.
 /// </summary>
+/// <remarks>
+/// Implementations must be idempotent with respect to <see cref="IDisposable.Dispose"/>.
+/// <see cref="GameEngine.ShutdownAsync"/> disposes the renderer explicitly before the DI
+/// container tears down singletons; the container will then call <see cref="IDisposable.Dispose"/>
+/// a second time during host disposal. Guard against double-disposal with a standard
+/// <c>_disposed</c> flag checked at the top of your <c>Dispose</c> implementation.
+/// </remarks>
 public interface IRenderer : IDisposable
 {
     // ============================================================
@@ -79,7 +86,7 @@ public interface IRenderer : IDisposable
     /// <param name="y">Y position</param>
     /// <param name="color">Text color</param>
     void DrawText(string text, float x, float y, Color color);
-    
+
     /// <summary>
     /// Draw text with advanced formatting options.
     /// </summary>
@@ -88,12 +95,12 @@ public interface IRenderer : IDisposable
     /// <param name="y">Y position</param>
     /// <param name="options">Rendering options (alignment, wrapping, effects, etc.)</param>
     void DrawText(string text, float x, float y, TextRenderOptions options);
-    
+
     /// <summary>
     /// Set the default font for text rendering.
     /// </summary>
     void SetDefaultFont(Font? font);
-    
+
     /// <summary>
     /// Measure the size of plain text.
     /// </summary>
@@ -101,7 +108,7 @@ public interface IRenderer : IDisposable
     /// <param name="fontSize">Font size in points (default uses current font size)</param>
     /// <returns>Width and height in pixels</returns>
     Vector2 MeasureText(string text, float? fontSize = null);
-    
+
     /// <summary>
     /// Measure the size of text with full layout options.
     /// </summary>

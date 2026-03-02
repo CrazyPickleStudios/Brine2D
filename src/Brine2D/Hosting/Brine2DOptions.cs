@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using Brine2D.Audio;
 using Brine2D.ECS;
@@ -11,62 +12,102 @@ namespace Brine2D.Hosting;
 public sealed class Brine2DOptions
 {
     /// <summary>Audio configuration.</summary>
-    [Required]
-    public AudioOptions Audio { get; set; } = new();
+    public AudioOptions Audio { get; init; } = new();
 
     /// <summary>ECS configuration.</summary>
-    [Required]
-    public ECSOptions ECS { get; set; } = new();
+    public ECSOptions ECS { get; init; } = new();
+
+    /// <summary>
+    ///     Time in seconds to wait for the game thread's finally block to complete after a forced
+    ///     shutdown is triggered. Default: 2 seconds.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Advanced)]
+    [Range(0, 30, ErrorMessage = "ForceShutdownGracePeriodSeconds must be between 0 and 30.")]
+    public int ForceShutdownGracePeriodSeconds { get; set; } = 2;
+
+    /// <summary>
+    ///     Scheduling priority of the dedicated game thread.
+    ///     Raise to <see cref="ThreadPriority.AboveNormal"/> on CPU-bound workloads for
+    ///     tighter frame-timing. Avoid <see cref="ThreadPriority.Highest"/>; it can starve
+    ///     OS threads and cause system instability on some platforms.
+    ///     Default: <see cref="ThreadPriority.Normal"/>.
+    /// </summary>
+    public ThreadPriority GameThreadPriority { get; set; } = ThreadPriority.Normal;
 
     /// <summary>
     ///     Run in headless mode (no window, input, audio, or rendering).
     ///     Useful for dedicated servers or automated testing.
     /// </summary>
-    public bool Headless { get; set; } = false;
+    public bool Headless { get; set; }
 
     /// <summary>
     ///     Minimum time in milliseconds a loading screen stays visible after the scene is ready.
-    ///     Prevents loading screens from flashing imperceptibly for very fast loads. Default: 200.
-    ///     Set to 0 to disable.
+    ///     Prevents loading screens from flashing on very fast loads. Default: 200. Set to 0 to disable.
     /// </summary>
     [Range(0, int.MaxValue, ErrorMessage = "LoadingScreenMinimumDisplayMs must be 0 or greater.")]
     public int LoadingScreenMinimumDisplayMs { get; set; } = 200;
 
     /// <summary>Rendering configuration.</summary>
-    [Required]
-    public RenderingOptions Rendering { get; set; } = new();
-
-    /// <summary>Window configuration.</summary>
-    [Required]
-    public WindowOptions Window { get; set; } = new();
+    public RenderingOptions Rendering { get; init; } = new();
 
     /// <summary>
-    ///     Validates all options using DataAnnotations (ASP.NET Core pattern).
-    ///     Called automatically by GameApplicationBuilder.Build().
+    ///     Time in seconds to wait for the game thread to exit gracefully during disposal.
+    ///     If the thread does not exit within this window, a forced shutdown is triggered.
+    ///     Default: 5 seconds.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
+    [Range(1, 60, ErrorMessage = "ShutdownTimeoutSeconds must be between 1 and 60.")]
+    public int ShutdownTimeoutSeconds { get; set; } = 5;
+
+    /// <summary>Window configuration.</summary>
+    public WindowOptions Window { get; init; } = new();
+
+    /// <summary>
+    ///     Validates all options using DataAnnotations.
+    ///     Called automatically by <see cref="GameApplicationBuilder.Build"/> and at host startup.
+    /// </summary>
+    /// <remarks>
+    ///     Nested sub-options are discovered and validated automatically via reflection.
+    /// </remarks>
+    /// <exception cref="GameConfigurationException">
     ///     Thrown if validation fails with detailed error messages.
     /// </exception>
     public void Validate()
     {
         var allErrors = new List<string>();
-
         var errors = new List<ValidationResult>();
-        var context = new ValidationContext(this, null, null);
 
-        if (!Validator.TryValidateObject(this, context, errors, true))
-        {
+        if (!Validator.TryValidateObject(this, new ValidationContext(this), errors, true))
             allErrors.AddRange(errors.Select(e => e.ErrorMessage ?? "Unknown validation error"));
+
+        foreach (var prop in typeof(Brine2DOptions).GetProperties()
+            .Where(p => p.CanRead
+                && p.PropertyType.IsClass
+                && p.PropertyType != typeof(string)
+                && !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType)))
+        {
+            var value = prop.GetValue(this);
+            if (value != null)
+                ValidateNested(value, prop.Name, allErrors);
         }
 
-        ValidateNested(Window, "Window", allErrors);
-        ValidateNested(Rendering, "Rendering", allErrors);
-        ValidateNested(ECS, "ECS", allErrors);
-        ValidateNested(Audio, "Audio", allErrors);
-
-        if (allErrors.Any())
+        if (ForceShutdownGracePeriodSeconds >= ShutdownTimeoutSeconds)
         {
-            throw new InvalidOperationException(
+            allErrors.Add(
+                $"ForceShutdownGracePeriodSeconds ({ForceShutdownGracePeriodSeconds}s) must be less than " +
+                $"ShutdownTimeoutSeconds ({ShutdownTimeoutSeconds}s).");
+        }
+
+        if (!Headless && (Window.Width <= 0 || Window.Height <= 0))
+        {
+            allErrors.Add(
+                $"Window.Width ({Window.Width}) and/or Window.Height ({Window.Height}) is 0 or negative; " +
+                $"SDL3 will fail to create the window. " +
+                $"Set valid dimensions via builder.Configure(o => {{ o.Window.Width = 1280; o.Window.Height = 720; }}).");
+        }
+
+        if (allErrors.Count > 0)
+        {
+            throw new GameConfigurationException(
                 "Game application configuration is invalid:" + Environment.NewLine +
                 string.Join(Environment.NewLine, allErrors.Select(e => $"  • {e}")) + Environment.NewLine +
                 Environment.NewLine +
@@ -74,17 +115,28 @@ public sealed class Brine2DOptions
         }
     }
 
-    private static void ValidateNested(object obj, string propertyName, List<string> allErrors)
+    private static void ValidateNested(object obj, string propertyPath, List<string> allErrors,
+        HashSet<object>? visited = null)
     {
-        var errors = new List<ValidationResult>();
-        var context = new ValidationContext(obj, null, null);
+        visited ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
+        if (!visited.Add(obj)) return;
 
-        if (!Validator.TryValidateObject(obj, context, errors, true))
+        var errors = new List<ValidationResult>();
+        if (!Validator.TryValidateObject(obj, new ValidationContext(obj), errors, true))
         {
             foreach (var error in errors)
-            {
-                allErrors.Add($"{propertyName}: {error.ErrorMessage}");
-            }
+                allErrors.Add($"{propertyPath}: {error.ErrorMessage}");
+        }
+
+        foreach (var prop in obj.GetType().GetProperties()
+            .Where(p => p.CanRead
+                && p.PropertyType.IsClass
+                && p.PropertyType != typeof(string)
+                && !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType)))
+        {
+            var value = prop.GetValue(obj);
+            if (value != null)
+                ValidateNested(value, $"{propertyPath}.{prop.Name}", allErrors, visited);
         }
     }
 }

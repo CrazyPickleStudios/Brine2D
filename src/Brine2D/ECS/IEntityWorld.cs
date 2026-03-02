@@ -8,18 +8,18 @@ namespace Brine2D.ECS;
 /// <summary>
 /// Interface for the entity world that manages all entities and systems.
 /// </summary>
-public interface IEntityWorld
+public interface IEntityWorld : IDisposable
 {
     /// <summary>
     /// Gets all entities in the world.
     /// </summary>
     IReadOnlyList<Entity> Entities { get; }
-    
+
     /// <summary>
     /// Gets all update systems in this world.
     /// </summary>
     IReadOnlyList<IUpdateSystem> UpdateSystems { get; }
-    
+
     /// <summary>
     /// Gets all render systems in this world.
     /// </summary>
@@ -147,7 +147,8 @@ public interface IEntityWorld
     void Render(IRenderer renderer);
 
     /// <summary>
-    /// Clears all entities and systems from the world.
+    /// Clears all entities and systems from the world, disposing any systems that
+    /// implement <see cref="IDisposable"/>. The world remains usable after this call.
     /// </summary>
     void Clear();
 
