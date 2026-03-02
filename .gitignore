@@ -419,3 +419,5 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+/.github/copilot-instructions.md
+/.gitignore
