@@ -48,6 +48,15 @@ public sealed class GameApplicationBuilderTests
     }
 
     [Fact]
+    public async Task ConfigureBrine2D_AfterBuild_Throws()
+    {
+        var builder = Headless();
+        await using var _ = builder.Build();
+
+        Assert.Throws<InvalidOperationException>(() => builder.ConfigureBrine2D(_ => { }));
+    }
+
+    [Fact]
     public void AddScene_CalledTwice_RegistersTransientOnce()
     {
         var builder = Headless();
@@ -67,7 +76,7 @@ public sealed class GameApplicationBuilderTests
         var builder = Headless();
         builder.AddScene<SceneWithUnregisteredDep>();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => builder.Build());
+        var ex = Assert.Throws<GameConfigurationException>(() => builder.Build());
 
         Assert.Contains(nameof(SceneWithUnregisteredDep), ex.Message);
         Assert.Contains(nameof(IUnregisteredService),     ex.Message);
@@ -83,6 +92,26 @@ public sealed class GameApplicationBuilderTests
         await using var game = builder.Build();
     }
 
+    [Fact]
+    public async Task Build_SceneWithOptionalDependency_DoesNotThrow()
+    {
+        var builder = Headless();
+        builder.AddScene<SceneWithOptionalDep>();
+
+        await using var _ = builder.Build();
+    }
+
+    [Fact]
+    public void ConfigureBrine2D_ThrowingDelegate_ThrowsGameConfigurationException()
+    {
+        var builder = Headless();
+        builder.ConfigureBrine2D(_ => throw new Exception("brine config failure"));
+
+        var ex = Assert.Throws<GameConfigurationException>(() => builder.Build());
+
+        Assert.Contains("ConfigureBrine2D", ex.Message);
+    }
+
     private sealed class EmptyScene : Scene { }
 
     private interface IUnregisteredService { }
@@ -92,5 +121,11 @@ public sealed class GameApplicationBuilderTests
     {
         // ReSharper disable once UnusedParameter.Local
         public SceneWithUnregisteredDep(IUnregisteredService dep) { }
+    }
+
+    private sealed class SceneWithOptionalDep : Scene
+    {
+        // ReSharper disable once UnusedParameter.Local
+        public SceneWithOptionalDep(IUnregisteredService? dep = null) { }
     }
 }

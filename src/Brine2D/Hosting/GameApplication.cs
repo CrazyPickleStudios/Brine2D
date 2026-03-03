@@ -210,11 +210,6 @@ public sealed class GameApplication : IAsyncDisposable, IDisposable
                         : forcedEx;
                 }
             }
-            else
-            {
-                if (_gameThreadTcs.Task.IsFaulted)
-                    await _gameThreadTcs.Task;
-            }
         }
         else
         {

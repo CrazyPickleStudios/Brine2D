@@ -20,7 +20,7 @@ public abstract class TestBase
         configure?.Invoke(options);
 
         return new EntityWorld(
-            serviceProvider,
+            new ServiceProviderActivator(serviceProvider),
             serviceProvider.GetService<ILoggerFactory>(),
             options);
     }
