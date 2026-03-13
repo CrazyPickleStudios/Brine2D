@@ -16,7 +16,6 @@ public class BackgroundLoadingDemoScene : Scene
 {
     private readonly ISceneManager _sceneManager;
     private readonly IAssetLoader _assetLoader;
-    private readonly IInputContext _input;
 
     private const int SimulatedLoadDelayMs = 800; // Slow enough to see loading screen
     private const int AssetCount = 5;
@@ -25,23 +24,21 @@ public class BackgroundLoadingDemoScene : Scene
 
     public BackgroundLoadingDemoScene(
         ISceneManager sceneManager,
-        IAssetLoader assetLoader,
-        IInputContext input)
+        IAssetLoader assetLoader)
     {
         _sceneManager = sceneManager;
         _assetLoader = assetLoader;
-        _input = input;
     }
 
-    protected override async Task OnLoadAsync(CancellationToken ct)
+    protected override async Task OnLoadAsync(CancellationToken ct, IProgress<float>? progress = null)
     {
         Logger.LogInformation("Loading started...");
 
-        // Just a simple delay to test if loading screen shows
         for (int i = 0; i < 5; i++)
         {
             await Task.Delay(1000, ct);
             Logger.LogInformation("Loading step {Step}/5", i + 1);
+            progress?.Report((i + 1) / 5f);
         }
 
         Logger.LogInformation("Loading complete!");
@@ -49,11 +46,10 @@ public class BackgroundLoadingDemoScene : Scene
 
     protected override void OnUpdate(GameTime gameTime)
     {
-        // Return to menu
-        if (_input.IsKeyPressed(Key.Escape))
+        if (Input.IsKeyPressed(Key.Escape))
         {
             Logger.LogInformation("Returning to main menu");
-            _sceneManager.LoadSceneAsync<MainMenuScene>();
+            _sceneManager.LoadScene<MainMenuScene>();
         }
     }
 

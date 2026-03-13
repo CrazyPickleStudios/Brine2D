@@ -9,7 +9,7 @@ namespace Brine2D.Rendering;
 /// <summary>
 /// Handles vertex batching and primitive rendering operations.
 /// </summary>
-internal sealed class SDL3BatchRenderer
+internal sealed class SDL3BatchRenderer : IDisposable
 {
     private readonly ILogger<SDL3BatchRenderer> _logger;
     private readonly SDL3StateManager _stateManager;
@@ -20,7 +20,12 @@ internal sealed class SDL3BatchRenderer
     private nint _whiteTexture;
     private nint _sampler;
     private nint _samplerNearest;
-    
+
+    private const int FramesInFlight = 3;
+    private readonly nint[] _transferBuffers = new nint[FramesInFlight];
+    private int _currentFrameSlot;
+    private int _frameVertexOffset;
+
     private nint _currentBoundTexture = nint.Zero;
     private TextureScaleMode _currentTextureScaleMode = TextureScaleMode.Linear;
     
@@ -52,6 +57,22 @@ internal sealed class SDL3BatchRenderer
         _whiteTexture = whiteTexture;
         _sampler = sampler;
         _samplerNearest = samplerNearest;
+
+        var transferCreateInfo = new SDL3.SDL.GPUTransferBufferCreateInfo
+        {
+            Usage = SDL3.SDL.GPUTransferBufferUsage.Upload,
+            Size = (uint)(VertexSize * MaxVertices)
+        };
+
+        for (int i = 0; i < FramesInFlight; i++)
+        {
+            _transferBuffers[i] = SDL3.SDL.CreateGPUTransferBuffer(_device, ref transferCreateInfo);
+            if (_transferBuffers[i] == nint.Zero)
+            {
+                var error = SDL3.SDL.GetError();
+                throw new InvalidOperationException($"Failed to create transfer buffer [{i}]: {error}");
+            }
+        }
     }
     
     public void Clear()
@@ -64,10 +85,6 @@ internal sealed class SDL3BatchRenderer
     public int VertexCount => _vertexBatch.Count;
     public nint CurrentBoundTexture => _currentBoundTexture;
     public TextureScaleMode CurrentTextureScaleMode => _currentTextureScaleMode;
-    
-    // ============================================================
-    // TEXTURE BATCHING
-    // ============================================================
     
     public void DrawTexturedQuad(
         nint textureHandle,
@@ -87,10 +104,6 @@ internal sealed class SDL3BatchRenderer
         else
             AddQuad(x, y, width, height, color, u1, v1, u2, v2, onFlushNeeded);
     }
-    
-    // ============================================================
-    // PRIMITIVES
-    // ============================================================
     
     public void DrawRectangleFilled(float x, float y, float width, float height, Color color, Action? onFlushNeeded = null)
     {
@@ -162,10 +175,6 @@ internal sealed class SDL3BatchRenderer
             DrawLine(x1, y1, x2, y2, color, thickness, onFlushNeeded);
         }
     }
-    
-    // ============================================================
-    // VERTEX BATCH MANAGEMENT
-    // ============================================================
     
     private void AddQuad(
         float x, float y, 
@@ -269,78 +278,87 @@ internal sealed class SDL3BatchRenderer
         }
     }
     
-    // ============================================================
-    // GPU UPLOAD
-    // ============================================================
-    
-    public unsafe void UploadToGPU(nint commandBuffer)
+    /// <summary>
+    /// Copies the current vertex batch to the transfer buffer (CPU-only, no GPU pass).
+    /// Returns (firstVertex, vertexCount) for use in a later copy pass.
+    /// </summary>
+    public unsafe (int FirstVertex, int VertexCount) StageForUpload()
     {
-        if (_vertexBatch.Count == 0) return;
+        if (_vertexBatch.Count == 0) return (_frameVertexOffset, 0);
 
-        var vertexDataSize = (uint)(VertexSize * _vertexBatch.Count);
+        int firstVertex = _frameVertexOffset;
+        int vertexCount = _vertexBatch.Count;
+        var vertexDataSize = (uint)(VertexSize * vertexCount);
+        var byteOffset = (uint)(firstVertex * VertexSize);
 
-        var transferCreateInfo = new SDL3.SDL.GPUTransferBufferCreateInfo
+        if (firstVertex + vertexCount > MaxVertices)
         {
-            Usage = SDL3.SDL.GPUTransferBufferUsage.Upload,
-            Size = vertexDataSize
+            _logger.LogWarning("Frame vertex budget exceeded ({Used}/{Max})", firstVertex + vertexCount, MaxVertices);
+            return (firstVertex, 0);
+        }
+
+        var mappedData = SDL3.SDL.MapGPUTransferBuffer(_device, _transferBuffers[_currentFrameSlot], false);
+        if (mappedData != nint.Zero)
+        {
+            fixed (Vertex* vertexPtr = CollectionsMarshal.AsSpan(_vertexBatch))
+            {
+                Buffer.MemoryCopy(
+                    vertexPtr,
+                    (void*)(mappedData + (nint)byteOffset),
+                    vertexDataSize,
+                    vertexDataSize
+                );
+            }
+            SDL3.SDL.UnmapGPUTransferBuffer(_device, _transferBuffers[_currentFrameSlot]);
+        }
+
+        _frameVertexOffset += vertexCount;
+        return (firstVertex, vertexCount);
+    }
+
+    /// <summary>
+    /// Issues the GPU copy command for a previously staged vertex range inside an already-open copy pass.
+    /// </summary>
+    public void UploadWithinCopyPass(nint copyPass, int firstVertex, int vertexCount)
+    {
+        var byteOffset = (uint)(firstVertex * VertexSize);
+        var source = new SDL3.SDL.GPUTransferBufferLocation
+        {
+            TransferBuffer = _transferBuffers[_currentFrameSlot],
+            Offset = byteOffset
         };
-
-        var transferBuffer = SDL3.SDL.CreateGPUTransferBuffer(_device, ref transferCreateInfo);
-        if (transferBuffer == nint.Zero)
+        var destination = new SDL3.SDL.GPUBufferRegion
         {
-            throw new InvalidOperationException("Failed to create transfer buffer for vertex upload");
-        }
+            Buffer = _vertexBuffer,
+            Offset = byteOffset,
+            Size = (uint)(VertexSize * vertexCount)
+        };
+        SDL3.SDL.UploadToGPUBuffer(copyPass, ref source, ref destination, false);
+    }
 
-        try
+    public void Dispose()
+    {
+        if (_device == nint.Zero) return;
+
+        for (int i = 0; i < FramesInFlight; i++)
         {
-            var mappedData = SDL3.SDL.MapGPUTransferBuffer(_device, transferBuffer, false);
-            if (mappedData != nint.Zero)
+            if (_transferBuffers[i] != nint.Zero)
             {
-                fixed (Vertex* vertexPtr = CollectionsMarshal.AsSpan(_vertexBatch))
-                {
-                    Buffer.MemoryCopy(
-                        vertexPtr,
-                        (void*)mappedData,
-                        vertexDataSize,
-                        vertexDataSize
-                    );
-                }
-                SDL3.SDL.UnmapGPUTransferBuffer(_device, transferBuffer);
+                SDL3.SDL.ReleaseGPUTransferBuffer(_device, _transferBuffers[i]);
+                _transferBuffers[i] = nint.Zero;
             }
-
-            var copyPass = SDL3.SDL.BeginGPUCopyPass(commandBuffer);
-            if (copyPass != nint.Zero)
-            {
-                var source = new SDL3.SDL.GPUTransferBufferLocation
-                {
-                    TransferBuffer = transferBuffer,
-                    Offset = 0
-                };
-
-                var destination = new SDL3.SDL.GPUBufferRegion
-                {
-                    Buffer = _vertexBuffer,
-                    Offset = 0,
-                    Size = vertexDataSize
-                };
-
-                SDL3.SDL.UploadToGPUBuffer(copyPass, ref source, ref destination, false);
-                SDL3.SDL.EndGPUCopyPass(copyPass);
-            }
-        }
-        finally
-        {
-            SDL3.SDL.ReleaseGPUTransferBuffer(_device, transferBuffer);
         }
     }
-    
-    // ============================================================
-    // HELPERS
-    // ============================================================
     
     private static Vector4 ColorToVector4(Color color) =>
         new(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
     
     private static int CalculateCircleSegments(float radius) =>
         Math.Max(16, (int)(radius * 2));
+    
+    public void NewFrame(int absoluteFrameIndex)
+    {
+        _currentFrameSlot = absoluteFrameIndex % FramesInFlight;
+        _frameVertexOffset = 0;
+    }
 }

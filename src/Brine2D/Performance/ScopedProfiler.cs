@@ -97,7 +97,6 @@ public class ScopedTimingData
         _currentMs = milliseconds;
         _frameCount++;
 
-        // Update history
         if (_frameHistory.Count >= _maxHistorySize)
         {
             var oldest = _frameHistory.Dequeue();
@@ -107,14 +106,12 @@ public class ScopedTimingData
         _frameHistory.Enqueue(milliseconds);
         _totalTime += milliseconds;
 
-        // Update min/max (after warmup)
         if (_frameCount > 60)
         {
             _minMs = Math.Min(_minMs, milliseconds);
             _maxMs = Math.Max(_maxMs, milliseconds);
         }
 
-        // Calculate average
         if (_frameHistory.Count > 0)
         {
             _avgMs = _totalTime / _frameHistory.Count;

@@ -88,6 +88,16 @@ internal class SDL3EventPump : IEventPump
                 _logger.LogDebug("Window focus lost");
                 break;
 
+            case SDL.EventType.WindowHidden:
+                _publicEventBus.Publish(new WindowHiddenEvent());
+                _logger.LogDebug("Window hidden");
+                break;
+
+            case SDL.EventType.WindowShown:
+                _publicEventBus.Publish(new WindowShownEvent());
+                _logger.LogDebug("Window shown");
+                break;
+
             case SDL.EventType.KeyDown:
                 _internalEventBus.Publish(new SDL3KeyDownEvent(evt.Key));
                 break;

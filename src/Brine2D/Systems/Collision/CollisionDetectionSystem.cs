@@ -2,6 +2,7 @@ using Brine2D.Collision;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
+using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
 
 namespace Brine2D.Systems.Collision;
@@ -15,6 +16,9 @@ public class CollisionDetectionSystem : UpdateSystemBase
     private readonly CollisionSystem _collisionSystem;
     private readonly Dictionary<Entity, CollisionShape> _entityShapes = new();
     private readonly Dictionary<Entity, HashSet<Entity>> _previousCollisions = new();
+    private CachedEntityQuery<ColliderComponent>? _colliderQuery;
+
+    public override int UpdateOrder => SystemUpdateOrder.Collision;
 
     public CollisionDetectionSystem()
     {
@@ -35,17 +39,15 @@ public class CollisionDetectionSystem : UpdateSystemBase
 
     private void SyncColliders(IEntityWorld world)
     {
-        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
+        _colliderQuery ??= world.CreateCachedQuery<ColliderComponent>().Build();
 
-        foreach (var entity in entities)
+        foreach (var (entity, collider) in _colliderQuery)
         {
-            var collider = entity.GetComponent<ColliderComponent>();
             var transform = entity.GetComponent<TransformComponent>();
 
-            if (collider == null || transform == null || !collider.IsEnabled)
+            if (transform == null || !collider.IsEnabled)
                 continue;
 
-            // Create shape if needed
             if (collider.Shape == null)
             {
                 collider.Shape = collider.ShapeType switch
@@ -68,7 +70,6 @@ public class CollisionDetectionSystem : UpdateSystemBase
                 _collisionSystem.AddShape(collider.Shape);
             }
 
-            // Update shape position (world position from transform)
             collider.Shape.Position = transform.Position;
         }
 
@@ -87,12 +88,11 @@ public class CollisionDetectionSystem : UpdateSystemBase
 
     private void DetectCollisions(IEntityWorld world)
     {
-        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
+        _colliderQuery ??= world.CreateCachedQuery<ColliderComponent>().Build();
 
-        foreach (var entity in entities)
+        foreach (var (entity, collider) in _colliderQuery)
         {
-            var collider = entity.GetComponent<ColliderComponent>();
-            if (collider?.Shape == null || !collider.IsEnabled) continue;
+            if (collider.Shape == null || !collider.IsEnabled) continue;
 
             // Get current collisions from low-level collision system
             var collisions = _collisionSystem.GetCollisions(collider.Shape);

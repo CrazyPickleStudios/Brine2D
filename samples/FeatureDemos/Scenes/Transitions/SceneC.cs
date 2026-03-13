@@ -18,11 +18,11 @@ public class SceneC : TransitionDemoScene
         : base(input, sceneManager, gameContext)
     {
     }
-    
-    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
+
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         // Simulate heavy asset loading (for demo purposes)
         await Task.Delay(2000, cancellationToken);
-        await base.OnLoadAsync(cancellationToken);
+        await base.OnLoadAsync(cancellationToken, progress);
     }
 }

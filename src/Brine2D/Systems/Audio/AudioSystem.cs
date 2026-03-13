@@ -1,10 +1,11 @@
+using Brine2D.Audio;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
+using Brine2D.ECS.Query;
+using Brine2D.ECS.Systems;
 using System.Collections.Concurrent;
 using System.Numerics;
-using Brine2D.Audio;
-using Brine2D.ECS.Systems;
 
 namespace Brine2D.Systems.Audio;
 
@@ -18,6 +19,8 @@ public class AudioSystem : UpdateSystemBase
     private readonly ConcurrentQueue<AudioEvent> _audioEvents = new();
     private readonly Dictionary<Entity, nint> _entityTracks = new();
     private readonly Dictionary<Entity, bool> _previousEnabledState = new();
+    private CachedEntityQuery<AudioSourceComponent>? _audioSourceQuery;
+    private CachedEntityQuery<AudioListenerComponent>? _audioListenerQuery;
 
     public AudioSystem(IAudioService audio)
     {
@@ -41,18 +44,13 @@ public class AudioSystem : UpdateSystemBase
 
         var listener = FindActiveListener(world);
 
-        var audioSources = world.GetEntitiesWithComponent<AudioSourceComponent>();
+        _audioSourceQuery ??= world.CreateCachedQuery<AudioSourceComponent>().Build();
 
-        foreach (var entity in audioSources)
+        foreach (var (entity, audioSource) in _audioSourceQuery)
         {
-            var audioSource = entity.GetComponent<AudioSourceComponent>();
-
-            if (audioSource == null)
-                continue;
-
             bool wasEnabled = _previousEnabledState.TryGetValue(entity, out var prevState) && prevState;
             bool isNowDisabled = wasEnabled && !audioSource.IsEnabled;
-            
+
             if (isNowDisabled && audioSource.IsPlaying)
             {
                 // Component was disabled - stop the sound
@@ -63,7 +61,7 @@ public class AudioSystem : UpdateSystemBase
                 }
                 audioSource.IsPlaying = false;
             }
-            
+
             _previousEnabledState[entity] = audioSource.IsEnabled;
 
             if (!audioSource.IsEnabled)
@@ -73,7 +71,7 @@ public class AudioSystem : UpdateSystemBase
             if (audioSource.EnableSpatialAudio && listener != null)
             {
                 UpdateSpatialAudio(audioSource, entity, listener);
-                
+
                 // Update playing track with new spatial values every frame
                 if (audioSource.IsPlaying && _entityTracks.TryGetValue(entity, out var activeTrack))
                 {
@@ -111,7 +109,7 @@ public class AudioSystem : UpdateSystemBase
                         audioSource.SpatialVolume, 
                         audioSource.LoopCount,
                         audioSource.SpatialPan);
-                    
+
                     if (track != nint.Zero)
                     {
                         _entityTracks[entity] = track;
@@ -135,7 +133,7 @@ public class AudioSystem : UpdateSystemBase
                     _audio.StopTrack(track);
                     _entityTracks.Remove(entity);
                 }
-                
+
                 if (audioSource.Music != null)
                 {
                     _audio.StopMusic();
@@ -178,18 +176,12 @@ public class AudioSystem : UpdateSystemBase
 
     private Entity? FindActiveListener(IEntityWorld world)
     {
-        var listeners = world.GetEntitiesWithComponent<AudioListenerComponent>();
-        
-        // Return first enabled listener
-        foreach (var listener in listeners)
+        _audioListenerQuery ??= world.CreateCachedQuery<AudioListenerComponent>().Build();
+        foreach (var (entity, listener) in _audioListenerQuery)
         {
-            var listenerComp = listener.GetComponent<AudioListenerComponent>();
-            if (listenerComp?.IsEnabled == true)
-            {
-                return listener;
-            }
+            if (listener.IsEnabled)
+                return entity;
         }
-
         return null;
     }
 

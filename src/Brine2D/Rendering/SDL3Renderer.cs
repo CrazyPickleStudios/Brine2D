@@ -43,8 +43,24 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private nint _graphicsPipeline;
     private nint _vertexBuffer;
 
-    private nint _renderPass;
-    
+    private readonly SDL3.SDL.GPUColorTargetInfo[] _colorTargetInfoBuf = new SDL3.SDL.GPUColorTargetInfo[1];
+    private readonly SDL3.SDL.GPUTextureSamplerBinding[] _textureSamplerBindingBuf = new SDL3.SDL.GPUTextureSamplerBinding[1];
+    private readonly SDL3.SDL.GPUBufferBinding[] _vertexBufferBindingBuf = new SDL3.SDL.GPUBufferBinding[1];
+    private GCHandle _colorTargetInfoHandle;
+
+    private readonly List<DrawCallRecord> _pendingDrawCalls = new();
+    private readonly HashSet<nint> _clearedTargetsThisFrame = new();
+
+    private readonly record struct DrawCallRecord(
+        int FirstVertex,
+        int VertexCount,
+        nint TextureHandle,
+        TextureScaleMode ScaleMode,
+        nint RenderTarget,
+        nint Pipeline,
+        SDL3.SDL.Rect Scissor
+    );
+
     private IShaderLoader? _shaderLoader;
     private IShader? _vertexShader;
     private IShader? _fragmentShader;
@@ -53,7 +69,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     private Color _clearColor = new Color(52, 78, 65, 255);
 
     private readonly Dictionary<BlendMode, nint> _graphicsPipelines = new();
-    
+    private readonly Action _flushBatchAction;
+
     public Color ClearColor
     {
         get => _clearColor;
@@ -69,8 +86,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public void SetRenderTarget(IRenderTarget? target)
     {
         ThrowIfNotInitialized();
-        
-        // Flush any pending draws before changing render target
+
         FlushBatch();
         
         _renderTargetManager.SetRenderTarget(target);
@@ -108,10 +124,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         return _stateManager.CurrentRenderLayer;
     }
 
-    // ============================================================
-    // TEXTURE DRAWING API (Clean, Non-Ambiguous)
-    // ============================================================
-
     /// <summary>
     /// Draw a texture with full control over transform, origin, scale, and flip.
     /// </summary>
@@ -143,7 +155,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         var textureHandle = GetTextureHandle(texture);
 
-        // Defaults
         var actualOrigin = origin ?? new Vector2(0.5f, 0.5f);
         var actualScale = scale ?? Vector2.One;
         var actualColor = color ?? Color.White;
@@ -169,7 +180,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         var adjustedX = position.X - pivotX;
         var adjustedY = position.Y - pivotY;
 
-        // Draw - Changed: Use batch renderer
         _batchRenderer.DrawTexturedQuad(
             textureHandle,
             texture.ScaleMode,
@@ -180,7 +190,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             actualColor,
             u1, v1, u2, v2,
             rotation,
-            FlushBatch);
+            _flushBatchAction);
     }
 
     /// <summary>
@@ -270,6 +280,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             postProcessPipeline);
     
         _frameManager = new SDL3FrameManager(_loggerFactory.CreateLogger<SDL3FrameManager>());
+        _flushBatchAction = FlushBatch;
+        _colorTargetInfoHandle = GCHandle.Alloc(_colorTargetInfoBuf, GCHandleType.Pinned);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -280,18 +292,9 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             return;
         }
 
-        _logger.LogInformation("Initializing SDL3 GPU renderer");
-
-        _logger.LogInformation("SDL3 GPU Renderer initializing on Thread {ThreadId}", 
+        _logger.LogInformation("Initializing SDL3 GPU renderer on thread {ThreadId}",
             Thread.CurrentThread.ManagedThreadId);
-        
-        if (!SDL3.SDL.Init(SDL3.SDL.InitFlags.Video | SDL3.SDL.InitFlags.Events))
-        {
-            var error = SDL3.SDL.GetError();
-            _logger.LogError("Failed to initialize SDL3: {Error}", error);
-            throw new InvalidOperationException($"Failed to initialize SDL3: {error}");
-        }
-        
+
         var windowFlags = SDL3.SDL.WindowFlags.Vulkan;
         if (_windowOptions.Resizable)
             windowFlags |= SDL3.SDL.WindowFlags.Resizable;
@@ -316,7 +319,12 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
                             SDL3.SDL.GPUShaderFormat.MSL |
                             SDL3.SDL.GPUShaderFormat.DXIL;
 
-        _device = SDL3.SDL.CreateGPUDevice(shaderFormats, true, _renderingOptions.PreferredGPUDriver.ToSDL3DriverName());
+#if DEBUG
+        const bool gpuDebugMode = true;
+#else
+        const bool gpuDebugMode = false;
+#endif
+        _device = SDL3.SDL.CreateGPUDevice(shaderFormats, gpuDebugMode, _renderingOptions.PreferredGPUDriver.ToSDL3DriverName());
 
         if (_device == nint.Zero)
         {
@@ -357,19 +365,21 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         CreateGraphicsPipeline();
         CreateVertexBuffer();
         _batchRenderer.Initialize(_device, _vertexBuffer, _whiteTexture, _sampler, _samplerNearest);
-        _renderTargetManager.Initialize(_device);  // NEW
-        _frameManager.Initialize(_device, _window);
+        _renderTargetManager.Initialize(_device); 
+        _frameManager.Initialize(_device, _window, _renderingOptions.VSync);
         UpdateProjectionMatrix(_viewport.Width, _viewport.Height);
 
         await _textRenderer.LoadDefaultFontAsync(cancellationToken);
 
-        if (_renderTargetManager.UsePostProcessing)  // Changed
+        if (_renderTargetManager.UsePostProcessing)
         {
-            _renderTargetManager.CreatePostProcessingTargets(_viewport.Width, _viewport.Height);  // Changed
+            _renderTargetManager.CreatePostProcessingTargets(_viewport.Width, _viewport.Height);
             _logger.LogInformation("Post-processing enabled");
         }
 
         _eventBus?.Subscribe<WindowResizedEvent>(OnWindowResized);
+        _eventBus?.Subscribe<WindowHiddenEvent>(OnWindowHidden);
+        _eventBus?.Subscribe<WindowShownEvent>(OnWindowShown);
 
         IsInitialized = true;
         _logger.LogInformation("SDL3 GPU renderer fully initialized");
@@ -380,9 +390,9 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         _viewport.Update(evt.Width, evt.Height);
         UpdateProjectionMatrix(_viewport.Width, evt.Height);
 
-        if (_renderTargetManager.UsePostProcessing)  // Changed
+        if (_renderTargetManager.UsePostProcessing) 
         {
-            _renderTargetManager.CreatePostProcessingTargets(evt.Width, evt.Height);  // Changed
+            _renderTargetManager.CreatePostProcessingTargets(evt.Width, evt.Height); 
         }
 
         _logger.LogInformation("Viewport resized to {Width}x{Height}, projection matrix updated",
@@ -521,7 +531,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     {
         _logger.LogDebug("Creating default graphics pipeline");
 
-        // Create default Alpha blend mode pipeline
         var defaultPipeline = CreateGraphicsPipelineForBlendMode(BlendMode.Alpha);
         _graphicsPipelines[BlendMode.Alpha] = defaultPipeline;
         _graphicsPipeline = defaultPipeline;
@@ -557,7 +566,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             }
         };
 
-        // Create blend state based on mode
         var blendState = blendMode switch
         {
             BlendMode.Alpha => new SDL3.SDL.GPUColorTargetBlendState
@@ -696,7 +704,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         var bufferCreateInfo = new SDL3.SDL.GPUBufferCreateInfo
         {
             Usage = SDL3.SDL.GPUBufferUsageFlags.Vertex,
-            Size = (uint)(SDL3BatchRenderer.VertexSize * SDL3BatchRenderer.MaxVertices)  // Changed
+            Size = (uint)(SDL3BatchRenderer.VertexSize * SDL3BatchRenderer.MaxVertices)  
         };
 
         _vertexBuffer = SDL3.SDL.CreateGPUBuffer(_device, ref bufferCreateInfo);
@@ -708,7 +716,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             throw new InvalidOperationException($"Failed to create vertex buffer: {error}");
         }
 
-        _logger.LogDebug("Vertex buffer created ({Size} vertices)", SDL3BatchRenderer.MaxVertices);  // Changed
+        _logger.LogDebug("Vertex buffer created ({Size} vertices)", SDL3BatchRenderer.MaxVertices);  
     }
 
     private void UpdateProjectionMatrix(int width, int height)
@@ -719,14 +727,16 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     public void BeginFrame()
     {
-        ThrowIfNotInitialized();
+        if (!IsInitialized || _isRenderSuspended)
+            return;
 
         _batchRenderer.Clear();
+        _batchRenderer.NewFrame(_frameCount++);
+        _pendingDrawCalls.Clear();
+        _clearedTargetsThisFrame.Clear();
 
-        if (!_frameManager.BeginFrame())  // Changed
-        {
-            return;  // Frame acquisition failed (minimized window, etc.)
-        }
+        if (!_frameManager.BeginFrame())
+            return;
     }
 
     /// <summary>
@@ -747,23 +757,22 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     {
         ThrowIfNotInitialized();
 
-        if (!_frameManager.HasActiveFrame)  // Changed
+        if (!_frameManager.HasActiveFrame)
         {
             return;
         }
 
         FlushBatch();
+        ExecuteDrawCalls();
 
-        // Use render target manager and frame manager
         bool effectsApplied = _renderTargetManager.ApplyPostProcessing(
             this,
-            _frameManager.SwapchainTexture,  // Changed
-            _frameManager.CommandBuffer);     // Changed
+            _frameManager.SwapchainTexture,
+            _frameManager.CommandBuffer);
 
-        // If no effects were applied, blit manually
         if (!effectsApplied && _renderTargetManager.MainRenderTarget != null)
         {
-            _frameManager.BlitToSwapchain(  // Changed
+            _frameManager.BlitToSwapchain(
                 _renderTargetManager.MainRenderTarget.TextureHandle,
                 _viewport.Width,
                 _viewport.Height);
@@ -773,175 +782,171 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public void EndFrame()
     {
         ThrowIfNotInitialized();
-        _frameManager.EndFrame();  // Changed - that's it!
+        _frameManager.EndFrame();  
     }
 
     private void FlushBatch()
     {
         if (_batchRenderer.VertexCount == 0) return;
+        if (!_frameManager.HasActiveFrame) return;
 
-        if (!_frameManager.HasActiveFrame)  // Changed
-        {
-            return;
-        }
+        var (firstVertex, vertexCount) = _batchRenderer.StageForUpload();
+        if (vertexCount == 0) return;
 
-        _batchRenderer.UploadToGPU(_frameManager.CommandBuffer);  // Changed
+        var renderTarget = ResolveRenderTarget();
+        if (renderTarget == nint.Zero) return;
 
-        // Determine render target based on current state
-        nint renderTarget;
-        if (_renderTargetManager.CurrentRenderTarget != null)
+        SDL3.SDL.Rect scissor;
+        if (_stateManager.CurrentScissorRect.HasValue)
         {
-            renderTarget = (_renderTargetManager.CurrentRenderTarget as RenderTarget)?.TextureHandle ?? nint.Zero;
-            if (renderTarget == nint.Zero)
-            {
-                _logger.LogError("Invalid render target");
-                return;
-            }
-        }
-        else if (_renderTargetManager.UsePostProcessing && _renderTargetManager.MainRenderTarget != null)
-        {
-            renderTarget = _renderTargetManager.MainRenderTarget.TextureHandle;
+            var rect = _stateManager.CurrentScissorRect.Value;
+            scissor = new SDL3.SDL.Rect { X = (int)rect.X, Y = (int)rect.Y, W = (int)rect.Width, H = (int)rect.Height };
         }
         else
         {
-            renderTarget = _frameManager.SwapchainTexture;  // Changed
+            scissor = new SDL3.SDL.Rect { X = 0, Y = 0, W = _viewport.Width, H = _viewport.Height };
         }
 
-        var colorTargetInfo = new SDL3.SDL.GPUColorTargetInfo
-        {
-            Texture = renderTarget,
-            ClearColor = new SDL3.SDL.FColor
-            {
-                R = _clearColor.R / 255f,
-                G = _clearColor.G / 255f,
-                B = _clearColor.B / 255f,
-                A = _clearColor.A / 255f
-            },
-            LoadOp = _frameManager.IsFirstFlush ? SDL3.SDL.GPULoadOp.Clear : SDL3.SDL.GPULoadOp.Load,  // Changed
-            StoreOp = SDL3.SDL.GPUStoreOp.Store
-        };
-
-        _frameManager.MarkFirstFlushComplete();  // NEW - add after creating colorTargetInfo
-
-        var colorTargets = new[] { colorTargetInfo };
-        var colorTargetHandle = GCHandle.Alloc(colorTargets, GCHandleType.Pinned);
-
-        try
-        {
-            _renderPass = SDL3.SDL.BeginGPURenderPass(
-                _frameManager.CommandBuffer,  // Changed
-                colorTargetHandle.AddrOfPinnedObject(),
-                1,
-                IntPtr.Zero);
-
-            if (_renderPass == nint.Zero)
-            {
-                var error = SDL3.SDL.GetError();
-                _logger.LogError("Failed to begin render pass: {Error}", error);
-                throw new InvalidOperationException($"Failed to begin render pass: {error}");
-            }
-
-            SDL3.SDL.BindGPUGraphicsPipeline(_renderPass, _graphicsPipeline);
-            PushUniformData();
-
-            var textureToUse = _batchRenderer.CurrentBoundTexture != nint.Zero
-                ? _batchRenderer.CurrentBoundTexture
-                : _whiteTexture;
-            var samplerToUse = _batchRenderer.CurrentTextureScaleMode == TextureScaleMode.Nearest
-                ? _samplerNearest
-                : _sampler;
-
-            var textureBinding = new SDL3.SDL.GPUTextureSamplerBinding
-            {
-                Texture = textureToUse,
-                Sampler = samplerToUse
-            };
-            var textureBindings = new[] { textureBinding };
-            var textureBindingHandle = GCHandle.Alloc(textureBindings, GCHandleType.Pinned);
-
-            try
-            {
-                SDL3.SDL.BindGPUFragmentSamplers(_renderPass, 0, textureBindings, 1);
-
-                var viewport = new SDL3.SDL.GPUViewport
-                {
-                    X = 0,
-                    Y = 0,
-                    W = _viewport.Width,
-                    H = _viewport.Height,
-                    MinDepth = 0.0f,
-                    MaxDepth = 1.0f
-                };
-                SDL3.SDL.SetGPUViewport(_renderPass, ref viewport);
-
-                SDL3.SDL.Rect scissor;
-
-                if (_stateManager.CurrentScissorRect.HasValue)
-                {
-                    var rect = _stateManager.CurrentScissorRect.Value;
-                    scissor = new SDL3.SDL.Rect
-                    {
-                        X = (int)rect.X,
-                        Y = (int)rect.Y,
-                        W = (int)rect.Width,
-                        H = (int)rect.Height
-                    };
-                }
-                else
-                {
-                    // No clipping - use full viewport
-                    scissor = new SDL3.SDL.Rect
-                    {
-                        X = 0,
-                        Y = 0,
-                        W = _viewport.Width,
-                        H = _viewport.Height
-                    };
-                }
-                SDL3.SDL.SetGPUScissor(_renderPass, ref scissor);
-
-                var bufferBinding = new SDL3.SDL.GPUBufferBinding
-                {
-                    Buffer = _vertexBuffer,
-                    Offset = 0
-                };
-                var bufferBindings = new[] { bufferBinding };
-                var bufferBindingHandle = GCHandle.Alloc(bufferBindings, GCHandleType.Pinned);
-
-                try
-                {
-                    SDL3.SDL.BindGPUVertexBuffers(_renderPass, 0, bufferBindings, 1);
-                    SDL3.SDL.DrawGPUPrimitives(_renderPass, (uint)_batchRenderer.VertexCount, 1, 0, 0);
-                }
-                finally
-                {
-                    bufferBindingHandle.Free();
-                }
-            }
-            finally
-            {
-                textureBindingHandle.Free();
-            }
-
-            SDL3.SDL.EndGPURenderPass(_renderPass);
-            _renderPass = nint.Zero;
-        }
-        finally
-        {
-            colorTargetHandle.Free();
-        }
+        _pendingDrawCalls.Add(new DrawCallRecord(
+            firstVertex,
+            vertexCount,
+            _batchRenderer.CurrentBoundTexture,
+            _batchRenderer.CurrentTextureScaleMode,
+            renderTarget,
+            _graphicsPipeline,
+            scissor
+        ));
 
         _batchRenderer.Clear();
     }
 
-    private void PushUniformData()
+    private nint ResolveRenderTarget()
+    {
+        if (_renderTargetManager.CurrentRenderTarget != null)
+        {
+            var handle = (_renderTargetManager.CurrentRenderTarget as RenderTarget)?.TextureHandle ?? nint.Zero;
+            if (handle == nint.Zero)
+                _logger.LogError("Invalid render target");
+            return handle;
+        }
+        if (_renderTargetManager.UsePostProcessing && _renderTargetManager.MainRenderTarget != null)
+            return _renderTargetManager.MainRenderTarget.TextureHandle;
+        return _frameManager.SwapchainTexture;
+    }
+
+    private void ExecuteDrawCalls()
+    {
+        if (_pendingDrawCalls.Count == 0) return;
+        if (!_frameManager.HasActiveFrame) return;
+
+        var commandBuffer = _frameManager.CommandBuffer;
+
+        var copyPass = SDL3.SDL.BeginGPUCopyPass(commandBuffer);
+        if (copyPass != nint.Zero)
+        {
+            foreach (var dc in _pendingDrawCalls)
+                _batchRenderer.UploadWithinCopyPass(copyPass, dc.FirstVertex, dc.VertexCount);
+            SDL3.SDL.EndGPUCopyPass(copyPass);
+        }
+
+        var viewport = new SDL3.SDL.GPUViewport
+        {
+            X = 0, Y = 0,
+            W = _viewport.Width, H = _viewport.Height,
+            MinDepth = 0.0f, MaxDepth = 1.0f
+        };
+
+        nint activeRenderPass = nint.Zero;
+        nint activeRenderTarget = nint.Zero;
+        nint activePipeline = nint.Zero;
+        nint activeTexture = nint.Zero;
+        TextureScaleMode activeScaleMode = default;
+
+        foreach (var dc in _pendingDrawCalls)
+        {
+            if (dc.RenderTarget != activeRenderTarget)
+            {
+                if (activeRenderPass != nint.Zero)
+                {
+                    SDL3.SDL.EndGPURenderPass(activeRenderPass);
+                    activeRenderPass = nint.Zero;
+                }
+
+                bool isFirstOnTarget = _clearedTargetsThisFrame.Add(dc.RenderTarget);
+                _colorTargetInfoBuf[0] = new SDL3.SDL.GPUColorTargetInfo
+                {
+                    Texture = dc.RenderTarget,
+                    ClearColor = new SDL3.SDL.FColor
+                    {
+                        R = _clearColor.R / 255f,
+                        G = _clearColor.G / 255f,
+                        B = _clearColor.B / 255f,
+                        A = _clearColor.A / 255f
+                    },
+                    LoadOp = isFirstOnTarget ? SDL3.SDL.GPULoadOp.Clear : SDL3.SDL.GPULoadOp.Load,
+                    StoreOp = SDL3.SDL.GPUStoreOp.Store
+                };
+
+                activeRenderPass = SDL3.SDL.BeginGPURenderPass(
+                    commandBuffer,
+                    _colorTargetInfoHandle.AddrOfPinnedObject(),
+                    1,
+                    IntPtr.Zero);
+
+                if (activeRenderPass == nint.Zero)
+                {
+                    _logger.LogError("Failed to begin render pass: {Error}", SDL3.SDL.GetError());
+                    break;
+                }
+
+                activeRenderTarget = dc.RenderTarget;
+                activePipeline = nint.Zero;
+                activeTexture = nint.Zero;
+
+                _vertexBufferBindingBuf[0] = new SDL3.SDL.GPUBufferBinding { Buffer = _vertexBuffer, Offset = 0 };
+                SDL3.SDL.BindGPUVertexBuffers(activeRenderPass, 0, _vertexBufferBindingBuf, 1);
+                SDL3.SDL.SetGPUViewport(activeRenderPass, ref viewport);
+                PushUniformData(commandBuffer);
+            }
+
+            if (dc.Pipeline != activePipeline)
+            {
+                SDL3.SDL.BindGPUGraphicsPipeline(activeRenderPass, dc.Pipeline);
+                activePipeline = dc.Pipeline;
+            }
+
+            if (dc.TextureHandle != activeTexture || dc.ScaleMode != activeScaleMode)
+            {
+                _textureSamplerBindingBuf[0] = new SDL3.SDL.GPUTextureSamplerBinding
+                {
+                    Texture = dc.TextureHandle != nint.Zero ? dc.TextureHandle : _whiteTexture,
+                    Sampler = dc.ScaleMode == TextureScaleMode.Nearest ? _samplerNearest : _sampler
+                };
+                SDL3.SDL.BindGPUFragmentSamplers(activeRenderPass, 0, _textureSamplerBindingBuf, 1);
+                activeTexture = dc.TextureHandle;
+                activeScaleMode = dc.ScaleMode;
+            }
+
+            var scissor = dc.Scissor;
+            SDL3.SDL.SetGPUScissor(activeRenderPass, ref scissor);
+
+            SDL3.SDL.DrawGPUPrimitives(activeRenderPass, (uint)dc.VertexCount, 1, (uint)dc.FirstVertex, 0);
+        }
+
+        if (activeRenderPass != nint.Zero)
+            SDL3.SDL.EndGPURenderPass(activeRenderPass);
+
+        _pendingDrawCalls.Clear();
+    }
+
+    private void PushUniformData(nint commandBuffer)
     {
         unsafe
         {
             fixed (Matrix4x4* matrixPtr = &_projectionMatrix)
             {
                 SDL3.SDL.PushGPUVertexUniformData(
-                    _frameManager.CommandBuffer,  // Changed
+                    commandBuffer,
                     0,
                     (nint)matrixPtr,
                     (uint)sizeof(Matrix4x4)
@@ -995,7 +1000,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public void DrawRectangleFilled(float x, float y, float width, float height, Color color)
     {
         ThrowIfNotInitialized();
-        _batchRenderer.DrawRectangleFilled(x, y, width, height, color, FlushBatch);
+        _batchRenderer.DrawRectangleFilled(x, y, width, height, color, _flushBatchAction);
     }
 
     public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1)
@@ -1011,19 +1016,19 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     public void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1)
     {
         ThrowIfNotInitialized();
-        _batchRenderer.DrawLine(x1, y1, x2, y2, color, thickness, FlushBatch);
+        _batchRenderer.DrawLine(x1, y1, x2, y2, color, thickness, _flushBatchAction);
     }
 
     public void DrawCircleFilled(float centerX, float centerY, float radius, Color color)
     {
         ThrowIfNotInitialized();
-        _batchRenderer.DrawCircleFilled(centerX, centerY, radius, color, FlushBatch);
+        _batchRenderer.DrawCircleFilled(centerX, centerY, radius, color, _flushBatchAction);
     }
 
     public void DrawCircleOutline(float centerX, float centerY, float radius, Color color, float thickness = 1)
     {
         ThrowIfNotInitialized();
-        _batchRenderer.DrawCircleOutline(centerX, centerY, radius, color, thickness, FlushBatch);
+        _batchRenderer.DrawCircleOutline(centerX, centerY, radius, color, thickness, _flushBatchAction);
     }
 
     public void DrawText(string text, float x, float y, Color color)
@@ -1042,9 +1047,13 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         if (string.IsNullOrEmpty(text))
             return;
 
-        var runs = _textRenderer.ParseText(text, options);
+        if (!options.ParseMarkup)
+        {
+            RenderPlainText(text, x, y, options);
+            return;
+        }
 
-        // Render with layout
+        var runs = _textRenderer.ParseText(text, options);
         RenderTextRuns(runs, x, y, options);
     }
 
@@ -1058,10 +1067,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         return _textRenderer.MeasureTextWithOptions(text, options);
     }
 
-    // ============================================================
-    // TEXT RENDERING INTERNALS
-    // ============================================================
-
     private void RenderTextRuns(
     IReadOnlyList<TextRun> runs,
     float x,
@@ -1071,20 +1076,17 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         if (runs.Count == 0)
             return;
 
-        // CHANGE THIS:
         // Ensure font atlas is ready
-        _textRenderer.EnsureFontAtlasGenerated(this);  // Changed
+        _textRenderer.EnsureFontAtlasGenerated(this);  
 
-        if (_textRenderer.DefaultFontAtlas == null || _textRenderer.DefaultFontAtlas.Texture == null)  // Changed
+        if (_textRenderer.DefaultFontAtlas == null || _textRenderer.DefaultFontAtlas.Texture == null)  
         {
             _logger.LogWarning("No font atlas available");
             return;
         }
 
-        // Calculate total text bounds for alignment
-        var textSize = _textRenderer.MeasureTextRuns(runs);  // Changed
+        var textSize = _textRenderer.MeasureTextRuns(runs);  
 
-        // ... rest of the method stays the same
         float startX = x;
         float startY = y;
 
@@ -1112,25 +1114,76 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         float cursorX = startX;
         float cursorY = startY;
-        float lineHeight = _textRenderer.DefaultFontAtlas.LineHeight * options.LineSpacing;  // Changed
+        float lineHeight = _textRenderer.DefaultFontAtlas.LineHeight * options.LineSpacing;  
 
-        var atlasTexture = _textRenderer.DefaultFontAtlas.Texture;  // Changed
+        var atlasTexture = _textRenderer.DefaultFontAtlas.Texture;  
 
-        foreach (var run in runs)
+        for (int i = 0; i < runs.Count; i++)
         {
+            var run = runs[i];
             if (string.IsNullOrEmpty(run.Text))
                 continue;
 
-            // Handle wrapping
+            if (options.MaxWidth.HasValue)
+                RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+            else
+                RenderRunDirect(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+        }
+    }
+
+    private void RenderPlainText(string text, float x, float y, TextRenderOptions options)
+    {
+        _textRenderer.EnsureFontAtlasGenerated(this);
+
+        if (_textRenderer.DefaultFontAtlas == null || _textRenderer.DefaultFontAtlas.Texture == null)
+        {
+            _logger.LogWarning("No font atlas available");
+            return;
+        }
+
+        float startX = x;
+        float startY = y;
+
+        if (options.MaxWidth.HasValue || options.MaxHeight.HasValue)
+        {
+            var textSize = _textRenderer.MeasureText(text, options.FontSize);
             if (options.MaxWidth.HasValue)
             {
-                RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+                startX = options.HorizontalAlign switch
+                {
+                    TextAlignment.Center => x + (options.MaxWidth.Value - textSize.X) / 2,
+                    TextAlignment.Right => x + options.MaxWidth.Value - textSize.X,
+                    _ => x
+                };
             }
-            else
+            if (options.MaxHeight.HasValue)
             {
-                RenderRunDirect(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+                startY = options.VerticalAlign switch
+                {
+                    VerticalAlignment.Middle => y + (options.MaxHeight.Value - textSize.Y) / 2,
+                    VerticalAlignment.Bottom => y + options.MaxHeight.Value - textSize.Y,
+                    _ => y
+                };
             }
         }
+
+        var run = new TextRun
+        {
+            Text = text,
+            Color = options.Color,
+            Font = options.Font,
+            FontSize = options.FontSize,
+        };
+
+        float cursorX = startX;
+        float cursorY = startY;
+        float lineHeight = _textRenderer.DefaultFontAtlas.LineHeight * options.LineSpacing;
+        var atlasTexture = _textRenderer.DefaultFontAtlas.Texture;
+
+        if (options.MaxWidth.HasValue)
+            RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+        else
+            RenderRunDirect(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
     }
 
     private void RenderRunDirect(
@@ -1142,34 +1195,45 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         TextRenderOptions options,
         ITexture atlasTexture)
     {
-        // Render shadow if enabled
+        RenderRunDirect(run.Text.AsSpan(), run.Color, run.Style,
+            ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+    }
+
+    private void RenderRunDirect(
+        ReadOnlySpan<char> text,
+        Color color,
+        TextStyle style,
+        ref float cursorX,
+        ref float cursorY,
+        float startX,
+        float lineHeight,
+        TextRenderOptions options,
+        ITexture atlasTexture)
+    {
         if (options.ShadowOffset.HasValue)
         {
             float shadowStartX = cursorX;
-            RenderGlyphs(run.Text, cursorX + options.ShadowOffset.Value.X,
+            RenderGlyphs(text, cursorX + options.ShadowOffset.Value.X,
                          cursorY + options.ShadowOffset.Value.Y,
                          options.ShadowColor, atlasTexture, ref cursorX, ref cursorY, startX, lineHeight, false);
-            cursorX = shadowStartX; // Reset cursor after shadow
+            cursorX = shadowStartX;
         }
 
-        // Render main text
         float textStartX = cursorX;
         float textY = cursorY;
-        RenderGlyphs(run.Text, cursorX, cursorY, run.Color, atlasTexture,
+        RenderGlyphs(text, cursorX, cursorY, color, atlasTexture,
                      ref cursorX, ref cursorY, startX, lineHeight, true);
 
-        // Render underline
-        if ((run.Style & TextStyle.Underline) != 0)
+        if ((style & TextStyle.Underline) != 0)
         {
             float underlineY = textY + lineHeight - 2;
-            DrawLine(textStartX, underlineY, cursorX, underlineY, run.Color, 1f);
+            DrawLine(textStartX, underlineY, cursorX, underlineY, color, 1f);
         }
 
-        // Render strikethrough
-        if ((run.Style & TextStyle.Strikethrough) != 0)
+        if ((style & TextStyle.Strikethrough) != 0)
         {
             float strikeY = textY + lineHeight / 2;
-            DrawLine(textStartX, strikeY, cursorX, strikeY, run.Color, 1f);
+            DrawLine(textStartX, strikeY, cursorX, strikeY, color, 1f);
         }
     }
 
@@ -1182,31 +1246,32 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         TextRenderOptions options,
         ITexture atlasTexture)
     {
-        // Simple word wrapping
-        var words = run.Text.Split(' ');
+        var text = run.Text.AsSpan();
+        int wordStart = 0;
 
-        foreach (var word in words)
+        while (wordStart < text.Length)
         {
-            var wordSize = MeasureText(word + " ");
+            var remaining = text[wordStart..];
+            int spaceIdx = remaining.IndexOf(' ');
+            var word = spaceIdx < 0 ? remaining : remaining[..(spaceIdx + 1)];
 
+            var wordSize = _textRenderer.MeasureGlyphSpan(word);
             if (cursorX + wordSize.X > startX + options.MaxWidth!.Value && cursorX > startX)
             {
-                // Wrap to next line
                 cursorX = startX;
                 cursorY += lineHeight;
             }
 
-            RenderRunDirect(new TextRun
-            {
-                Text = word + " ",
-                Color = run.Color,
-                Style = run.Style
-            }, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+            RenderRunDirect(word, run.Color, run.Style,
+                ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture);
+
+            wordStart += word.Length;
+            if (spaceIdx < 0) break;
         }
     }
 
     private void RenderGlyphs(
-        string text,
+        ReadOnlySpan<char> text,
         float x,
         float y,
         Color color,
@@ -1242,7 +1307,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
             var atlasGpuTexture = (SDL3Texture)atlasTexture;
 
-            // Changed: Use batch renderer
             _batchRenderer.DrawTexturedQuad(
                 atlasGpuTexture.Handle,
                 atlasTexture.ScaleMode,
@@ -1252,8 +1316,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
                 glyph.Height,
                 color,
                 u1, v1, u2, v2,
-                0f,  // No rotation
-                FlushBatch);
+                0f,
+                _flushBatchAction);
 
             localCursorX += glyph.Advance;
         }
@@ -1299,6 +1363,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         return new SDL3Texture(
             "surface_texture",
+            _device,
             gpuTexture,
             width,
             height,
@@ -1408,6 +1473,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         return new SDL3Texture(
             $"blank_{width}x{height}",
+            _device,
             gpuTexture,
             width,
             height,
@@ -1417,12 +1483,12 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     public void ReleaseTexture(ITexture texture)
     {
-        if (texture is SDL3Texture gpuTexture)
-        {
-            SDL3.SDL.ReleaseGPUTexture(_device, gpuTexture.Handle);
-            _logger.LogDebug("Released GPU texture: {Source}", texture.Source);
-        }
+        texture.Dispose();
     }
+
+    // Rendering is suspended while the window is hidden (sleep, lock screen).
+    // volatile: written on the event bus thread, read on the game thread.
+    private volatile bool _isRenderSuspended;
 
     private void ThrowIfNotInitialized()
     {
@@ -1435,17 +1501,23 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
             return;
 
+        if (_colorTargetInfoHandle.IsAllocated)
+            _colorTargetInfoHandle.Free();
+
         _logger.LogInformation("Disposing SDL3 GPU renderer");
 
         _eventBus?.Unsubscribe<WindowResizedEvent>(OnWindowResized);
+        _eventBus?.Unsubscribe<WindowHiddenEvent>(OnWindowHidden);
+        _eventBus?.Unsubscribe<WindowShownEvent>(OnWindowShown);
 
         if (_device != nint.Zero)
         {
             SDL3.SDL.WaitForGPUIdle(_device);
+            _frameManager.ReleaseInFlightFences();
         }
 
-        _renderTargetManager.Dispose();  // NEW
-        
+        _renderTargetManager.Dispose();
+        _batchRenderer.Dispose();
         _textRenderer.Dispose();
         _vertexShader?.Dispose();
         _fragmentShader?.Dispose();
@@ -1497,8 +1569,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             _window = nint.Zero;
         }
 
-        SDL3.SDL.Quit();
-
         IsInitialized = false;
     }
 
@@ -1520,11 +1590,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
     }
 
-    // ============================================================
-    // VECTOR2 OVERLOADS (delegate to float overloads)
-    // ============================================================
-
-    // Rectangles
     public void DrawRectangleFilled(Rectangle rect, Color color)
     {
         DrawRectangleFilled(rect.X, rect.Y, rect.Width, rect.Height, color);
@@ -1535,7 +1600,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         DrawRectangleOutline(rect.X, rect.Y, rect.Width, rect.Height, color, thickness);
     }
 
-    // Circles
     public void DrawCircleFilled(Vector2 center, float radius, Color color)
     {
         DrawCircleFilled(center.X, center.Y, radius, color);
@@ -1546,7 +1610,6 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         DrawCircleOutline(center.X, center.Y, radius, color, thickness);
     }
 
-    // Lines
     public void DrawLine(Vector2 start, Vector2 end, Color color, float thickness = 1f)
     {
         DrawLine(start.X, start.Y, end.X, end.Y, color, thickness);
@@ -1564,4 +1627,18 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
                 nameof(texture))
         };
     }
+
+    private void OnWindowHidden(WindowHiddenEvent evt)
+    {
+        _isRenderSuspended = true;
+        _logger.LogDebug("Rendering suspended (window hidden)");
+    }
+
+    private void OnWindowShown(WindowShownEvent evt)
+    {
+        _isRenderSuspended = false;
+        _logger.LogDebug("Rendering resumed (window shown)");
+    }
+
+    private int _frameCount;
 }

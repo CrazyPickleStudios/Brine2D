@@ -5,9 +5,10 @@ namespace Brine2D.Rendering.Text;
 /// <summary>
 /// Represents a contiguous span of text with uniform styling.
 /// </summary>
-public sealed class TextRun
+public readonly struct TextRun
 {
-    public required string Text { get; init; }
+    public TextRun() { }
+    public string Text { get; init; } = string.Empty;
     public Color Color { get; init; } = Color.White;
     public Font? Font { get; init; }
     public float FontSize { get; init; } = 16f;

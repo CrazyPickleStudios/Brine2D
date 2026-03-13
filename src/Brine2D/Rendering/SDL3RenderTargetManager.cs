@@ -122,7 +122,7 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     }
     
     public bool ApplyPostProcessing(
-        IRenderer renderer,  // Changed from ISDL3WindowProvider
+        IRenderer renderer, 
         nint swapchainTexture,
         nint commandBuffer)
     {
@@ -131,7 +131,7 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         
         // Execute pipeline - it returns true if any effects were applied
         return _postProcessPipeline.Execute(
-            renderer,  // Now correct type
+            renderer,
             _mainRenderTarget.TextureHandle, 
             swapchainTexture, 
             commandBuffer, 

@@ -41,7 +41,7 @@ public class UIDemoScene : DemoSceneBase
         _inputLayerManager = inputLayerManager;
     }
 
-    protected override Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== UI Components Demo ===");
         Logger.LogInformation("Controls:");

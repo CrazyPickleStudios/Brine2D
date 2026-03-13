@@ -8,6 +8,13 @@ namespace Brine2D.Rendering;
 public interface ICameraManager
 {
     /// <summary>
+    /// The well-known name of the primary/main scene camera.
+    /// Used by <c>SceneManager</c> when registering the scene camera and as the
+    /// default value for <c>CameraFollowComponent.CameraName</c>.
+    /// </summary>
+    public const string MainCameraName = "main";
+
+    /// <summary>
     /// Gets or sets the primary/main camera.
     /// This is the default camera used when no specific camera is specified.
     /// </summary>
@@ -38,6 +45,12 @@ public interface ICameraManager
     /// Gets all registered cameras.
     /// </summary>
     IReadOnlyDictionary<string, ICamera> GetAllCameras();
+
+    /// <summary>
+    /// Iterates all registered cameras without boxing the dictionary enumerator.
+    /// The generic <typeparamref name="TState"/> parameter avoids closure allocations.
+    /// </summary>
+    void ForEachCamera<TState>(TState state, Action<TState, ICamera> action);
 
     /// <summary>
     /// Checks if a camera with the specified name exists.

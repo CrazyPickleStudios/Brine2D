@@ -69,6 +69,12 @@ public class CameraManager : ICameraManager
         return _cameras;
     }
 
+    public void ForEachCamera<TState>(TState state, Action<TState, ICamera> action)
+    {
+        foreach (var camera in _cameras.Values)
+            action(state, camera);
+    }
+
     public bool HasCamera(string name)
     {
         if (string.IsNullOrWhiteSpace(name))

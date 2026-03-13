@@ -15,19 +15,15 @@ public interface IRenderSystem : ISystem
 {
     /// <summary>
     /// Determines the order in which this system executes during the render phase.
-    /// Lower values execute first. Default is 0.
+    /// Lower values execute first. Default is 0 (<see cref="SystemRenderOrder.Sprites"/>).
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Use <see cref="SystemRenderOrder"/> constants for common phases:
-    /// - Background rendering: -100
-    /// - Sprite rendering: 0
-    /// - UI rendering: 900
-    /// - Debug rendering: 1000
-    /// </para>
+    /// This property must return a constant value. <see cref="EntityWorld"/> sorts systems
+    /// once after registration; a value that changes at runtime will not trigger a re-sort.
+    /// Use <see cref="SystemRenderOrder"/> constants for common phases.
     /// </remarks>
-    int RenderOrder => 0; // Default implementation
-    
+    int RenderOrder => SystemRenderOrder.Sprites;
+
     /// <summary>
     /// Called every frame to render this system.
     /// </summary>

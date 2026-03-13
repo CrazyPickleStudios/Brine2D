@@ -826,7 +826,6 @@ internal class AudioService : IAudioService
         StopMusic();
         StopAllSounds();
 
-        // Final safety sweep — catches any tracks that arrived between StopAllSounds and here.
         List<nint> remainingTracks;
         lock (_tracksLock)
         {
@@ -838,7 +837,6 @@ internal class AudioService : IAudioService
         foreach (var track in remainingTracks)
             SDL3.Mixer.DestroyTrack(track);
 
-        // Snapshot under lock so a concurrent LoadSoundAsync/LoadMusicAsync can't race the clear.
         List<SoundEffect> sounds;
         List<Music> music;
         lock (_assetLock)
@@ -855,13 +853,22 @@ internal class AudioService : IAudioService
         foreach (var m in music)
             m.Dispose();
 
-        if (_mixer != IntPtr.Zero)
+        try
         {
-            SDL3.Mixer.DestroyMixer(_mixer);
-            _mixer = IntPtr.Zero;
-        }
+            if (_mixer != IntPtr.Zero)
+            {
+                SDL3.Mixer.DestroyMixer(_mixer);
+                _mixer = IntPtr.Zero;
+            }
 
-        SDL3.Mixer.Quit();
+            SDL3.Mixer.Quit();
+        }
+        catch (Exception ex)
+        {
+            // SDL may already be shut down by the time DI disposes this service.
+            // TODO: dispose AudioService during GameEngine.Shutdown() before SDL tears down.
+            _logger.LogDebug(ex, "Exception during SDL3_mixer teardown; SDL may have already exited");
+        }
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using Brine2D.Core;
 using Brine2D.Collision;
 using Brine2D.ECS.Components;
 using Brine2D.ECS;
+using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
 
 namespace Brine2D.Systems.Physics;
@@ -17,6 +18,10 @@ public class PhysicsSystem : UpdateSystemBase
     private readonly CollisionSystem _collisionSystem;
     private readonly Dictionary<Entity, CollisionShape> _entityShapes = new();
     private readonly Dictionary<Entity, HashSet<Entity>> _previousCollisions = new();
+    private readonly List<Entity> _toRemoveBuffer = new();
+    private readonly HashSet<Entity> _currentCollidingBuffer = new();
+    private readonly List<CollisionShape> _collisionsBuffer = new();
+    private CachedEntityQuery<ColliderComponent>? _colliderQuery;
 
     public PhysicsSystem(CollisionSystem collisionSystem)
     {
@@ -25,23 +30,19 @@ public class PhysicsSystem : UpdateSystemBase
 
     public override void Update(IEntityWorld world, GameTime gameTime)
     {
-        // Sync collider positions with transforms
-        SyncColliders(world);
+        _colliderQuery ??= world.CreateCachedQuery<ColliderComponent>().Build();
 
-        // Detect collisions
+        SyncColliders(world);
         DetectCollisions(world);
     }
 
     private void SyncColliders(IEntityWorld world)
     {
-        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
-
-        foreach (var entity in entities)
+        foreach (var (entity, collider) in _colliderQuery!)
         {
-            var collider = entity.GetComponent<ColliderComponent>();
             var transform = entity.GetComponent<TransformComponent>();
 
-            if (collider?.Shape == null || transform == null)
+            if (collider.Shape == null || transform == null)
                 continue;
 
             // Update shape position
@@ -55,9 +56,11 @@ public class PhysicsSystem : UpdateSystemBase
             }
         }
 
-        // Remove shapes for destroyed entities
-        var toRemove = _entityShapes.Keys.Where(e => !e.IsActive).ToList();
-        foreach (var entity in toRemove)
+        _toRemoveBuffer.Clear();
+        foreach (var entity in _entityShapes.Keys)
+            if (!entity.IsActive) _toRemoveBuffer.Add(entity);
+
+        foreach (var entity in _toRemoveBuffer)
         {
             _collisionSystem.RemoveShape(_entityShapes[entity]);
             _entityShapes.Remove(entity);
@@ -67,46 +70,45 @@ public class PhysicsSystem : UpdateSystemBase
 
     private void DetectCollisions(IEntityWorld world)
     {
-        var entities = world.GetEntitiesWithComponent<ColliderComponent>();
-
-        foreach (var entity in entities)
+        foreach (var (entity, collider) in _colliderQuery!)
         {
-            var collider = entity.GetComponent<ColliderComponent>();
-            if (collider?.Shape == null) continue;
+            if (collider.Shape == null) continue;
 
-            // Get current collisions
-            var collisions = _collisionSystem.GetCollisions(collider.Shape);
-            var currentColliding = new HashSet<Entity>();
+            _collisionSystem.GetCollisions(collider.Shape, _collisionsBuffer);
+            _currentCollidingBuffer.Clear();
 
-            foreach (var shape in collisions)
+            _previousCollisions.TryGetValue(entity, out var previousSet);
+
+            foreach (var shape in _collisionsBuffer)
             {
-                // Find entity that owns this shape
                 var other = _entityShapes.FirstOrDefault(kvp => kvp.Value == shape).Key;
                 if (other == null || other == entity) continue;
 
                 var otherCollider = other.GetComponent<ColliderComponent>();
                 if (otherCollider == null) continue;
 
-                // Check layer mask
                 if ((collider.CollisionMask & (1 << otherCollider.Layer)) == 0)
                     continue;
 
-                currentColliding.Add(other);
+                _currentCollidingBuffer.Add(other);
 
-                // Check if this is a new collision
-                if (!_previousCollisions.ContainsKey(entity) || 
-                    !_previousCollisions[entity].Contains(other))
+                if (previousSet == null || !previousSet.Contains(other))
                 {
                     collider.NotifyCollisionEnter(otherCollider);
                     otherCollider.NotifyCollisionEnter(collider);
                 }
             }
 
-            // Detect collision exits
-            if (_previousCollisions.ContainsKey(entity))
+            if (previousSet == null)
             {
-                var exited = _previousCollisions[entity].Except(currentColliding);
-                foreach (var other in exited)
+                if (_currentCollidingBuffer.Count == 0) continue;
+                previousSet = new HashSet<Entity>();
+                _previousCollisions[entity] = previousSet;
+            }
+
+            foreach (var other in previousSet)
+            {
+                if (!_currentCollidingBuffer.Contains(other))
                 {
                     var otherCollider = other.GetComponent<ColliderComponent>();
                     if (otherCollider != null)
@@ -117,7 +119,9 @@ public class PhysicsSystem : UpdateSystemBase
                 }
             }
 
-            _previousCollisions[entity] = currentColliding;
+            previousSet.Clear();
+            foreach (var e in _currentCollidingBuffer)
+                previousSet.Add(e);
         }
     }
 

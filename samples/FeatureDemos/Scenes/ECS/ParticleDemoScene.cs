@@ -54,8 +54,8 @@ public class ParticleDemoScene : DemoSceneBase
         _textureLoader = textureLoader;
         _atlasBuilder = atlasBuilder;
     }
-    
-    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
+
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== Enhanced Particle Demo Scene ===");
         Logger.LogInformation("NEW: Texture support, rotation, and trails!");

@@ -29,7 +29,7 @@ namespace SceneBasics
         }
 
         // OnLoad: Called when scene loads - initialize state and load resources
-        protected override Task OnLoadAsync(CancellationToken cancellationToken)
+        protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
         {
             Logger.LogInformation("MenuScene: OnLoad - Scene is loading");
             Renderer.ClearColor = Color.DarkSlateBlue;
@@ -42,7 +42,7 @@ namespace SceneBasics
             if (_input.IsKeyPressed(Key.Space))
             {
                 Logger.LogInformation("MenuScene: Transitioning to GameScene");
-                _sceneManager.LoadSceneAsync<GameScene>();
+                _sceneManager.LoadScene<GameScene>();
             }
             
             // ESC exits application

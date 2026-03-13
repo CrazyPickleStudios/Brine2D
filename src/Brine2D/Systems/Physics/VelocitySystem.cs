@@ -22,10 +22,10 @@ public class VelocitySystem : UpdateSystemBase
 
         var deltaTime = (float)gameTime.DeltaTime;
 
-        _cachedQuery.ForEach((entity, transform, velocity) =>
+        foreach (var (_, transform, velocity) in _cachedQuery)
         {
             if (!velocity.IsEnabled)
-                return;
+                continue;
 
             transform.Position += velocity.Velocity * deltaTime;
 
@@ -48,6 +48,6 @@ public class VelocitySystem : UpdateSystemBase
                 if (speed > velocity.MaxSpeed)
                     velocity.Velocity = velocity.Velocity * (velocity.MaxSpeed / speed);
             }
-        });
+        }
     }
 }

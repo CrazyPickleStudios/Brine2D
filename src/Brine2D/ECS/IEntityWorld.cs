@@ -38,7 +38,16 @@ public interface IEntityWorld : IDisposable
     void AddSystem<T>(Action<T>? configure = null) where T : class;
 
     /// <summary>
-    /// Removes a system from this world.
+    /// Removes a system of the specified type from this world.
+    /// If the system implements both <see cref="IUpdateSystem"/> and <see cref="IRenderSystem"/>
+    /// it will be removed from both pipelines.
+    /// </summary>
+    bool RemoveSystem<T>() where T : class;
+
+    /// <summary>
+    /// Removes a system by instance reference.
+    /// If the system implements both <see cref="IUpdateSystem"/> and <see cref="IRenderSystem"/>
+    /// it will be removed from both pipelines.
     /// </summary>
     bool RemoveSystem(object system);
 
@@ -114,6 +123,18 @@ public interface IEntityWorld : IDisposable
     /// <see cref="CreateCachedQuery{T1}"/> which rebuilds only when components change.
     /// </remarks>
     IEnumerable<Entity> GetEntitiesWithComponent<T>() where T : Component;
+
+    /// <summary>
+    /// Invokes <paramref name="action"/> for every active entity that has component
+    /// <typeparamref name="T"/>, iterating directly over the pool snapshot with no
+    /// iterator state-machine allocation.
+    /// </summary>
+    /// <remarks>
+    /// Prefer this over <see cref="GetEntitiesWithComponent{T}"/> in per-frame loops when
+    /// you do not need a cached query. For static or pre-cached delegates the call is
+    /// allocation-free; closures that capture variables will still allocate a delegate object.
+    /// </remarks>
+    void ForEachWithComponent<T>(Action<Entity> action) where T : Component;
 
     /// <summary>
     /// Gets all entities that have both specified component types.

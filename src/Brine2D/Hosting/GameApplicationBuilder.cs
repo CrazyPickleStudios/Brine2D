@@ -38,9 +38,12 @@ public sealed class GameApplicationBuilder
     private readonly HostApplicationBuilder _hostBuilder;
     private readonly Brine2DOptions _options = new();
     private readonly HashSet<Type> _registeredScenes = new();
+    private readonly HashSet<Type> _excludedDefaultSystems = new();
     private readonly List<Action<IEntityWorld>> _sceneConfigurations = [];
     private readonly List<Action<Brine2DBuilder>> _brineConfigurations = [];
     private bool _built;
+    private Type _fallbackSceneType = typeof(DefaultFallbackScene);
+    private readonly List<(Type Type, Action<IEntityWorld> Register)> _additionalDefaultSystems = [];
 
     internal GameApplicationBuilder(string[] args)
     {
@@ -90,12 +93,17 @@ public sealed class GameApplicationBuilder
     /// Registers a scene by runtime type. Used internally by <see cref="SceneBuilder.AddRange"/>.
     /// Prefer <see cref="AddScene{T}"/> for compile-time type safety.
     /// </summary>
-    internal GameApplicationBuilder AddScene(Type sceneType)
+    /// <param name="sceneType">The scene type to register.</param>
+    /// <param name="skipTypeCheck">
+    /// When <see langword="true"/>, skips the <see cref="Scene"/> assignability check.
+    /// Used by <see cref="SceneBuilder.AddRange"/> which pre-validates all types atomically.
+    /// </param>
+    internal GameApplicationBuilder AddScene(Type sceneType, bool skipTypeCheck = false)
     {
         ArgumentNullException.ThrowIfNull(sceneType);
         EnsureNotBuilt();
 
-        if (!typeof(Scene).IsAssignableFrom(sceneType))
+        if (!skipTypeCheck && !typeof(Scene).IsAssignableFrom(sceneType))
             throw new ArgumentException(
                 $"Type '{sceneType.Name}' does not inherit from Scene.", nameof(sceneType));
 
@@ -151,6 +159,26 @@ public sealed class GameApplicationBuilder
     }
 
     /// <summary>
+    /// Prevents a default engine system from being registered in every scene's world.
+    /// Use this when a system is never needed project-wide and you want to avoid its
+    /// construction cost entirely. To conditionally disable a system at runtime instead,
+    /// use <see cref="ConfigureScene"/> with <c>world.GetSystem&lt;T&gt;()!.IsEnabled = false</c>.
+    /// Can be called multiple times; exclusions are additive.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// builder.ExcludeDefaultSystem&lt;ParticleSystem&gt;();
+    /// builder.ExcludeDefaultSystem&lt;CollisionDetectionSystem&gt;();
+    /// </code>
+    /// </example>
+    public GameApplicationBuilder ExcludeDefaultSystem<T>() where T : class
+    {
+        EnsureNotBuilt();
+        _excludedDefaultSystems.Add(typeof(T));
+        return this;
+    }
+
+    /// <summary>
     /// Configures optional Brine2D subsystems via <see cref="Brine2DBuilder"/>.
     /// Can be called multiple times; delegates are additive.
     /// </summary>
@@ -170,12 +198,84 @@ public sealed class GameApplicationBuilder
     }
 
     /// <summary>
+    /// Replaces the built-in <see cref="DefaultFallbackScene"/> with a custom scene shown when
+    /// a scene load fails and <see cref="ISceneManager.SceneLoadFailed"/> has no handler that
+    /// queues a recovery transition.
+    /// The fallback scene can inject <see cref="ISceneLoadErrorInfo"/> to display the failure details.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// builder.UseFallbackScene&lt;MyErrorScene&gt;();
+    /// </code>
+    /// </example>
+    public GameApplicationBuilder UseFallbackScene<T>() where T : Scene
+    {
+        EnsureNotBuilt();
+        _fallbackSceneType = typeof(T);
+        if (_registeredScenes.Add(typeof(T)))
+            Services.AddTransient(typeof(T), typeof(T));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a system to every scene's entity world, equivalent to calling
+    /// <c>world.AddSystem&lt;T&gt;()</c> in <see cref="ConfigureScene"/>.
+    /// Can be excluded project-wide with <see cref="ExcludeDefaultSystem{T}"/>.
+    /// Can be called multiple times; additions are additive.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// builder.AddDefaultSystem&lt;FogOfWarSystem&gt;();
+    /// </code>
+    /// </example>
+    public GameApplicationBuilder AddDefaultSystem<T>() where T : class
+    {
+        EnsureNotBuilt();
+        _additionalDefaultSystems.Add((typeof(T), w => w.AddSystem<T>()));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a system to every scene's entity world with an initial configuration delegate.
+    /// Can be excluded project-wide with <see cref="ExcludeDefaultSystem{T}"/>.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// builder.AddDefaultSystem&lt;FogOfWarSystem&gt;(s => s.Radius = 200f);
+    /// </code>
+    /// </example>
+    public GameApplicationBuilder AddDefaultSystem<T>(Action<T> configure) where T : class
+    {
+        EnsureNotBuilt();
+        ArgumentNullException.ThrowIfNull(configure);
+        _additionalDefaultSystems.Add((typeof(T), w => w.AddSystem(configure)));
+        return this;
+    }
+
+    /// <summary>
     /// Builds the game application. Can only be called once per builder instance.
     /// </summary>
     public GameApplication Build()
     {
         EnsureNotBuilt();
 
+        RegisterCoreServices();
+
+        var brine2DBuilder = Services.AddBrine2D();
+        ApplyBrine2DConfigurations(brine2DBuilder);
+        RegisterBackendServices();
+        ValidateAll();
+
+        _built = true;
+        var host = _hostBuilder.Build();
+
+        LogConfigurationWarnings(host);
+
+        return new GameApplication(host);
+    }
+
+    private void RegisterCoreServices()
+    {
         Services.AddSingleton(new RegisteredSceneRegistry(new HashSet<Type>(_registeredScenes)));
 
         Services.AddSingleton(_options);
@@ -184,55 +284,31 @@ public sealed class GameApplicationBuilder
         Services.AddSingleton(_options.ECS);
         Services.AddSingleton(_options.Audio);
 
+        Services.AddSingleton(BuildSceneWorldConfiguration());
+        Services.AddSingleton(new FallbackSceneConfiguration(_fallbackSceneType));
+    }
+
+    private SceneWorldConfiguration BuildSceneWorldConfiguration()
+    {
         var configurations = _sceneConfigurations.ToArray();
         Action<IEntityWorld>? compositeConfig = configurations.Length > 0
-            ? world =>
-            {
-                List<Exception>? exceptions = null;
-                foreach (var configure in configurations)
-                {
-                    try { configure(world); }
-                    catch (Exception ex) { (exceptions ??= []).Add(ex); }
-                }
-                if (exceptions is { Count: > 0 })
-                {
-                    var inner = exceptions.Count == 1
-                        ? exceptions[0]
-                        : new AggregateException(
-                            "One or more ConfigureScene delegates threw an exception.", exceptions);
-                    throw new GameConfigurationException(
-                        $"{exceptions.Count} builder.ConfigureScene() delegate(s) threw an exception." +
-                        Environment.NewLine +
-                        "Fix: Check your ConfigureScene delegates in Program.cs.",
-                        inner);
-                }
-            }
+            ? world => RunAllOrThrow(configurations, world, "ConfigureScene")
             : null;
-        Services.AddSingleton(new SceneWorldConfiguration(compositeConfig));
 
-        var brine2DBuilder = Services.AddBrine2D();
-        if (_brineConfigurations.Count > 0)
-        {
-            List<Exception>? brineExceptions = null;
-            foreach (var configure in _brineConfigurations)
-            {
-                try { configure(brine2DBuilder); }
-                catch (Exception ex) { (brineExceptions ??= []).Add(ex); }
-            }
-            if (brineExceptions is { Count: > 0 })
-            {
-                var inner = brineExceptions.Count == 1
-                    ? brineExceptions[0]
-                    : new AggregateException(
-                        "One or more ConfigureBrine2D delegates threw an exception.", brineExceptions);
-                throw new GameConfigurationException(
-                    $"{brineExceptions.Count} builder.ConfigureBrine2D() delegate(s) threw an exception." +
-                    Environment.NewLine +
-                    "Fix: Check your ConfigureBrine2D delegates in Program.cs.",
-                    inner);
-            }
-        }
+        return new SceneWorldConfiguration(
+            compositeConfig,
+            _excludedDefaultSystems.ToFrozenSet(),
+            _additionalDefaultSystems.Count > 0 ? _additionalDefaultSystems.ToArray() : null);
+    }
 
+    private void ApplyBrine2DConfigurations(Brine2DBuilder brine2DBuilder)
+    {
+        if (_brineConfigurations.Count == 0) return;
+        RunAllOrThrow(_brineConfigurations, brine2DBuilder, "ConfigureBrine2D");
+    }
+
+    private void RegisterBackendServices()
+    {
         if (!_options.Headless)
         {
             Services.AddSDL3EventPump();
@@ -248,7 +324,10 @@ public sealed class GameApplicationBuilder
             Services.TryAddSingleton<IAudioService, HeadlessAudioService>();
             Services.TryAddSingleton<IEventPump, HeadlessEventPump>();
         }
+    }
 
+    private void ValidateAll()
+    {
         var registeredExact = new HashSet<Type>();
         var registeredOpenGeneric = new HashSet<Type>();
         foreach (var descriptor in Services)
@@ -264,18 +343,19 @@ public sealed class GameApplicationBuilder
         foreach (var sceneType in _registeredScenes)
             ValidateSceneDependencies(sceneType, registeredExact, registeredOpenGeneric);
 
-        _built = true;
-        var host = _hostBuilder.Build();
+        if (!_registeredScenes.Contains(_fallbackSceneType))
+            ValidateSceneDependencies(_fallbackSceneType, registeredExact, registeredOpenGeneric);
+    }
 
-        var configWarnings = GetConfigurationWarnings();
-        if (configWarnings.Count > 0)
+    private void LogConfigurationWarnings(IHost host)
+    {
+        var warnings = GetConfigurationWarnings();
+        if (warnings.Count > 0)
         {
             var logger = host.Services.GetRequiredService<ILogger<GameApplicationBuilder>>();
-            foreach (var warning in configWarnings)
+            foreach (var warning in warnings)
                 logger.LogWarning("{ConfigWarning}", warning);
         }
-
-        return new GameApplication(host);
     }
 
     private List<string> GetConfigurationWarnings()
@@ -300,9 +380,9 @@ public sealed class GameApplicationBuilder
             {
                 warnings.Add(
                     $"Scene '{sceneType.Name}' has {constructors.Length} constructors with no " +
-                    $"[ActivatorUtilitiesConstructor] attribute. Startup-time dependency validation used " +
-                    $"the first declared constructor as a heuristic; annotate the intended constructor " +
-                    $"to ensure accurate validation.");
+                    $"[ActivatorUtilitiesConstructor] attribute. Startup-time dependency validation targeted " +
+                    $"the best-matching constructor (most resolvable parameters); annotate the intended " +
+                    $"constructor to ensure accurate validation.");
             }
         }
 
@@ -317,10 +397,9 @@ public sealed class GameApplicationBuilder
         var constructors = sceneType.GetConstructors();
         if (constructors.Length == 0) return;
 
-        // Prefer [ActivatorUtilitiesConstructor]; fall back to the first declared constructor.
         var constructor =
             constructors.FirstOrDefault(c => c.GetCustomAttribute<ActivatorUtilitiesConstructorAttribute>() != null)
-            ?? constructors[0];
+            ?? SelectBestConstructor(constructors, registeredExact, registeredOpenGeneric);
 
         var parameters = constructor.GetParameters();
         if (parameters.Length == 0) return;
@@ -331,18 +410,10 @@ public sealed class GameApplicationBuilder
         {
             if (param.HasDefaultValue) continue;
 
-            var paramType = param.ParameterType;
-
-            bool isRegistered =
-                registeredExact.Contains(paramType) ||
-                (paramType.IsGenericType && _synthesizedCollectionTypes.Contains(paramType.GetGenericTypeDefinition())) ||
-                (paramType.IsGenericType && registeredOpenGeneric.Contains(paramType.GetGenericTypeDefinition())) ||
-                param.GetCustomAttribute<FromKeyedServicesAttribute>() != null;
-
-            if (!isRegistered)
+            if (!IsResolvable(param, registeredExact, registeredOpenGeneric))
             {
                 errors.Add(
-                    $"  • {param.Name} ({paramType.Name}): not registered. " +
+                    $"  • {param.Name} ({param.ParameterType.Name}): not registered. " +
                     $"Add it via builder.Services.Add...() before calling Build().");
             }
         }
@@ -352,7 +423,7 @@ public sealed class GameApplicationBuilder
             var multiCtorNote = constructors.Length > 1
                 ? Environment.NewLine +
                   $"Note: '{sceneType.Name}' has {constructors.Length} constructors; validation targeted " +
-                  $"the first declared constructor as a heuristic. Annotate the intended one with " +
+                  $"the best-matching constructor (most resolvable parameters). Annotate the intended one with " +
                   $"[ActivatorUtilitiesConstructor] to ensure accurate validation."
                 : string.Empty;
 
@@ -362,6 +433,60 @@ public sealed class GameApplicationBuilder
                 $"Fix: Register missing services in Program.cs before calling Build()." +
                 multiCtorNote);
         }
+    }
+
+    /// <summary>
+    /// Mimics the <see cref="ActivatorUtilities"/> constructor selection algorithm:
+    /// prefer the constructor with the most parameters where every parameter is resolvable,
+    /// then fall back to the constructor with the most total parameters.
+    /// </summary>
+    private static ConstructorInfo SelectBestConstructor(
+        ConstructorInfo[] constructors,
+        HashSet<Type> registeredExact,
+        HashSet<Type> registeredOpenGeneric)
+    {
+        ConstructorInfo? bestFullMatch = null;
+        int bestFullMatchCount = -1;
+        ConstructorInfo? bestPartial = null;
+        int bestPartialCount = -1;
+
+        foreach (var ctor in constructors)
+        {
+            var parameters = ctor.GetParameters();
+            int resolvable = 0;
+
+            foreach (var param in parameters)
+            {
+                if (param.HasDefaultValue || IsResolvable(param, registeredExact, registeredOpenGeneric))
+                    resolvable++;
+            }
+
+            if (resolvable == parameters.Length && parameters.Length > bestFullMatchCount)
+            {
+                bestFullMatch = ctor;
+                bestFullMatchCount = parameters.Length;
+            }
+
+            if (parameters.Length > bestPartialCount)
+            {
+                bestPartial = ctor;
+                bestPartialCount = parameters.Length;
+            }
+        }
+
+        return bestFullMatch ?? bestPartial!;
+    }
+
+    private static bool IsResolvable(
+        ParameterInfo param,
+        HashSet<Type> registeredExact,
+        HashSet<Type> registeredOpenGeneric)
+    {
+        var paramType = param.ParameterType;
+        return registeredExact.Contains(paramType) ||
+               (paramType.IsGenericType && _synthesizedCollectionTypes.Contains(paramType.GetGenericTypeDefinition())) ||
+               (paramType.IsGenericType && registeredOpenGeneric.Contains(paramType.GetGenericTypeDefinition())) ||
+               param.GetCustomAttribute<FromKeyedServicesAttribute>() != null;
     }
 
     private static void ValidateServiceRegistrations(HashSet<Type> registered)
@@ -398,6 +523,31 @@ public sealed class GameApplicationBuilder
                 Environment.NewLine +
                 "This is likely a framework bug. Please report it with your configuration.");
         }
+    }
+
+    private static void RunAllOrThrow<T>(
+        IReadOnlyList<Action<T>> delegates, T argument, string delegateName)
+    {
+        List<Exception>? exceptions = null;
+        foreach (var action in delegates)
+        {
+            try { action(argument); }
+            catch (Exception ex) { (exceptions ??= []).Add(ex); }
+        }
+
+        if (exceptions is not { Count: > 0 })
+            return;
+
+        var inner = exceptions.Count == 1
+            ? exceptions[0]
+            : new AggregateException(
+                $"One or more {delegateName} delegates threw an exception.", exceptions);
+
+        throw new GameConfigurationException(
+            $"{exceptions.Count} builder.{delegateName}() delegate(s) threw an exception." +
+            Environment.NewLine +
+            $"Fix: Check your {delegateName} delegates in Program.cs.",
+            inner);
     }
 
     private void EnsureNotBuilt()

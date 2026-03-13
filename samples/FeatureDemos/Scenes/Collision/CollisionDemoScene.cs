@@ -83,7 +83,7 @@ public class CollisionDemoScene : DemoSceneBase
         };
     }
 
-    protected override Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== Collision Detection Demo ===");
         Logger.LogInformation("Controls:");

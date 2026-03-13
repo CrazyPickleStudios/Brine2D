@@ -30,7 +30,7 @@ public class GameScene : Scene
 
     // OnLoad: Called when scene loads - initialize state
     // Each time you transition to GameScene, a NEW instance is created
-    protected override Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("GameScene: OnLoad - Game starting");
         Renderer.ClearColor = new Color(52, 78, 65, 255); // Dirty brine
@@ -52,7 +52,7 @@ public class GameScene : Scene
         if (_input.IsKeyPressed(Key.Escape))
         {
             Logger.LogInformation("GameScene: Returning to menu");
-            _sceneManager.LoadSceneAsync<MenuScene>();
+            _sceneManager.LoadScene<MenuScene>();
         }
         
         // Q quits game

@@ -14,6 +14,7 @@ internal sealed class GameEngine
     private readonly ILogger<GameEngine> _logger;
     private readonly IRenderer _renderer;
     private readonly IInputContext _inputContext;
+
     private bool _rendererDisposed;
 
     public bool IsInitialized { get; private set; }
@@ -48,7 +49,7 @@ internal sealed class GameEngine
             catch (DllNotFoundException ex)
             {
                 _logger.LogCritical(ex, "SDL3 library not found");
-                throw new InvalidOperationException(
+                throw new EngineInitializationException(
                     "Failed to initialize renderer: SDL3 library not found. " +
                     "Ensure SDL3 runtime libraries are installed and accessible. " +
                     "\n\nFor installation instructions, see: https://github.com/libsdl-org/SDL/releases " +
@@ -59,10 +60,8 @@ internal sealed class GameEngine
             }
             catch (ExternalException ex)
             {
-                // Catches P/Invoke failures from SDL3 native calls; more precise and
-                // locale-independent than filtering on exception message strings.
                 _logger.LogCritical(ex, "SDL3 native call failed during initialization");
-                throw new InvalidOperationException(
+                throw new EngineInitializationException(
                     "Failed to initialize SDL3 renderer. Common causes: " +
                     "\n- Graphics drivers are out of date" +
                     "\n- Vulkan/DirectX runtime not available (for GPU backend)" +
@@ -78,15 +77,18 @@ internal sealed class GameEngine
             IsInitialized = true;
             _logger.LogInformation("Game engine initialized successfully");
         }
-        catch (InvalidOperationException)
+        catch (OperationCanceledException)
         {
-            // Already formatted with user-friendly context, re-throw as-is.
+            throw;
+        }
+        catch (EngineInitializationException)
+        {
             throw;
         }
         catch (Exception ex)
         {
             _logger.LogCritical(ex, "Unexpected error during game engine initialization");
-            throw new InvalidOperationException(
+            throw new EngineInitializationException(
                 $"Game engine initialization failed with unexpected error: {ex.Message} " +
                 "\n\nCheck your configuration and ensure all required services are registered. " +
                 "\nFor help, see: https://github.com/CrazyPickleStudios/Brine2D/wiki/Troubleshooting",
@@ -94,14 +96,13 @@ internal sealed class GameEngine
         }
     }
 
-    public Task ShutdownAsync(CancellationToken cancellationToken = default)
+    public void Shutdown()
     {
         if (!IsInitialized)
-            return Task.CompletedTask;
+            return;
 
         _logger.LogInformation("Shutting down game engine");
 
-        // Dispose explicitly so SDL3 native resources are freed before the DI container teardown.
         _logger.LogDebug("Shutting down renderer ({RendererType})", _renderer.GetType().Name);
         try
         {
@@ -117,6 +118,5 @@ internal sealed class GameEngine
         }
 
         IsInitialized = false;
-        return Task.CompletedTask;
     }
 }

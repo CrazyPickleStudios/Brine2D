@@ -11,6 +11,8 @@ namespace Brine2D.Hosting;
 /// </summary>
 public sealed class Brine2DOptions
 {
+    private volatile bool _validated;
+
     /// <summary>Audio configuration.</summary>
     public AudioOptions Audio { get; init; } = new();
 
@@ -46,7 +48,7 @@ public sealed class Brine2DOptions
     /// </summary>
     [Range(0, int.MaxValue, ErrorMessage = "LoadingScreenMinimumDisplayMs must be 0 or greater.")]
     public int LoadingScreenMinimumDisplayMs { get; set; } = 200;
-
+    
     /// <summary>Rendering configuration.</summary>
     public RenderingOptions Rendering { get; init; } = new();
 
@@ -58,51 +60,43 @@ public sealed class Brine2DOptions
     [Range(1, 60, ErrorMessage = "ShutdownTimeoutSeconds must be between 1 and 60.")]
     public int ShutdownTimeoutSeconds { get; set; } = 5;
 
+    /// <summary>Gets <see cref="ShutdownTimeoutSeconds"/> as a <see cref="TimeSpan"/>.</summary>
+    public TimeSpan ShutdownTimeout => TimeSpan.FromSeconds(ShutdownTimeoutSeconds);
+
     /// <summary>Window configuration.</summary>
     public WindowOptions Window { get; init; } = new();
 
     /// <summary>
     ///     Validates all options using DataAnnotations.
     ///     Called automatically by <see cref="GameApplicationBuilder.Build"/> and at host startup.
+    ///     Subsequent calls short-circuit if the first validation succeeded.
     /// </summary>
-    /// <remarks>
-    ///     Nested sub-options are discovered and validated automatically via reflection.
-    /// </remarks>
     /// <exception cref="GameConfigurationException">
     ///     Thrown if validation fails with detailed error messages.
     /// </exception>
     public void Validate()
     {
+        if (_validated)
+            return;
+
         var allErrors = new List<string>();
         var errors = new List<ValidationResult>();
 
         if (!Validator.TryValidateObject(this, new ValidationContext(this), errors, true))
             allErrors.AddRange(errors.Select(e => e.ErrorMessage ?? "Unknown validation error"));
 
-        foreach (var prop in typeof(Brine2DOptions).GetProperties()
-            .Where(p => p.CanRead
-                && p.PropertyType.IsClass
-                && p.PropertyType != typeof(string)
-                && !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType)))
-        {
-            var value = prop.GetValue(this);
-            if (value != null)
-                ValidateNested(value, prop.Name, allErrors);
-        }
+        if (!Headless)
+            ValidateNested(Window, nameof(Window), allErrors);
+
+        ValidateNested(Rendering, nameof(Rendering), allErrors);
+        ValidateNested(ECS, nameof(ECS), allErrors);
+        ValidateNested(Audio, nameof(Audio), allErrors);
 
         if (ForceShutdownGracePeriodSeconds >= ShutdownTimeoutSeconds)
         {
             allErrors.Add(
                 $"ForceShutdownGracePeriodSeconds ({ForceShutdownGracePeriodSeconds}s) must be less than " +
                 $"ShutdownTimeoutSeconds ({ShutdownTimeoutSeconds}s).");
-        }
-
-        if (!Headless && (Window.Width <= 0 || Window.Height <= 0))
-        {
-            allErrors.Add(
-                $"Window.Width ({Window.Width}) and/or Window.Height ({Window.Height}) is 0 or negative; " +
-                $"SDL3 will fail to create the window. " +
-                $"Set valid dimensions via builder.Configure(o => {{ o.Window.Width = 1280; o.Window.Height = 720; }}).");
         }
 
         if (allErrors.Count > 0)
@@ -113,6 +107,8 @@ public sealed class Brine2DOptions
                 Environment.NewLine +
                 "Fix: Check your builder.Configure(options => ...) calls in Program.cs");
         }
+
+        _validated = true;
     }
 
     private static void ValidateNested(object obj, string propertyPath, List<string> allErrors,
@@ -130,7 +126,7 @@ public sealed class Brine2DOptions
 
         foreach (var prop in obj.GetType().GetProperties()
             .Where(p => p.CanRead
-                && p.PropertyType.IsClass
+                && !p.PropertyType.IsValueType
                 && p.PropertyType != typeof(string)
                 && !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType)))
         {

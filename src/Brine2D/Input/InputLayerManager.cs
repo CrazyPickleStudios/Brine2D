@@ -9,40 +9,35 @@ public class InputLayerManager
     private readonly List<IInputLayer> _layers = new();
     private readonly IInputContext _inputService;
 
-    // Track what was consumed this frame
     private bool _keyboardConsumedThisFrame;
     private bool _mouseConsumedThisFrame;
+    private bool _gamepadConsumedThisFrame;
 
     public InputLayerManager(IInputContext inputService)
     {
         _inputService = inputService ?? throw new ArgumentNullException(nameof(inputService));
     }
 
-    /// <summary>
-    /// Returns true if keyboard input was consumed by any layer this frame.
-    /// </summary>
+    /// <summary>Returns true if keyboard input was consumed by any layer this frame.</summary>
     public bool KeyboardConsumed => _keyboardConsumedThisFrame;
 
-    /// <summary>
-    /// Returns true if mouse input was consumed by any layer this frame.
-    /// </summary>
+    /// <summary>Returns true if mouse input was consumed by any layer this frame.</summary>
     public bool MouseConsumed => _mouseConsumedThisFrame;
 
-    /// <summary>
-    /// Registers an input layer.
-    /// </summary>
+    /// <summary>Returns true if gamepad input was consumed by any layer this frame.</summary>
+    public bool GamepadConsumed => _gamepadConsumedThisFrame;
+
+    /// <summary>Registers an input layer.</summary>
     public void RegisterLayer(IInputLayer layer)
     {
-        if (!_layers.Contains(layer))
-        {
-            _layers.Add(layer);
-            _layers.Sort((a, b) => b.Priority.CompareTo(a.Priority)); // Sort by priority descending
-        }
+        if (_layers.Contains(layer))
+            return;
+
+        var index = _layers.BinarySearch(layer, DescendingPriorityComparer.Instance);
+        _layers.Insert(index < 0 ? ~index : index, layer);
     }
 
-    /// <summary>
-    /// Unregisters an input layer.
-    /// </summary>
+    /// <summary>Unregisters an input layer.</summary>
     public void UnregisterLayer(IInputLayer layer)
     {
         _layers.Remove(layer);
@@ -56,24 +51,29 @@ public class InputLayerManager
     {
         _keyboardConsumedThisFrame = false;
         _mouseConsumedThisFrame = false;
+        _gamepadConsumedThisFrame = false;
 
         foreach (var layer in _layers)
         {
-            // Process keyboard if not yet consumed
             if (!_keyboardConsumedThisFrame)
-            {
                 _keyboardConsumedThisFrame = layer.ProcessKeyboardInput(_inputService);
-            }
 
-            // Process mouse if not yet consumed
             if (!_mouseConsumedThisFrame)
-            {
                 _mouseConsumedThisFrame = layer.ProcessMouseInput(_inputService);
-            }
 
-            // If both consumed, no need to check further layers
-            if (_keyboardConsumedThisFrame && _mouseConsumedThisFrame)
+            if (!_gamepadConsumedThisFrame)
+                _gamepadConsumedThisFrame = layer.ProcessGamepadInput(_inputService);
+
+            if (_keyboardConsumedThisFrame && _mouseConsumedThisFrame && _gamepadConsumedThisFrame)
                 break;
         }
+    }
+
+    private sealed class DescendingPriorityComparer : IComparer<IInputLayer>
+    {
+        public static readonly DescendingPriorityComparer Instance = new();
+
+        public int Compare(IInputLayer? x, IInputLayer? y) =>
+            (y?.Priority ?? 0).CompareTo(x?.Priority ?? 0);
     }
 }

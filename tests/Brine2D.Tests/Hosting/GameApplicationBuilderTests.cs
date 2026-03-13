@@ -112,6 +112,15 @@ public sealed class GameApplicationBuilderTests
         Assert.Contains("ConfigureBrine2D", ex.Message);
     }
 
+    [Fact]
+    public void AddScenes_NonSceneType_Throws()
+    {
+        var builder = Headless();
+
+        Assert.Throws<ArgumentException>(() =>
+            builder.AddScenes(s => s.AddRange(typeof(string))));
+    }
+
     private sealed class EmptyScene : Scene { }
 
     private interface IUnregisteredService { }

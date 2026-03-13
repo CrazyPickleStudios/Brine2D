@@ -11,6 +11,7 @@ namespace Brine2D.Rendering;
 public class SDL3Shader : IShader
 {
     private readonly ILogger<SDL3Shader> _logger;
+    private nint _device;
     private nint _shaderHandle;
     private bool _disposed;
 
@@ -53,6 +54,7 @@ public class SDL3Shader : IShader
             NumUniformBuffers = numUniformBuffers > 0 ? numUniformBuffers : (Stage == ShaderStage.Vertex ? 1u : 0u)
         };
 
+        _device = device;
         _shaderHandle = SDL3.SDL.CreateGPUShader(device, ref createInfo);
 
         if (_shaderHandle == nint.Zero)
@@ -94,9 +96,9 @@ public class SDL3Shader : IShader
     {
         if (_disposed) return;
 
-        if (_shaderHandle != nint.Zero)
+        if (_shaderHandle != nint.Zero && _device != nint.Zero)
         {
-            SDL3.SDL.ReleaseGPUShader(nint.Zero, _shaderHandle);
+            SDL3.SDL.ReleaseGPUShader(_device, _shaderHandle);
             _shaderHandle = nint.Zero;
         }
 

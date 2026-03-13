@@ -14,32 +14,26 @@ namespace Brine2D.ECS;
 /// </summary>
 internal class EntityWorld : IEntityWorld, IDisposable
 {
-    // Main entity list (deferred)
     private readonly DeferredList<Entity> _entities = new();
-
-    // Behaviors (deferred)
     private readonly DeferredList<EntityBehavior> _behaviors = new();
-
-    // Systems (scene-scoped)
     private readonly List<IUpdateSystem> _updateSystems = new();
     private readonly List<IRenderSystem> _renderSystems = new();
+
+    // O(1) duplicate check for AddSystem; kept in sync with the two system lists.
+    private readonly HashSet<Type> _registeredSystemTypes = [];
 
     private readonly IActivator _activator;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger<EntityWorld>? _logger;
     private readonly ECSOptions _options;
 
-    // Flag to control when structural changes are deferred
     private bool _isProcessing = false;
-
-    // O(1) entity lookup by ID
     private readonly Dictionary<int, Entity> _entityLookup = new();
 
     // Per-type query index; targeted invalidation instead of broadcast
     private readonly List<ICachedQuery> _cachedQueries = new();
     private readonly Dictionary<Type, List<ICachedQuery>> _queriesByComponentType = new();
 
-    // Lazy sort flags; invalidated when systems are added or removed
     private bool _updateSystemsSorted = false;
     private bool _renderSystemsSorted = false;
 
@@ -71,8 +65,6 @@ internal class EntityWorld : IEntityWorld, IDisposable
         _options = options ?? new ECSOptions();
     }
 
-    #region System Management
-
     /// <summary>
     /// Adds a system to this world, automatically creating it with dependency injection.
     /// Systems that implement IUpdateSystem are added to the update pipeline.
@@ -97,8 +89,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
     /// </example>
     public void AddSystem<T>(Action<T>? configure = null) where T : class
     {
-        if (_updateSystems.Any(s => s.GetType() == typeof(T)) ||
-            _renderSystems.Any(s => s.GetType() == typeof(T)))
+        if (!_registeredSystemTypes.Add(typeof(T)))
         {
             _logger?.LogWarning("System {SystemType} already exists in world, skipping", typeof(T).Name);
             return;
@@ -126,7 +117,20 @@ internal class EntityWorld : IEntityWorld, IDisposable
         }
 
         if (!added)
+        {
+            _registeredSystemTypes.Remove(typeof(T));
             _logger?.LogWarning("System {SystemType} does not implement IUpdateSystem or IRenderSystem", typeof(T).Name);
+        }
+    }
+
+    /// <summary>
+    /// Removes a system of the specified type from this world.
+    /// If the system implements both IUpdateSystem and IRenderSystem it will be removed from both.
+    /// </summary>
+    public bool RemoveSystem<T>() where T : class
+    {
+        var system = GetSystem<T>();
+        return system != null && RemoveSystem(system);
     }
 
     /// <summary>
@@ -151,31 +155,48 @@ internal class EntityWorld : IEntityWorld, IDisposable
             removed = true;
         }
 
+        if (removed)
+            _registeredSystemTypes.Remove(system.GetType());
+
         return removed;
     }
 
     public T? GetUpdateSystem<T>() where T : class, IUpdateSystem
-        => _updateSystems.OfType<T>().FirstOrDefault();
+    {
+        foreach (var s in _updateSystems)
+            if (s is T match) return match;
+        return null;
+    }
 
     public T? GetRenderSystem<T>() where T : class, IRenderSystem
-        => _renderSystems.OfType<T>().FirstOrDefault();
+    {
+        foreach (var s in _renderSystems)
+            if (s is T match) return match;
+        return null;
+    }
 
     public T? GetSystem<T>() where T : class
     {
-        var updateSystem = _updateSystems.OfType<T>().FirstOrDefault();
-        if (updateSystem != null) return updateSystem;
-        return _renderSystems.OfType<T>().FirstOrDefault();
+        foreach (var s in _updateSystems)
+            if (s is T match) return match;
+        foreach (var s in _renderSystems)
+            if (s is T match) return match;
+        return null;
     }
 
     public bool HasUpdateSystem<T>() where T : class, IUpdateSystem
-        => _updateSystems.Any(s => s is T);
+    {
+        foreach (var s in _updateSystems)
+            if (s is T) return true;
+        return false;
+    }
 
     public bool HasRenderSystem<T>() where T : class, IRenderSystem
-        => _renderSystems.Any(s => s is T);
-
-    #endregion
-
-    #region Entity Management
+    {
+        foreach (var s in _renderSystems)
+            if (s is T) return true;
+        return false;
+    }
 
     public Entity CreateEntity(string name = "")
     {
@@ -259,6 +280,26 @@ internal class EntityWorld : IEntityWorld, IDisposable
         }
     }
 
+    public void ForEachWithComponent<T>(Action<Entity> action) where T : Component
+    {
+        var pool = GetOrCreatePool<T>();
+        var (snapshot, length) = pool.GetSnapshot();
+        try
+        {
+            for (int i = 0; i < length; i++)
+            {
+                var (entityId, _) = ((ValueTuple<int, T>[])snapshot)[i];
+                var entity = GetEntityById(entityId);
+                if (entity != null && entity.IsActive)
+                    action(entity);
+            }
+        }
+        finally
+        {
+            pool.ReturnSnapshot(snapshot);
+        }
+    }
+
     /// <remarks>
     /// Hot path: prefer <see cref="IEntityWorld.CreateCachedQuery{T1,T2}"/> for per-frame use.
     /// </remarks>
@@ -309,10 +350,6 @@ internal class EntityWorld : IEntityWorld, IDisposable
         return null;
     }
 
-    #endregion
-
-    #region Update and Render
-
     public void Update(GameTime gameTime)
     {
         _isProcessing = true;
@@ -325,10 +362,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
             {
                 _updateSystems.Sort((a, b) => a.UpdateOrder.CompareTo(b.UpdateOrder));
                 _updateSystemsSorted = true;
-
-                _logger?.LogDebug("Update systems execution order:");
-                foreach (var system in _updateSystems)
-                    _logger?.LogDebug("  [{Order,4}] {SystemType}", system.UpdateOrder, system.GetType().Name);
+                _logger?.LogDebug("Update systems sorted ({Count} systems)", _updateSystems.Count);
             }
 
             foreach (var system in _updateSystems)
@@ -340,8 +374,10 @@ internal class EntityWorld : IEntityWorld, IDisposable
 
             foreach (var behavior in _behaviors)
             {
-                if (behavior.IsEnabled && behavior.Entity?.IsActive == true)
-                    behavior.Update(gameTime);
+                if (!behavior.IsEnabled || behavior.Entity?.IsActive != true)
+                    continue;
+                try { behavior.Update(gameTime); }
+                catch (Exception ex) { _logger?.LogError(ex, "Error in behavior {BehaviorType} on '{EntityName}'", behavior.GetType().Name, behavior.Entity?.Name); }
             }
         }
         finally
@@ -357,10 +393,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
         {
             _renderSystems.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
             _renderSystemsSorted = true;
-
-            _logger?.LogDebug("Render systems execution order:");
-            foreach (var system in _renderSystems)
-                _logger?.LogDebug("  [{Order,4}] {SystemType}", system.RenderOrder, system.GetType().Name);
+            _logger?.LogDebug("Render systems sorted ({Count} systems)", _renderSystems.Count);
         }
 
         foreach (var system in _renderSystems)
@@ -372,8 +405,10 @@ internal class EntityWorld : IEntityWorld, IDisposable
 
         foreach (var behavior in _behaviors)
         {
-            if (behavior.IsEnabled && behavior.Entity?.IsActive == true)
-                behavior.Render(renderer);
+            if (!behavior.IsEnabled || behavior.Entity?.IsActive != true)
+                continue;
+            try { behavior.Render(renderer); }
+            catch (Exception ex) { _logger?.LogError(ex, "Error rendering behavior {BehaviorType} on '{EntityName}'", behavior.GetType().Name, behavior.Entity?.Name); }
         }
     }
 
@@ -425,6 +460,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
 
         _updateSystems.Clear();
         _renderSystems.Clear();
+        _registeredSystemTypes.Clear();
         _updateSystemsSorted = false;
         _renderSystemsSorted = false;
     }
@@ -438,10 +474,6 @@ internal class EntityWorld : IEntityWorld, IDisposable
         DisposeAndClearSystems();
     }
 
-    #endregion
-
-    #region Internal Notifications
-
     internal void NotifyComponentAdded(Entity entity, Component component)
         => InvalidateCachedQueriesForType(component.GetType());
 
@@ -453,10 +485,6 @@ internal class EntityWorld : IEntityWorld, IDisposable
 
     internal void NotifyBehaviorRemoved(Entity entity, EntityBehavior behavior)
         => _behaviors.Remove(behavior);
-
-    #endregion
-
-    #region Deferred Operations
 
     private void ProcessDeferredOperations()
     {
@@ -497,10 +525,6 @@ internal class EntityWorld : IEntityWorld, IDisposable
             RemoveEntityFromAllPools(entity.Id);
         });
     }
-
-    #endregion
-
-    #region Queries
 
     public EntityQuery Query() => new EntityQuery(this, _options);
 
@@ -558,10 +582,6 @@ internal class EntityWorld : IEntityWorld, IDisposable
             query.Invalidate();
     }
 
-    #endregion
-
-    #region Utilities
-
     public void Flush()
     {
         var wasProcessing = _isProcessing;
@@ -569,10 +589,6 @@ internal class EntityWorld : IEntityWorld, IDisposable
         try { ProcessDeferredOperations(); }
         finally { _isProcessing = wasProcessing; }
     }
-
-    #endregion
-
-    #region Component Pools
 
     internal ComponentPool<T> GetOrCreatePool<T>() where T : Component
     {
@@ -676,6 +692,4 @@ internal class EntityWorld : IEntityWorld, IDisposable
             foreach (var t in removedTypes)
                 InvalidateCachedQueriesForType(t);
     }
-
-    #endregion
 }

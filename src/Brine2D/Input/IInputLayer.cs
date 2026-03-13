@@ -21,4 +21,11 @@ public interface IInputLayer
     /// Process mouse input. Return true to consume the event and prevent lower layers from receiving it.
     /// </summary>
     bool ProcessMouseInput(IInputContext input);
+
+    /// <summary>
+    /// Process gamepad input. Return true to consume the event and prevent lower layers from receiving it.
+    /// Defaults to <see langword="false"/>; override when a layer needs to block gamepad input
+    /// (e.g., a modal dialog that should intercept confirm/cancel buttons).
+    /// </summary>
+    bool ProcessGamepadInput(IInputContext input) => false;
 }

@@ -39,7 +39,7 @@ public abstract class DemoSceneBase : Scene
     protected void ReturnToMenu()
     {
         Logger.LogInformation("Returning to main menu...");
-        _ = SceneManager.LoadSceneAsync<MainMenuScene>(
+        SceneManager.LoadScene<MainMenuScene>(
             new FadeTransition(duration: 0.3f, color: Color.Black)
         );
     }

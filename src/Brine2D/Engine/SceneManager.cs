@@ -1,8 +1,8 @@
-﻿using Brine2D.Audio;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.Hosting;
-using Brine2D.Input;
 using Brine2D.Rendering;
 using Brine2D.Systems.Audio;
 using Brine2D.Systems.Collision;
@@ -17,71 +17,121 @@ namespace Brine2D.Engine;
 /// <summary>
 ///     Manages scene lifetime: loading, transitions, loading screens, and frame-boundary deferral.
 /// </summary>
-internal sealed class SceneManager : ISceneManager, IAsyncDisposable
+internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
 {
-    // Must match the key used by CameraSystem and ICameraManager.GetCamera("main").
-    private const string MainCameraKey = "main";
+    private const float ProgressComplete = 1.0f;
+    private const float ProgressSceneCreated = 0.3f;
+    private const float ProgressAssetsLoading = 0.5f;
+
+    /// <remarks>
+    ///     Add new default systems here; they are not discovered automatically.
+    ///     Exclude project-wide via <c>builder.ExcludeDefaultSystem&lt;T&gt;()</c>.
+    ///     Disable per-scene via <c>world.GetSystem&lt;T&gt;()!.IsEnabled = false</c> in <c>OnEnter()</c>,
+    ///     or configure project-wide via <c>builder.ConfigureScene(...)</c>.
+    ///     Registration order here has no effect on execution order;
+    ///     that is governed by each system's <c>UpdateOrder</c> and <c>RenderOrder</c> properties.
+    /// </remarks>
+    private static readonly (Type Type, Action<IEntityWorld> Register)[] DefaultSystems =
+    [
+        (typeof(SpriteRenderingSystem), static w => w.AddSystem<SpriteRenderingSystem>()),
+        (typeof(ParticleSystem),        static w => w.AddSystem<ParticleSystem>()),
+        (typeof(VelocitySystem),        static w => w.AddSystem<VelocitySystem>()),
+        (typeof(CollisionDetectionSystem), static w => w.AddSystem<CollisionDetectionSystem>()),
+        (typeof(AudioSystem),           static w => w.AddSystem<AudioSystem>()),
+        (typeof(CameraSystem),          static w => w.AddSystem<CameraSystem>()),
+        (typeof(DebugRenderer),         static w => w.AddSystem<DebugRenderer>(static d => d.IsEnabled = false)),
+    ];
 
     private readonly int _loadingScreenMinimumDisplayMs;
+    private readonly TimeSpan _shutdownTimeout;
     private readonly ILogger<SceneManager> _logger;
     private readonly HashSet<Type> _registeredScenes;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IMainThreadDispatcher _mainThreadDispatcher;
     private readonly SceneWorldConfiguration? _sceneWorldConfig;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly IRenderer _renderer;
-    private readonly IInputContext _inputContext;
-    private readonly IAudioService _audioService;
-    private readonly IGameContext _gameContext;
+    private readonly SceneFrameworkServices _services;
     private readonly ICameraManager _cameraManager;
+    private readonly SceneLoadErrorInfo? _sceneLoadErrorInfo;
+    private readonly FallbackSceneConfiguration? _fallbackSceneConfig;
 
     private LoadingScene? _activeLoadingScreen;
     private ISceneTransition? _activeTransition;
     private IServiceScope? _currentSceneScope;
-    private LoadingScene? _deferredLoadingScreen;
-    private Func<IServiceProvider, Scene>? _deferredSceneFactory;
-    private Type? _deferredSceneType;
-    private ISceneTransition? _deferredTransition;
 
-    private bool _isProcessingFrame;
-    private bool _isTransitioning;
+    // Read and written exclusively on the main thread: set in BeginFrame() and
+    // ProcessDeferredTransitions(), read in LoadSceneCore overloads.
+    // While a load is in flight, ProcessDeferredTransitions returns early (guarded by
+    // _isLoadingScene), keeping this flag true for the full duration of the load.
+    private bool _isDeferringTransitions;
+
+    // Read and written exclusively on the main thread: set in BeginSceneLoad(),
+    // cleared in the finally block of LoadSceneInternalCoreAsync via RunOnMainThreadAsync.
+    // Read in DisposeAsync for a diagnostic log; staleness there is harmless.
     private bool _isLoadingScene;
 
-    private readonly HashSet<Type> _warnedUnregisteredScenes = [];
+    // Set in the catch block of LoadSceneInternalCoreAsync; consumed and cleared by RaiseSceneLoadFailedIfPending.
+    // Written on the background load thread; read on the main thread after the pending task is observed as faulted —
+    // task completion provides the happens-before guarantee. volatile makes the intent explicit.
+    private volatile SceneLoadFailedEventArgs? _pendingSceneLoadFailure;
+
+    // Tracks the in-flight load task so DisposeAsync can await its cancellation and GameLoop
+    // can detect faults via ActiveLoadTask. Set on the main thread before any async work begins;
+    // read on the game thread during disposal and fault detection.
+    private Task? _currentLoadTask;
+
+    // Bounded by the number of distinct scene types; typically a small set, so no cap is needed.
+    private readonly ConcurrentDictionary<Type, byte> _warnedUnregisteredScenes = new();
     private readonly CancellationTokenSource _disposeCts = new();
     private int _disposed;
+
+    // Pending cross-frame scene transition. Null when no transition is queued.
+    private DeferredTransitionRequest? _pendingTransition;
+
+    // Written and read exclusively on the main thread: assigned synchronously before the first
+    // await in LoadSceneInternalCoreAsync, or inside RunOnMainThreadAsync lambdas. Read during
+    // Update and Render which run on the same thread.
+    private Scene? _currentScene;
 
     public SceneManager(
         ILogger<SceneManager> logger,
         IServiceScopeFactory scopeFactory,
-        IRenderer renderer,
         IMainThreadDispatcher mainThreadDispatcher,
-        ILoggerFactory loggerFactory,
-        IInputContext inputContext,
-        IAudioService audioService,
-        IGameContext gameContext,
+        SceneFrameworkServices services,
         ICameraManager cameraManager,
+        Brine2DOptions options,
+        SceneLoadErrorInfo? sceneLoadErrorInfo = null,
         SceneWorldConfiguration? sceneWorldConfig = null,
         RegisteredSceneRegistry? sceneRegistry = null,
-        Brine2DOptions? options = null)
+        FallbackSceneConfiguration? fallbackSceneConfig = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
-        _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
         _mainThreadDispatcher = mainThreadDispatcher ?? throw new ArgumentNullException(nameof(mainThreadDispatcher));
+        _services = services ?? throw new ArgumentNullException(nameof(services));
         _registeredScenes = sceneRegistry != null
             ? new HashSet<Type>(sceneRegistry.SceneTypes)
             : [];
-        _loadingScreenMinimumDisplayMs = options?.LoadingScreenMinimumDisplayMs ?? 200;
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _inputContext = inputContext ?? throw new ArgumentNullException(nameof(inputContext));
-        _audioService = audioService ?? throw new ArgumentNullException(nameof(audioService));
-        _gameContext = gameContext ?? throw new ArgumentNullException(nameof(gameContext));
         _cameraManager = cameraManager ?? throw new ArgumentNullException(nameof(cameraManager));
+        _sceneLoadErrorInfo = sceneLoadErrorInfo;
         _sceneWorldConfig = sceneWorldConfig;
+        _fallbackSceneConfig = fallbackSceneConfig;
+
+        ArgumentNullException.ThrowIfNull(options);
+        _loadingScreenMinimumDisplayMs = options.LoadingScreenMinimumDisplayMs;
+        _shutdownTimeout = options.ShutdownTimeout;
     }
 
-    public Scene? CurrentScene { get; private set; }
+    public Scene? CurrentScene
+    {
+        get => _currentScene;
+        private set => _currentScene = value;
+    }
+
+    public Task? ActiveLoadTask => _currentLoadTask;
+
+    public TimeSpan ShutdownTimeout => _shutdownTimeout;
+
+    public event EventHandler<SceneLoadFailedEventArgs>? SceneLoadFailed;
 
     public async ValueTask DisposeAsync()
     {
@@ -91,59 +141,43 @@ internal sealed class SceneManager : ISceneManager, IAsyncDisposable
         _disposeCts.Cancel();
 
         if (_isLoadingScene)
+            _logger.LogDebug("DisposeAsync called during an active scene transition; awaiting cancellation...");
+
+        // Await the cancelled load so its catch/finally blocks finish before we touch shared state.
+        // RunOnMainThreadAsync executes inline after SignalShutdown (called by GameLoop before disposal),
+        // so the background task can complete without needing the main thread queue to be drained.
+        var pendingLoad = _currentLoadTask;
+        if (pendingLoad is { IsCompleted: false })
         {
-            _logger.LogWarning(
-                "DisposeAsync called during an active scene transition; " +
-                "the transition will not complete and scene cleanup may be partial");
+            try { await pendingLoad.WaitAsync(_shutdownTimeout); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Exception while awaiting in-flight scene load during dispose"); }
         }
 
         if (_activeLoadingScreen != null)
         {
-            try { await _activeLoadingScreen.OnUnloadAsync(CancellationToken.None); }
+            try { await TeardownLoadingScreenAsync(_activeLoadingScreen); }
             catch (Exception ex) { _logger.LogError(ex, "Error unloading loading screen during dispose"); }
             _activeLoadingScreen = null;
         }
 
         var scene = CurrentScene;
-        if (scene is not null and not LoadingScene)
+        if (scene is not null)
         {
-            try
-            {
-                scene.OnExit();
-                await scene.OnUnloadAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error unloading scene {SceneName} during dispose", scene.GetType().Name);
-            }
+            try { await TeardownSceneAsync(scene, wasEntered: true); }
+            catch (Exception ex) { _logger.LogError(ex, "Error unloading scene {SceneName} during dispose", scene.GetType().Name); }
         }
 
         _currentSceneScope?.Dispose();
         _disposeCts.Dispose();
     }
 
-    public Task LoadSceneAsync<TScene>(
+    public void LoadScene<TScene>(
         ISceneTransition? transition = null,
         CancellationToken cancellationToken = default)
         where TScene : Scene
-        => LoadSceneAsync(typeof(TScene), transition, null, cancellationToken);
+        => LoadSceneCore(typeof(TScene), transition, null, cancellationToken);
 
-    public Task LoadSceneAsync<TScene, TLoadingScene>(
-        ISceneTransition? transition = null,
-        CancellationToken cancellationToken = default)
-        where TScene : Scene
-        where TLoadingScene : LoadingScene
-    {
-        using var tempScope = _scopeFactory.CreateScope();
-        var loadingScreen = tempScope.ServiceProvider.GetService<TLoadingScene>()
-                            ?? ActivatorUtilities.CreateInstance<TLoadingScene>(tempScope.ServiceProvider);
-
-        SetupLoadingScene(loadingScreen);
-
-        return LoadSceneAsync(typeof(TScene), transition, loadingScreen, cancellationToken);
-    }
-
-    public async Task LoadSceneAsync(
+    public void LoadScene(
         Type sceneType,
         ISceneTransition? transition = null,
         LoadingScene? loadingScreen = null,
@@ -152,22 +186,32 @@ internal sealed class SceneManager : ISceneManager, IAsyncDisposable
         if (!typeof(Scene).IsAssignableFrom(sceneType))
             throw new ArgumentException($"Type {sceneType.Name} does not inherit from Scene", nameof(sceneType));
 
-        if (_isProcessingFrame)
+        LoadSceneCore(sceneType, transition, loadingScreen, cancellationToken);
+    }
+
+    private void LoadSceneCore(
+        Type sceneType,
+        ISceneTransition? transition,
+        LoadingScene? loadingScreen,
+        CancellationToken cancellationToken)
+    {
+        if (_isDeferringTransitions || _isLoadingScene)
         {
-            _deferredSceneType = sceneType;
-            _deferredTransition = transition;
-            _deferredLoadingScreen = loadingScreen;
+            SetPendingTransition(sceneType.Name, new DeferredTransitionRequest(
+                SceneType: sceneType,
+                SceneFactory: null,
+                LoadingScreenType: null,
+                LoadingScreen: loadingScreen,
+                Transition: transition,
+                CancellationToken: cancellationToken));
             return;
         }
 
-        await LoadSceneInternalAsync(sceneType, transition, loadingScreen, cancellationToken);
+        // Task is tracked via _currentLoadTask; GameLoop observes faults through ActiveLoadTask.
+        _ = LoadSceneInternalAsync(sceneType, transition, loadingScreen, null, cancellationToken);
     }
 
-    /// <summary>
-    ///     Loads a scene using a custom factory function.
-    ///     Use when runtime data needs to be passed to the initial scene that DI alone cannot provide.
-    /// </summary>
-    public async Task LoadSceneAsync<TScene>(
+    public void LoadScene<TScene>(
         Func<IServiceProvider, TScene> sceneFactory,
         ISceneTransition? transition = null,
         LoadingScene? loadingScreen = null,
@@ -176,16 +220,34 @@ internal sealed class SceneManager : ISceneManager, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(sceneFactory);
 
-        if (_isProcessingFrame)
+        if (_isDeferringTransitions || _isLoadingScene)
         {
-            _deferredSceneFactory = sp => sceneFactory(sp);
-            _deferredSceneType = typeof(TScene);
-            _deferredTransition = transition;
-            _deferredLoadingScreen = loadingScreen;
+            SetPendingTransition(typeof(TScene).Name, new DeferredTransitionRequest(
+                SceneType: null,
+                SceneFactory: sp => sceneFactory(sp),
+                LoadingScreenType: null,
+                LoadingScreen: loadingScreen,
+                Transition: transition,
+                CancellationToken: cancellationToken));
             return;
         }
 
-        await LoadSceneInternalFactoryAsync(sp => sceneFactory(sp), transition, loadingScreen, cancellationToken);
+        // Task is tracked via _currentLoadTask; GameLoop observes faults through ActiveLoadTask.
+        _ = LoadSceneInternalFactoryAsync(sp => sceneFactory(sp), transition, loadingScreen, cancellationToken);
+    }
+
+    /// <summary>
+    /// Blocking initial scene load used exclusively by <see cref="GameApplication"/> before the game loop starts.
+    /// Not part of the public <see cref="ISceneManager"/> contract.
+    /// </summary>
+    internal Task LoadInitialSceneAsync<TScene>(
+        Func<IServiceProvider, TScene>? sceneFactory,
+        CancellationToken cancellationToken)
+        where TScene : Scene
+    {
+        return sceneFactory is null
+            ? LoadSceneInternalAsync(typeof(TScene), null, null, null, cancellationToken)
+            : LoadSceneInternalFactoryAsync(sp => sceneFactory(sp), null, null, cancellationToken);
     }
 
     public void Update(GameTime gameTime)
@@ -197,12 +259,13 @@ internal sealed class SceneManager : ISceneManager, IAsyncDisposable
             if (_activeTransition.IsComplete)
             {
                 _activeTransition = null;
-                _isTransitioning = false;
                 _logger.LogDebug("Transition completed");
             }
-
-            if (_activeTransition != null)
+            else
+            {
+                _activeLoadingScreen?.OnUpdate(gameTime);
                 return;
+            }
         }
 
         if (_activeLoadingScreen != null)
@@ -222,52 +285,169 @@ internal sealed class SceneManager : ISceneManager, IAsyncDisposable
     public void Render(GameTime gameTime)
     {
         var currentScene = CurrentScene;
+        if (_activeLoadingScreen == null && currentScene == null && _activeTransition == null)
+            return;
 
-        if (currentScene != null && currentScene.EnableAutomaticFrameManagement)
-            _renderer.BeginFrame();
+        var renderer = _services.Renderer;
+        renderer.BeginFrame();
 
+        // Loading screens replace the scene visually. When a transition is active alongside
+        // a loading screen, only the loading screen renders beneath the transition overlay.
         if (_activeLoadingScreen != null)
-        {
             _activeLoadingScreen.OnRender(gameTime);
-        }
         else if (currentScene != null)
         {
-            currentScene.World.Render(_renderer);
+            currentScene.World.Render(renderer);
             currentScene.OnRender(gameTime);
         }
 
-        if (_activeTransition != null)
-            _activeTransition.Render(_renderer);
+        _activeTransition?.Render(renderer);
 
-        if (currentScene != null && currentScene.EnableAutomaticFrameManagement)
+        renderer.ApplyPostProcessing();
+        renderer.EndFrame();
+    }
+
+    /// <summary>
+    /// Called by GameLoop at the start of each frame. Enables transition deferral for the duration of
+    /// Update/Render and for any background scene load already in flight — see <see cref="_isDeferringTransitions"/>.
+    /// </summary>
+    public void BeginFrame() => _isDeferringTransitions = true;
+
+    /// <summary>
+    /// Resets deferral and fires any queued scene transition. Called by GameLoop after Update and Render.
+    /// The active load task is exposed via <see cref="ActiveLoadTask"/> so GameLoop can track it for
+    /// faulted-load detection independently of this method's invocation.
+    /// </summary>
+    /// <remarks>
+    /// Any transition queued while a load is in flight is intentionally abandoned on shutdown.
+    /// <see cref="DisposeAsync"/> awaits the in-flight load's cancellation, and the game loop stops
+    /// calling this method once it exits — so the queued request simply goes unprocessed.
+    /// </remarks>
+    public void ProcessDeferredTransitions(CancellationToken ct)
+    {
+        if (_isLoadingScene)
+            return;
+
+        _isDeferringTransitions = false;
+
+        if (!_pendingTransition.HasValue)
+            return;
+
+        var req = _pendingTransition.Value;
+        _pendingTransition = null;
+
+        if (req.SceneFactory != null)
+            _ = ProcessDeferredFactoryAsync(req, ct);
+        else
+            _ = ProcessDeferredTypeAsync(req, ct);
+    }
+
+    /// <summary>
+    /// Fires <see cref="SceneLoadFailed"/> if a failure was recorded by the last load attempt.
+    /// Called by GameLoop immediately after <see cref="BeginFrame"/> so that any handler calling
+    /// <see cref="LoadScene{TScene}()"/> will defer correctly and be tracked as the next pending transition.
+    /// If no handler queues a recovery transition, the registered fallback scene is loaded automatically.
+    /// </summary>
+    public void RaiseSceneLoadFailedIfPending()
+    {
+        var args = _pendingSceneLoadFailure;
+        _pendingSceneLoadFailure = null;
+        if (args == null)
+            return;
+
+        try
         {
-            _renderer.ApplyPostProcessing();
-            _renderer.EndFrame();
+            SceneLoadFailed?.Invoke(this, args);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in SceneLoadFailed handler");
+        }
+
+        if (!_pendingTransition.HasValue)
+        {
+            if (_fallbackSceneConfig != null)
+            {
+                _sceneLoadErrorInfo?.Set(args);
+                _logger.LogWarning(
+                    "No recovery transition queued after SceneLoadFailed; loading fallback scene {FallbackType}",
+                    _fallbackSceneConfig.FallbackSceneType.Name);
+                LoadScene(_fallbackSceneConfig.FallbackSceneType);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Scene '{SceneName}' failed to load with no recovery transition queued and no fallback scene configured. The engine will continue with no active scene.",
+                    args.SceneName);
+            }
         }
     }
 
-    /// <summary>Called by GameLoop to mark the start of frame processing; defers scene transitions until <see cref="ProcessDeferredTransitionsAsync"/>.</summary>
-    internal void BeginFrame() => _isProcessingFrame = true;
-
-    /// <summary>Processes deferred scene transitions at frame boundaries. Called by GameLoop after Update and Render complete.</summary>
-    internal Task ProcessDeferredTransitionsAsync(CancellationToken ct)
+    private void SetPendingTransition(string newSceneName, DeferredTransitionRequest req)
     {
-        _isProcessingFrame = false;
+        if (_pendingTransition.HasValue)
+        {
+            var queued = _pendingTransition.Value.SceneType?.Name ?? "factory";
+            throw new InvalidOperationException(
+                $"LoadScene('{newSceneName}') called while a transition to '{queued}' is already pending. " +
+                "Only one deferred transition is allowed per frame. " +
+                "Coordinate competing transition sources to ensure only one fires per frame.");
+        }
 
-        if (_deferredSceneFactory == null && _deferredSceneType == null)
-            return Task.CompletedTask;
+        _pendingTransition = req;
+    }
 
-        return _deferredSceneFactory != null
-            ? ProcessDeferredFactoryAsync(ct)
-            : ProcessDeferredTypeAsync(ct);
+    private async Task RunWithLoadingScreenAsync(
+        LoadingScene? screen,
+        string logName,
+        CancellationToken ct,
+        Func<Task> body)
+    {
+        var loadingScreenEntered = false;
+
+        try
+        {
+            if (screen != null)
+            {
+                _activeLoadingScreen = screen;
+                await screen.OnLoadAsync(ct);
+                await _mainThreadDispatcher.RunOnMainThreadAsync(screen.OnEnter, CancellationToken.None);
+                loadingScreenEntered = true;
+            }
+
+            await body();
+
+            if (_activeLoadingScreen != null)
+            {
+                if (_loadingScreenMinimumDisplayMs > 0)
+                    await Task.Delay(_loadingScreenMinimumDisplayMs, ct);
+
+                var screenToTeardown = _activeLoadingScreen;
+                await _mainThreadDispatcher.RunOnMainThreadAsync(() => _activeLoadingScreen = null, CancellationToken.None);
+                await TeardownLoadingScreenAsync(screenToTeardown, wasEntered: true, ct);
+            }
+        }
+        catch
+        {
+            var screenToClean = _activeLoadingScreen;
+            if (screenToClean != null)
+            {
+                try { await TeardownLoadingScreenAsync(screenToClean, wasEntered: loadingScreenEntered); }
+                catch (Exception ex) { _logger.LogError(ex, "Error cleaning up loading screen during failed load: {SceneName}", logName); }
+            }
+            throw;
+        }
     }
 
     private Task LoadSceneInternalAsync(
         Type sceneType,
         ISceneTransition? transition,
         LoadingScene? loadingScreen,
+        Type? loadingScreenType,
         CancellationToken cancellationToken)
-        => LoadSceneInternalCoreAsync(
+    {
+        BeginSceneLoad();
+        var task = LoadSceneInternalCoreAsync(
             scope =>
             {
                 var scene = scope.ServiceProvider.GetService(sceneType) as Scene;
@@ -282,39 +462,68 @@ internal sealed class SceneManager : ISceneManager, IAsyncDisposable
                 return scene;
             },
             sceneType.Name,
-            transition, loadingScreen, cancellationToken);
+            transition, loadingScreen, loadingScreenType, cancellationToken);
+        _currentLoadTask = task;
+        return task;
+    }
 
     private Task LoadSceneInternalFactoryAsync(
         Func<IServiceProvider, Scene> sceneFactory,
         ISceneTransition? transition,
         LoadingScene? loadingScreen,
         CancellationToken cancellationToken)
-        => LoadSceneInternalCoreAsync(
+    {
+        BeginSceneLoad();
+        var task = LoadSceneInternalCoreAsync(
             scope => sceneFactory(scope.ServiceProvider)
                      ?? throw new InvalidOperationException("Scene factory returned null"),
             "factory",
-            transition, loadingScreen, cancellationToken);
+            transition, loadingScreen, null, cancellationToken);
+        _currentLoadTask = task;
+        return task;
+    }
+
+    public void LoadScene<TScene, TLoadingScene>(
+        ISceneTransition? transition = null,
+        CancellationToken cancellationToken = default)
+        where TScene : Scene
+        where TLoadingScene : LoadingScene
+    {
+        if (_isDeferringTransitions || _isLoadingScene)
+        {
+            SetPendingTransition(typeof(TScene).Name, new DeferredTransitionRequest(
+                SceneType: typeof(TScene),
+                SceneFactory: null,
+                LoadingScreenType: typeof(TLoadingScene),
+                LoadingScreen: null,
+                Transition: transition,
+                CancellationToken: cancellationToken));
+            return;
+        }
+
+        // Task is tracked via _currentLoadTask; GameLoop observes faults through ActiveLoadTask.
+        _ = LoadSceneInternalAsync(typeof(TScene), transition, null, typeof(TLoadingScene), cancellationToken);
+    }
 
     private async Task LoadSceneInternalCoreAsync(
         Func<IServiceScope, Scene> resolveScene,
         string logName,
         ISceneTransition? transition,
         LoadingScene? loadingScreen,
+        Type? loadingScreenType,
         CancellationToken cancellationToken)
     {
-        if (_isLoadingScene)
-        {
-            _logger.LogWarning(
-                "LoadScene({Scene}) ignored; a scene load is already in progress. " +
-                "Call LoadSceneAsync from within a frame (OnUpdate/OnEnter) to use deferred queuing.",
-                logName);
-            return;
-        }
+        Debug.Assert(_isLoadingScene, $"Callers must invoke {nameof(BeginSceneLoad)} before calling this method.");
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
         var ct = linkedCts.Token;
 
-        _isLoadingScene = true;
+        Scene? newScene = null;
+        var sceneEntered = false;
+
+        // Owns the DI scope for a loading screen resolved by type. Null when the caller
+        // already provided a fully constructed LoadingScene instance.
+        IServiceScope? loadingScreenScope = null;
 
         try
         {
@@ -322,169 +531,253 @@ internal sealed class SceneManager : ISceneManager, IAsyncDisposable
 
             if (transition != null)
             {
-                _isTransitioning = true;
                 _activeTransition = transition;
                 _activeTransition.Begin();
             }
 
             var oldScene = CurrentScene;
+            CurrentScene = null;
 
-            if (loadingScreen != null)
+            // Resolve the loading screen from its type here, inside the try block, so any
+            // DI or activation failure is caught and reported via SceneLoadFailed rather than
+            // silently lost in a fire-and-forget outer wrapper.
+            if (loadingScreen == null && loadingScreenType != null)
             {
-                _activeLoadingScreen = loadingScreen;
-                CurrentScene = _activeLoadingScreen;
-                await _activeLoadingScreen.OnLoadAsync(ct);
-            }
-            else
-            {
-                CurrentScene = null;
-            }
-
-            if (oldScene != null)
-            {
-                _logger.LogDebug("Exiting current scene {SceneName}", oldScene.GetType().Name);
-                oldScene.OnExit();
-                await oldScene.OnUnloadAsync(ct);
+                loadingScreenScope = _scopeFactory.CreateScope();
+                loadingScreen = (LoadingScene)(
+                    loadingScreenScope.ServiceProvider.GetService(loadingScreenType)
+                    ?? ActivatorUtilities.CreateInstance(loadingScreenScope.ServiceProvider, loadingScreenType));
+                SetupLoadingScene(loadingScreen);
             }
 
-            _activeLoadingScreen?.UpdateProgress(0.3f, "Creating scene...");
-
-            _logger.LogDebug("Creating new scene service scope");
-            _currentSceneScope?.Dispose();
-            _currentSceneScope = _scopeFactory.CreateScope();
-
-            var scene = resolveScene(_currentSceneScope);
-
-            var sceneType = scene.GetType();
-            if (!_registeredScenes.Contains(sceneType) && _warnedUnregisteredScenes.Add(sceneType))
+            await RunWithLoadingScreenAsync(loadingScreen, logName, ct, async () =>
             {
-                _logger.LogWarning(
-                    "Scene {SceneName} was not registered via builder.AddScene<T>(). " +
-                    "Consider registering it for automatic dependency validation at startup.",
-                    sceneType.Name);
-            }
+                if (oldScene != null)
+                {
+                    _logger.LogDebug("Exiting current scene {SceneName}", oldScene.GetType().Name);
+                    await TeardownSceneAsync(oldScene, wasEntered: true, ct);
+                }
 
-            SetupScene(scene, _currentSceneScope);
+                _activeLoadingScreen?.UpdateProgress(ProgressSceneCreated, "Creating scene...");
 
-            _activeLoadingScreen?.UpdateProgress(0.5f, "Loading assets...");
+                _logger.LogDebug("Creating new scene service scope");
+                _currentSceneScope?.Dispose();
+                _currentSceneScope = null;
+                _currentSceneScope = _scopeFactory.CreateScope();
 
-            await scene.OnLoadAsync(ct);
-            scene.OnEnter();
+                newScene = resolveScene(_currentSceneScope);
 
-            _activeLoadingScreen?.UpdateProgress(1.0f, "Ready!");
+                var sceneType = newScene.GetType();
+                if (!_registeredScenes.Contains(sceneType) && _warnedUnregisteredScenes.TryAdd(sceneType, 0))
+                {
+                    _logger.LogWarning(
+                        "Scene {SceneName} was not registered via builder.AddScene<T>(). " +
+                        "Consider registering it for automatic dependency validation at startup.",
+                        sceneType.Name);
+                }
 
-            if (_activeLoadingScreen != null && _loadingScreenMinimumDisplayMs > 0)
-                await Task.Delay(_loadingScreenMinimumDisplayMs, ct);
+                SetupScene(newScene, _currentSceneScope);
 
-            if (_activeLoadingScreen != null)
-                await _activeLoadingScreen.OnUnloadAsync(ct);
+                _activeLoadingScreen?.UpdateProgress(ProgressAssetsLoading, "Loading assets...");
 
-            // Swap CurrentScene and _activeLoadingScreen together on the game thread so Update/Render never observe a partial transition.
+                var activeScreen = _activeLoadingScreen;
+                var sceneProgress = activeScreen != null
+                    ? new Progress<float>(p => activeScreen.UpdateProgress(
+                        ProgressAssetsLoading + Math.Clamp(p, 0f, 1f) * (ProgressComplete - ProgressAssetsLoading)))
+                    : null;
+
+                await newScene.OnLoadAsync(ct, sceneProgress);
+
+                _activeLoadingScreen?.UpdateProgress(ProgressComplete, "Ready!");
+            });
+
+            var scope = _currentSceneScope!;
             await _mainThreadDispatcher.RunOnMainThreadAsync(() =>
             {
-                CurrentScene = scene;
-                _activeLoadingScreen = null;
-                _logger.LogInformation("Scene loaded successfully: {SceneName}", scene.Name);
+                RegisterCameraForScene(scope);
+                CurrentScene = newScene;
+                try
+                {
+                    newScene!.OnEnter();
+                    sceneEntered = true;
+                    _logger.LogInformation("Scene loaded successfully: {SceneName}", newScene.Name);
+                }
+                catch
+                {
+                    _cameraManager.RemoveCamera(ICameraManager.MainCameraName);
+                    _cameraManager.MainCamera = null;
+                    throw;
+                }
             }, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load scene: {SceneName}", logName);
+            // Distinguish deliberate cancellations from genuine load failures. Cancellations
+            // triggered by the caller's token or by disposal are expected and must not surface
+            // as SceneLoadFailed — that event is reserved for unexpected errors.
+            var isCancellation = ex is OperationCanceledException
+                && (cancellationToken.IsCancellationRequested || _disposeCts.IsCancellationRequested);
+
+            if (isCancellation)
+                _logger.LogDebug("Scene load cancelled: {SceneName}", logName);
+            else
+                _logger.LogError(ex, "Failed to load scene: {SceneName}", logName);
+
+            if (newScene != null)
+            {
+                // Use CancellationToken.None for error-path cleanup so it always completes.
+                try { await TeardownSceneAsync(newScene, sceneEntered); }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogError(cleanupEx, "Error cleaning up partially-loaded scene: {SceneName}", logName);
+                }
+            }
 
             await _mainThreadDispatcher.RunOnMainThreadAsync(() =>
             {
                 _activeLoadingScreen = null;
+                _activeTransition = null;
                 CurrentScene = null;
             }, CancellationToken.None);
 
             _currentSceneScope?.Dispose();
             _currentSceneScope = null;
+
+            if (!isCancellation)
+                _pendingSceneLoadFailure = new SceneLoadFailedEventArgs(logName, ex);
             throw;
         }
         finally
         {
-            await _mainThreadDispatcher.RunOnMainThreadAsync(() =>
-            {
-                _isLoadingScene = false;
-                _isTransitioning = false;
-                _activeTransition = null;
-            }, CancellationToken.None);
+            // Dispose the loading screen scope after the loading screen has been fully torn down
+            // (OnExit + OnUnloadAsync are called in both the success and catch paths above).
+            loadingScreenScope?.Dispose();
+
+            await _mainThreadDispatcher.RunOnMainThreadAsync(() => { _isLoadingScene = false; },
+                CancellationToken.None);
         }
     }
 
-    private async Task ProcessDeferredFactoryAsync(CancellationToken ct)
+    private void BeginSceneLoad()
+    {
+        if (_isLoadingScene)
+            throw new InvalidOperationException(
+                $"Cannot start a new scene load while one is already in progress. " +
+                $"Under normal usage this guard is unreachable: all {nameof(LoadScene)} overloads " +
+                "defer automatically when a load is in flight.");
+        _isLoadingScene = true;
+    }
+
+    private async Task ProcessDeferredFactoryAsync(DeferredTransitionRequest req, CancellationToken loopToken)
     {
         _logger.LogDebug("Processing deferred scene transition using factory");
+        Task? loadTask = null;
         try
         {
-            await LoadSceneInternalFactoryAsync(_deferredSceneFactory!, _deferredTransition, _deferredLoadingScreen, ct);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(req.CancellationToken, loopToken);
+            loadTask = LoadSceneInternalFactoryAsync(req.SceneFactory!, req.Transition, req.LoadingScreen, linkedCts.Token);
+            await loadTask;
         }
-        finally
+        catch (OperationCanceledException) when (loopToken.IsCancellationRequested) { }
+        // Guard against double-reporting: LoadSceneInternalCoreAsync sets _pendingSceneLoadFailure before
+        // rethrowing, and GameLoop's fault-detection path raises SceneLoadFailed from there.
+        // loadTask is captured locally so the check is stable regardless of _currentLoadTask reassignment.
+        catch (Exception ex) when (loadTask?.IsFaulted != true)
         {
-            _deferredSceneFactory = null;
-            _deferredSceneType = null;
-            _deferredTransition = null;
-            _deferredLoadingScreen = null;
+            _logger.LogError(ex, "Unhandled exception in deferred factory scene transition");
         }
     }
 
-    private async Task ProcessDeferredTypeAsync(CancellationToken ct)
+    private async Task ProcessDeferredTypeAsync(DeferredTransitionRequest req, CancellationToken loopToken)
     {
-        _logger.LogDebug("Processing deferred scene transition to {SceneName}", _deferredSceneType!.Name);
+        _logger.LogDebug("Processing deferred scene transition to {SceneName}", req.SceneType!.Name);
+        Task? loadTask = null;
         try
         {
-            await LoadSceneInternalAsync(_deferredSceneType, _deferredTransition, _deferredLoadingScreen, ct);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(req.CancellationToken, loopToken);
+            loadTask = LoadSceneInternalAsync(req.SceneType!, req.Transition, req.LoadingScreen, req.LoadingScreenType, linkedCts.Token);
+            await loadTask;
         }
-        finally
+        catch (OperationCanceledException) when (loopToken.IsCancellationRequested) { }
+        // Guard against double-reporting: LoadSceneInternalCoreAsync sets _pendingSceneLoadFailure before
+        // rethrowing, and GameLoop's fault-detection path raises SceneLoadFailed from there.
+        // loadTask is captured locally so the check is stable regardless of _currentLoadTask reassignment.
+        catch (Exception ex) when (loadTask?.IsFaulted != true)
         {
-            _deferredSceneType = null;
-            _deferredTransition = null;
-            _deferredLoadingScreen = null;
+            _logger.LogError(ex, "Unhandled exception in deferred scene transition to {SceneName}", req.SceneType!.Name);
         }
     }
 
-    private void SetupLoadingScene(LoadingScene loadingScene)
+    private async Task TeardownSceneAsync(SceneBase scene, bool wasEntered, CancellationToken ct = default)
     {
-        loadingScene.Logger = _loggerFactory.CreateLogger(loadingScene.GetType());
-        loadingScene.Renderer = _renderer;
-        loadingScene.Input = _inputContext;
-        loadingScene.Audio = _audioService;
-        loadingScene.Game = _gameContext;
+        if (wasEntered)
+            await _mainThreadDispatcher.RunOnMainThreadAsync(() =>
+            {
+                scene.OnExit();
+                scene.BeginUnload();
+            }, CancellationToken.None);
+        else
+            scene.BeginUnload();
+
+        await scene.OnUnloadAsync(ct);
     }
 
-    /// <remarks>
-    ///     IMPORTANT: New default systems must be added here; they are not discovered automatically.
-    ///     Disable per-scene via <c>world.GetSystem&lt;T&gt;()!.IsEnabled = false</c> in <c>OnEnter()</c>,
-    ///     or project-wide via <c>builder.ConfigureScene(...)</c>.
-    /// </remarks>
+    private async Task TeardownLoadingScreenAsync(LoadingScene screen, bool wasEntered = true, CancellationToken ct = default)
+    {
+        await _mainThreadDispatcher.RunOnMainThreadAsync(() =>
+        {
+            if (wasEntered)
+                screen.OnExit();
+            screen.BeginUnload();
+        }, CancellationToken.None);
+
+        await screen.OnUnloadAsync(ct);
+    }
+
+    private void RegisterCameraForScene(IServiceScope scope)
+    {
+        var camera = scope.ServiceProvider.GetRequiredService<ICamera>();
+        _cameraManager.RegisterCamera(ICameraManager.MainCameraName, camera);
+        if (camera is ITrackableCamera trackable)
+            trackable.TrackRegistration(_cameraManager, ICameraManager.MainCameraName);
+        _cameraManager.MainCamera = camera;
+    }
+
+    private void SetupSceneBase(SceneBase scene)
+    {
+        scene.Logger = _services.LoggerFactory.CreateLogger(scene.GetType());
+        scene.Renderer = _services.Renderer;
+        scene.Input = _services.InputContext;
+        scene.Audio = _services.AudioService;
+        scene.Game = _services.GameContext;
+    }
+
+    private void SetupLoadingScene(LoadingScene loadingScene) => SetupSceneBase(loadingScene);
+
     private void SetupScene(Scene scene, IServiceScope scope)
     {
-        scene.Logger = _loggerFactory.CreateLogger(scene.GetType());
+        SetupSceneBase(scene);
 
         var world = scope.ServiceProvider.GetRequiredService<IEntityWorld>();
 
-        world.AddSystem<SpriteRenderingSystem>();
-        world.AddSystem<ParticleSystem>();
-        world.AddSystem<VelocitySystem>();
-        world.AddSystem<CollisionDetectionSystem>();
-        world.AddSystem<AudioSystem>();
-        world.AddSystem<CameraSystem>();
-        world.AddSystem<DebugRenderer>(debug => debug.IsEnabled = false);
+        foreach (var (type, register) in DefaultSystems)
+        {
+            if (_sceneWorldConfig?.IsExcluded(type) != true)
+                register(world);
+        }
 
         _sceneWorldConfig?.Apply(world);
 
         _logger.LogDebug("Default engine systems added to world for scene: {SceneName}", scene.GetType().Name);
 
-        var camera = scope.ServiceProvider.GetRequiredService<ICamera>();
-        _cameraManager.RegisterCamera(MainCameraKey, camera);
-        if (camera is ITrackableCamera trackable)
-            trackable.TrackRegistration(_cameraManager, MainCameraKey);
-        _cameraManager.MainCamera = camera;
-
         scene.World = world;
-        scene.Renderer = _renderer;
-        scene.Input = _inputContext;
-        scene.Audio = _audioService;
-        scene.Game = _gameContext;
     }
+
+    private readonly record struct DeferredTransitionRequest(
+        Type? SceneType,
+        Func<IServiceProvider, Scene>? SceneFactory,
+        Type? LoadingScreenType,
+        LoadingScene? LoadingScreen,
+        ISceneTransition? Transition,
+        CancellationToken CancellationToken);
 }

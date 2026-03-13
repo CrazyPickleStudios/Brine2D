@@ -103,7 +103,8 @@ public class Brine2DOptionsTests
 
         var ex = Assert.Throws<GameConfigurationException>(options.Validate);
 
-        Assert.Contains("Window.Width", ex.Message);
+        Assert.Contains("Window", ex.Message);
+        Assert.Contains("Width", ex.Message);
     }
 
     [Fact]

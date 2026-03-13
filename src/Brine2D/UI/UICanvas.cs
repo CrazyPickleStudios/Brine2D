@@ -72,7 +72,6 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Update active tooltip
         _activeTooltip?.Update(deltaTime);
     }
 
@@ -89,7 +88,6 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Render active tooltip on top of everything
         if (_activeTooltip != null && _activeTooltip.Visible)
         {
             _activeTooltip.Render(renderer);
@@ -103,16 +101,13 @@ public class UICanvas : IInputLayer
     /// </summary>
     public bool ProcessKeyboardInput(IInputContext input)
     {
-        // If text input is focused, consume ALL keyboard input
         if (_focusedTextInput != null && _focusedTextInput.IsFocused)
         {
             HandleTextInputKeyboard();
-            return true; // Consume input - game won't see keyboard events
+            return true;
         }
 
-        // Add other keyboard-consuming UI here (dropdowns, menus, etc.)
-
-        return false; // Don't consume - game can see keyboard events
+        return false;
     }
 
     /// <summary>
@@ -131,8 +126,7 @@ public class UICanvas : IInputLayer
         HandleDialogInput();
         HandleTooltips(input);
 
-        // Consume mouse input if UI is actively using it
-        bool isInteractingWithUI = 
+        bool isInteractingWithUI =
             _hoveredButton != null || 
             _pressedButton != null || 
             _activeSlider?.IsDragging == true ||
@@ -278,7 +272,6 @@ public class UICanvas : IInputLayer
     {
         var mouseScreenPos = _input.MousePosition;
 
-        // Update hover state
         if (_hoveredCheckbox != null)
         {
             _hoveredCheckbox.SetHovered(false);
@@ -298,7 +291,6 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Handle clicks
         if (_input.IsMouseButtonPressed(MouseButton.Left))
         {
             if (_hoveredCheckbox != null)
@@ -312,18 +304,15 @@ public class UICanvas : IInputLayer
     {
         var mouseScreenPos = _input.MousePosition;
 
-        // Update hover state for dropdown items
         if (_activeDropdown != null && _activeDropdown.IsExpanded)
         {
             _activeDropdown.UpdateHover(mouseScreenPos);
         }
 
-        // Handle clicks
         if (_input.IsMouseButtonPressed(MouseButton.Left))
         {
             UIDropdown? clickedDropdown = null;
 
-            // Check if clicking on a dropdown
             foreach (var component in _components)
             {
                 if (component is UIDropdown dropdown && dropdown.Enabled && dropdown.Visible)
@@ -338,17 +327,13 @@ public class UICanvas : IInputLayer
 
             if (clickedDropdown != null)
             {
-                // Check if clicking in the expanded list area
                 if (clickedDropdown.IsExpanded && 
                     mouseScreenPos.Y > clickedDropdown.Position.Y + clickedDropdown.Size.Y)
                 {
-                    // Clicking on an item in the list
                     clickedDropdown.SelectItem(mouseScreenPos);
                 }
                 else
                 {
-                    // Clicking on the dropdown header - toggle
-                    // Close other dropdowns first
                     if (_activeDropdown != null && _activeDropdown != clickedDropdown)
                     {
                         _activeDropdown.Close();
@@ -360,7 +345,6 @@ public class UICanvas : IInputLayer
             }
             else
             {
-                // Clicked outside - close active dropdown
                 if (_activeDropdown != null)
                 {
                     _activeDropdown.Close();
@@ -374,7 +358,6 @@ public class UICanvas : IInputLayer
     {
         var mouseScreenPos = _input.MousePosition;
 
-        // Update hover state
         if (_hoveredRadioButton != null)
         {
             _hoveredRadioButton.SetHovered(false);
@@ -394,7 +377,6 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Handle clicks
         if (_input.IsMouseButtonPressed(MouseButton.Left))
         {
             if (_hoveredRadioButton != null)
@@ -408,7 +390,6 @@ public class UICanvas : IInputLayer
     {
         var mouseScreenPos = _input.MousePosition;
 
-        // Update hover state
         _hoveredTabContainer = null;
 
         foreach (var component in _components)
@@ -424,7 +405,6 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Handle clicks
         if (_input.IsMouseButtonPressed(MouseButton.Left))
         {
             if (_hoveredTabContainer != null)
@@ -439,7 +419,6 @@ public class UICanvas : IInputLayer
         var mouseScreenPos = _input.MousePosition;
         var scrollDelta = _input.ScrollWheelDelta;
 
-        // Find scroll view under mouse
         _activeScrollView = null;
         foreach (var component in _components)
         {
@@ -453,7 +432,6 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Handle scroll wheel
         if (_activeScrollView != null && Math.Abs(scrollDelta) > 0.001f)
         {
             _activeScrollView.HandleScroll(scrollDelta);
@@ -464,7 +442,6 @@ public class UICanvas : IInputLayer
     {
         var mouseScreenPos = _input.MousePosition;
 
-        // Find topmost dialog
         for (int i = _components.Count - 1; i >= 0; i--)
         {
             if (_components[i] is UIDialog dialog && dialog.Enabled && dialog.Visible)
@@ -474,7 +451,6 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Process dialog button input
         if (_activeDialog != null)
         {
             bool isPressed = _input.IsMouseButtonPressed(MouseButton.Left);
@@ -489,7 +465,6 @@ public class UICanvas : IInputLayer
         var mousePos = input.MousePosition;
         IUIComponent? hoveredComponent = null;
 
-        // Find which component is hovered (check in reverse order for top-most)
         for (int i = _components.Count - 1; i >= 0; i--)
         {
             var component = _components[i];
@@ -500,12 +475,10 @@ public class UICanvas : IInputLayer
             }
         }
 
-        // Update tooltip state
         if (hoveredComponent != null && hoveredComponent.Tooltip != null)
         {
             if (_tooltipOwner != hoveredComponent)
             {
-                // New component hovered
                 _activeTooltip?.OnHoverEnd();
                 _activeTooltip = hoveredComponent.Tooltip;
                 _tooltipOwner = hoveredComponent;
@@ -513,13 +486,11 @@ public class UICanvas : IInputLayer
             }
             else
             {
-                // Same component, update position
                 _activeTooltip?.UpdatePosition(mousePos);
             }
         }
         else
         {
-            // No component hovered
             if (_activeTooltip != null)
             {
                 _activeTooltip.OnHoverEnd();

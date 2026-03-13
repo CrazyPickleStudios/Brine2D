@@ -26,7 +26,7 @@ namespace FeatureDemos.Scenes.Rendering
             _sceneManager = sceneManager;
         }
 
-        protected override Task OnLoadAsync(CancellationToken cancellationToken)
+        protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
         {
             Logger.LogInformation("Loading Scissor Rect Demo Scene");
             Renderer.ClearColor = new Color(30, 30, 40);
@@ -52,7 +52,7 @@ namespace FeatureDemos.Scenes.Rendering
 
             // Return to menu
             if (_input.IsKeyPressed(Key.Escape))
-                _ = _sceneManager.LoadSceneAsync<MainMenuScene>();
+                _sceneManager.LoadScene<MainMenuScene>();
         }
 
         protected override void OnRender(GameTime gameTime)  

@@ -97,24 +97,50 @@ public class CollisionSystem
 
         if (_useSpatialPartitioning && _spatialGrid != null)
         {
-            // Use spatial partitioning for better performance
             candidates = _spatialGrid.Query(shape);
         }
         else
         {
-            // Brute force - check all shapes
             candidates = _shapes.Where(s => s != shape && s.IsEnabled);
         }
 
         foreach (var other in candidates)
         {
             if (shape.Intersects(other))
-            {
                 collisions.Add(other);
-            }
         }
 
         return collisions;
+    }
+
+    /// <summary>
+    /// Fills <paramref name="results"/> with all shapes that collide with <paramref name="shape"/>.
+    /// Clears the list before writing. Use this overload in hot paths to avoid
+    /// allocating a new <see cref="List{T}"/> on every call.
+    /// </summary>
+    public void GetCollisions(CollisionShape shape, List<CollisionShape> results)
+    {
+        results.Clear();
+
+        if (!shape.IsEnabled)
+            return;
+
+        if (_useSpatialPartitioning && _spatialGrid != null)
+        {
+            foreach (var other in _spatialGrid.Query(shape))
+            {
+                if (shape.Intersects(other))
+                    results.Add(other);
+            }
+        }
+        else
+        {
+            foreach (var other in _shapes)
+            {
+                if (other != shape && other.IsEnabled && shape.Intersects(other))
+                    results.Add(other);
+            }
+        }
     }
 
     /// <summary>
@@ -147,30 +173,73 @@ public class CollisionSystem
                 continue;
 
             if (area.Intersects(shape.GetBounds()))
-            {
                 results.Add(shape);
-            }
         }
 
         return results;
     }
 
     /// <summary>
+    /// Fills <paramref name="results"/> with all shapes within <paramref name="area"/>.
+    /// Clears the list before writing. Use this overload in hot paths to avoid
+    /// allocating a new <see cref="List{T}"/> on every call.
+    /// </summary>
+    public void QueryArea(Rectangle area, List<CollisionShape> results)
+    {
+        results.Clear();
+
+        foreach (var shape in _shapes)
+        {
+            if (shape.IsEnabled && area.Intersects(shape.GetBounds()))
+                results.Add(shape);
+        }
+    }
+
+    /// <summary>
     /// Tries to get the first collision with the given shape.
+    /// Short-circuits on the first hit — does not allocate a list.
     /// </summary>
     public bool TryGetFirstCollision(CollisionShape shape, out CollisionShape? collision)
     {
-        collision = GetCollisions(shape).FirstOrDefault();
-        return collision != null;
+        if (!shape.IsEnabled)
+        {
+            collision = null;
+            return false;
+        }
+
+        if (_useSpatialPartitioning && _spatialGrid != null)
+        {
+            foreach (var other in _spatialGrid.Query(shape))
+            {
+                if (shape.Intersects(other))
+                {
+                    collision = other;
+                    return true;
+                }
+            }
+        }
+        else
+        {
+            foreach (var other in _shapes)
+            {
+                if (other != shape && other.IsEnabled && shape.Intersects(other))
+                {
+                    collision = other;
+                    return true;
+                }
+            }
+        }
+
+        collision = null;
+        return false;
     }
 
     /// <summary>
     /// Gets all collisions with a specific tag (requires ColliderComponent integration).
+    /// Returns an empty collection until shape-to-entity mapping is implemented.
     /// </summary>
-    public List<CollisionShape> GetCollisionsByTag(CollisionShape shape, string tag)
+    public IReadOnlyList<CollisionShape> GetCollisionsByTag(CollisionShape shape, string tag)
     {
-        // This would require tracking shape->entity mapping
-        // Consider adding a Dictionary<CollisionShape, Entity> lookup
-        return new List<CollisionShape>();
+        return Array.Empty<CollisionShape>();
     }
 }

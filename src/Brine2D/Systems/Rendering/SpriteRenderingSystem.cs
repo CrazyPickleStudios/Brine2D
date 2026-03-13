@@ -1,9 +1,10 @@
 ﻿using Brine2D.ECS;
 using Brine2D.ECS.Components;
-using Brine2D.Rendering;
-using System.Numerics;
+using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
 using Brine2D.Engine;
+using Brine2D.Rendering;
+using System.Numerics;
 
 namespace Brine2D.Systems.Rendering;
 
@@ -26,6 +27,7 @@ public class SpriteRenderingSystem : RenderSystemBase
     private int _lastRenderedCount = 0;
     private int _lastTotalCount = 0;
 
+    private CachedEntityQuery<SpriteComponent>? _spriteQuery;
     private List<(Entity Entity, SpriteComponent Sprite)> _cachedSprites = new();
 
     public SpriteRenderingSystem(
@@ -76,17 +78,13 @@ public class SpriteRenderingSystem : RenderSystemBase
     /// </summary>
     public override void Render(IEntityWorld world, IRenderer renderer)
     {
+        _spriteQuery ??= world.CreateCachedQuery<SpriteComponent>().Build();
         _cachedSprites.Clear();
-        
-        var sprites = world.GetEntitiesWithComponent<SpriteComponent>();
-        
-        foreach (var entity in sprites)
+
+        foreach (var (entity, sprite) in _spriteQuery)
         {
-            var sprite = entity.GetComponent<SpriteComponent>();
-            if (sprite != null && sprite.Texture != null)
-            {
+            if (sprite.Texture != null)
                 _cachedSprites.Add((entity, sprite));
-            }
         }
         
         _lastTotalCount = _cachedSprites.Count;

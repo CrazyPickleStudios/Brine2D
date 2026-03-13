@@ -25,3 +25,14 @@ public record WindowFocusGainedEvent();
 /// </summary>
 public record WindowFocusLostEvent();
 
+/// <summary>
+/// Raised when the window is hidden from the user (e.g., system sleep, lock screen, or display off).
+/// Rendering is suspended until <see cref="WindowShownEvent"/> is received.
+/// </summary>
+public record WindowHiddenEvent();
+
+/// <summary>
+/// Raised when the window becomes visible again after being hidden.
+/// </summary>
+public record WindowShownEvent();
+

@@ -1,6 +1,7 @@
 using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS;
+using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
 using Brine2D.Input;
 using Brine2D.Systems.Physics;
@@ -13,6 +14,7 @@ namespace Brine2D.Systems.Input;
 public class PlayerControllerSystem : UpdateSystemBase
 {
     private readonly IInputContext _input;
+    private CachedEntityQuery<PlayerControllerComponent>? _playerQuery;
 
     public PlayerControllerSystem(IInputContext input)
     {
@@ -21,14 +23,13 @@ public class PlayerControllerSystem : UpdateSystemBase
 
     public override void Update(IEntityWorld world, GameTime gameTime)
     {
-        var players = world.GetEntitiesWithComponent<PlayerControllerComponent>(); 
+        _playerQuery ??= world.CreateCachedQuery<PlayerControllerComponent>().Build();
 
-        foreach (var entity in players)
+        foreach (var (entity, controller) in _playerQuery)
         {
-            var controller = entity.GetComponent<PlayerControllerComponent>();
             var velocity = entity.GetComponent<VelocityComponent>();
 
-            if (controller == null || !controller.IsEnabled)
+            if (!controller.IsEnabled)
                 continue;
 
             // Get input direction based on input mode

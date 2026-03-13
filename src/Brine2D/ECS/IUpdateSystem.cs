@@ -15,25 +15,16 @@ public interface IUpdateSystem : ISystem
 {
     /// <summary>
     /// Determines the order in which this system executes during the update phase.
-    /// Lower values execute first. Default is 0.
+    /// Lower values execute first. Default is 0 (<see cref="SystemUpdateOrder.Update"/>).
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Use <see cref="SystemUpdateOrder"/> constants for common phases:
-    /// - Input systems: -100
-    /// - Physics systems: 100
-    /// - Collision systems: 200
-    /// - Late update systems: 900
-    /// </para>
-    /// <para>
-    /// You can use custom values or offsets:
-    /// <code>
-    /// public int UpdateOrder => SystemUpdateOrder.Physics + 10; // Right after physics
-    /// </code>
-    /// </para>
+    /// This property must return a constant value. <see cref="EntityWorld"/> sorts systems
+    /// once after registration; a value that changes at runtime will not trigger a re-sort.
+    /// Use <see cref="SystemUpdateOrder"/> constants for common phases, or add offsets for
+    /// fine-grained control (e.g., <c>SystemUpdateOrder.Physics + 10</c>).
     /// </remarks>
-    int UpdateOrder => 0; // Default implementation
-    
+    int UpdateOrder => SystemUpdateOrder.Update;
+
     /// <summary>
     /// Called every frame to update this system.
     /// </summary>

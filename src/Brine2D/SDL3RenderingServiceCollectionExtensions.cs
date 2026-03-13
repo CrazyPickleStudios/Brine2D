@@ -1,10 +1,9 @@
 ﻿using Brine2D.Common;
-using Brine2D.Events;
 using Brine2D.Rendering;
 using Brine2D.Rendering.SDL.PostProcessing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 
 namespace Brine2D;
 
@@ -20,31 +19,17 @@ public static class SDL3RenderingServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Hosted service: SDL.Init() runs in StartAsync (before any SDL usage).
+        // SDL.Quit() runs in Dispose() (LIFO, after all SDL-dependent singletons).
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SDL3Lifecycle>());
+
         services.TryAddSingleton<IFontLoader, SDL3FontLoader>();
         services.TryAddSingleton<IShaderLoader, SDL3ShaderLoader>();
 
-        services.TryAddSingleton<IRenderer>(provider =>
-        {
-            var renderingOptions = provider.GetRequiredService<RenderingOptions>();
-            var windowOptions = provider.GetRequiredService<WindowOptions>();
-            var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
-            var fontLoader = provider.GetService<IFontLoader>();
-            var eventBus = provider.GetService<IEventBus>();
-            var postProcessingOptions = provider.GetService<PostProcessingOptions>();
-            var postProcessPipeline = provider.GetService<SDL3PostProcessPipeline>();
+        // SDL3Renderer's optional ctor parameters use default values; the DI container
+        // injects registered services or falls back to null for unregistered ones.
+        services.TryAddSingleton<IRenderer, SDL3Renderer>();
 
-            return new SDL3Renderer(
-                provider.GetRequiredService<ILogger<SDL3Renderer>>(),
-                loggerFactory,
-                renderingOptions,
-                windowOptions,
-                postProcessingOptions,
-                postProcessPipeline,
-                fontLoader,
-                eventBus);
-        });
-
-        // Resolved by casting the already-registered IRenderer singleton — no separate instance.
         services.TryAddSingleton<ISDL3WindowProvider>(sp =>
             (ISDL3WindowProvider)sp.GetRequiredService<IRenderer>());
 

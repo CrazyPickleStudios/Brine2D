@@ -71,10 +71,11 @@ public sealed class TextureAtlas : ITextureAtlas
     {
         if (_disposed) return;
 
+        var count = RegionCount;
         Texture?.Dispose();
         _regions.Clear();
         _disposed = true;
 
-        _logger.LogDebug("Disposed texture atlas '{AtlasName}' with {RegionCount} regions", Name, RegionCount);
+        _logger.LogDebug("Disposed texture atlas '{AtlasName}' with {RegionCount} regions", Name, count);
     }
 }

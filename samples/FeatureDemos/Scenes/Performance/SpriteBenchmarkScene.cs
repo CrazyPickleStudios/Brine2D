@@ -42,7 +42,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         _camera = camera;
     }
 
-    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== Sprite Rendering Benchmark ===");
         Logger.LogInformation("Controls:");

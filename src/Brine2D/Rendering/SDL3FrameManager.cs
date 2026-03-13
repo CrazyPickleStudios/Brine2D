@@ -7,13 +7,17 @@ namespace Brine2D.Rendering;
 /// </summary>
 internal sealed class SDL3FrameManager
 {
+    private const int MaxInFlightFrames = 2;
+
     private readonly ILogger<SDL3FrameManager> _logger;
-    
+
     private nint _device;
     private nint _window;
     private nint _commandBuffer;
     private nint _swapchainTexture;
-    
+    private readonly nint[] _inFlightFences = new nint[MaxInFlightFrames];
+    private int _fenceSlot;
+
     public nint CommandBuffer => _commandBuffer;
     public nint SwapchainTexture => _swapchainTexture;
     public bool HasActiveFrame => _commandBuffer != nint.Zero && _swapchainTexture != nint.Zero;
@@ -24,10 +28,20 @@ internal sealed class SDL3FrameManager
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
     
-    public void Initialize(nint device, nint window)
+    public void Initialize(nint device, nint window, bool vsync)
     {
         _device = device;
         _window = window;
+
+        var presentMode = vsync
+            ? SDL3.SDL.GPUPresentMode.VSync
+            : SDL3.SDL.GPUPresentMode.Immediate;
+
+        if (!SDL3.SDL.SetGPUSwapchainParameters(_device, _window, SDL3.SDL.GPUSwapchainComposition.SDR, presentMode))
+        {
+            var error = SDL3.SDL.GetError();
+            _logger.LogWarning("Failed to set swapchain parameters ({PresentMode}): {Error}", presentMode, error);
+        }
     }
     
     /// <summary>
@@ -36,8 +50,11 @@ internal sealed class SDL3FrameManager
     /// <returns>True if frame resources were successfully acquired, false otherwise.</returns>
     public bool BeginFrame()
     {
+        if (_device == nint.Zero || _window == nint.Zero)
+            return false;
+
         IsFirstFlush = true;
-        
+
         _commandBuffer = SDL3.SDL.AcquireGPUCommandBuffer(_device);
         if (_commandBuffer == nint.Zero)
         {
@@ -49,9 +66,16 @@ internal sealed class SDL3FrameManager
         if (!SDL3.SDL.AcquireGPUSwapchainTexture(_commandBuffer, _window, out _swapchainTexture, out _, out _))
         {
             _logger.LogDebug("Failed to acquire swapchain texture (window may be minimized)");
-            SDL3.SDL.CancelGPUCommandBuffer(_commandBuffer);
+            SDL3.SDL.SubmitGPUCommandBuffer(_commandBuffer);
             _commandBuffer = nint.Zero;
             _swapchainTexture = nint.Zero;
+            return false;
+        }
+
+        if (_swapchainTexture == nint.Zero)
+        {
+            SDL3.SDL.SubmitGPUCommandBuffer(_commandBuffer);
+            _commandBuffer = nint.Zero;
             return false;
         }
 
@@ -110,21 +134,49 @@ internal sealed class SDL3FrameManager
     }
     
     /// <summary>
-    /// End the current frame and submit the command buffer for presentation.
+    /// End the current frame, submit the command buffer, and block until the
+    /// fence from <see cref="MaxInFlightFrames"/> frames ago is signaled.
+    /// This bounds the CPU to at most <see cref="MaxInFlightFrames"/> frames ahead
+    /// of the GPU regardless of VSync or frame-rate cap settings.
     /// </summary>
     public void EndFrame()
     {
-        if (!HasActiveFrame)
+        if (_commandBuffer == nint.Zero)
         {
+            _swapchainTexture = nint.Zero;
             return;
         }
-        
-        if (_commandBuffer != nint.Zero)
+
+        var fence = SDL3.SDL.SubmitGPUCommandBufferAndAcquireFence(_commandBuffer);
+        _commandBuffer = nint.Zero;
+        _swapchainTexture = nint.Zero;
+
+        var oldFence = _inFlightFences[_fenceSlot];
+        if (oldFence != nint.Zero)
         {
-            SDL3.SDL.SubmitGPUCommandBuffer(_commandBuffer);
-            _commandBuffer = nint.Zero;
+            var fenceArray = new nint[] { oldFence };
+            SDL3.SDL.WaitForGPUFences(_device, true, fenceArray, (uint)fenceArray.Length);
+            SDL3.SDL.ReleaseGPUFence(_device, oldFence);
         }
 
-        _swapchainTexture = nint.Zero;
+        _inFlightFences[_fenceSlot] = fence;
+        _fenceSlot = (_fenceSlot + 1) % MaxInFlightFrames;
+    }
+
+    /// <summary>
+    /// Releases any fence handles still held in the in-flight circular buffer.
+    /// Call this after <see cref="SDL3.SDL.WaitForGPUIdle"/> at shutdown so all
+    /// fences are already signaled before releasing them.
+    /// </summary>
+    public void ReleaseInFlightFences()
+    {
+        for (int i = 0; i < MaxInFlightFrames; i++)
+        {
+            if (_inFlightFences[i] != nint.Zero)
+            {
+                SDL3.SDL.ReleaseGPUFence(_device, _inFlightFences[i]);
+                _inFlightFences[i] = nint.Zero;
+            }
+        }
     }
 }

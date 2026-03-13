@@ -80,6 +80,16 @@ public class CachedEntityQuery<T1> : ICachedQuery, IDisposable where T1 : Compon
         }
     }
 
+    /// <summary>
+    /// Returns a struct enumerator over the cached (Entity, Component) pairs.
+    /// Use with foreach for zero-allocation iteration; no delegate or closure is created.
+    /// </summary>
+    public List<(Entity Entity, T1 Component)>.Enumerator GetEnumerator()
+    {
+        EnsureCache();
+        return (_cachedPairs ??= new()).GetEnumerator();
+    }
+
     /// <summary>Forces the cache to refresh on the next execution.</summary>
     public void Invalidate() => _isDirty = true;
 
@@ -215,6 +225,16 @@ public class CachedEntityQuery<T1, T2> : ICachedQuery, IDisposable
                 action(entity, c1, c2);
             }
         }
+    }
+
+    /// <summary>
+    /// Returns a struct enumerator over the cached (Entity, C1, C2) tuples.
+    /// Use with foreach for zero-allocation iteration; no delegate or closure is created.
+    /// </summary>
+    public List<(Entity Entity, T1 C1, T2 C2)>.Enumerator GetEnumerator()
+    {
+        EnsureCache();
+        return (_cachedPairs ??= new()).GetEnumerator();
     }
 
     public void Invalidate() => _isDirty = true;

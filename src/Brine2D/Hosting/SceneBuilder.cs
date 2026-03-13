@@ -43,7 +43,7 @@ public sealed class SceneBuilder
         }
 
         foreach (var sceneType in sceneTypes)
-            _appBuilder.AddScene(sceneType);
+            _appBuilder.AddScene(sceneType, skipTypeCheck: true);
 
         return this;
     }

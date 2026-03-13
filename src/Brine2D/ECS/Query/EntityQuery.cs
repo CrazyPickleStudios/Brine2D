@@ -215,53 +215,13 @@ public class EntityQuery
 
     /// <summary>
     /// Executes the query and returns matching entities.
-    /// Snapshots the entity list for consistency.
     /// </summary>
     public IEnumerable<Entity> Execute()
     {
-        var snapshot = _world.Entities.ToList();
+        if (_orderBySelector == null && !_skipCount.HasValue && !_takeCount.HasValue)
+            return ExecuteCore();
 
-        IEnumerable<Entity> results = snapshot
-            .Where(entity => entity != null)
-            .Where(entity =>
-            {
-                if (_onlyActive && !entity.IsActive) return false;
-                if (_withComponents.Any(type => !entity.HasComponent(type))) return false;
-                if (_withoutComponents.Any(type => entity.HasComponent(type))) return false;
-
-                foreach (var kvp in _componentFilters)
-                {
-                    var component = entity.GetAllComponents()
-                        .FirstOrDefault(c => kvp.Key.IsInstanceOfType(c));
-                    if (component == null || !kvp.Value(component)) return false;
-                }
-
-                if (_withTags.Any(tag => !entity.Tags.Contains(tag))) return false;
-                if (_withoutTags.Any(tag => entity.Tags.Contains(tag))) return false;
-                if (_withAllTags.Count > 0 && !_withAllTags.All(tag => entity.Tags.Contains(tag))) return false;
-                if (_withAnyTags.Count > 0 && !_withAnyTags.Any(tag => entity.Tags.Contains(tag))) return false;
-
-                if (_spatialCenter.HasValue && _spatialRadius.HasValue)
-                {
-                    var transform = entity.GetComponent<TransformComponent>();
-                    if (transform == null) return false;
-                    if (Vector2.Distance(transform.Position, _spatialCenter.Value) > _spatialRadius.Value) return false;
-                }
-
-                if (_spatialBounds.HasValue)
-                {
-                    var transform = entity.GetComponent<TransformComponent>();
-                    if (transform == null) return false;
-                    var bounds = _spatialBounds.Value;
-                    var pos = transform.Position;
-                    if (pos.X < bounds.X || pos.X > bounds.X + bounds.Width ||
-                        pos.Y < bounds.Y || pos.Y > bounds.Y + bounds.Height)
-                        return false;
-                }
-
-                if (_predicate != null && !_predicate(entity)) return false;
-                return true;
-            });
+        IEnumerable<Entity> results = ExecuteCore();
 
         if (_orderBySelector != null)
         {
@@ -281,6 +241,27 @@ public class EntityQuery
         if (_takeCount.HasValue) results = results.Take(_takeCount.Value);
 
         return results;
+    }
+
+    private IEnumerable<Entity> ExecuteCore()
+    {
+        var entities = _world.Entities;
+        for (int i = 0; i < entities.Count; i++)
+        {
+            var entity = entities[i];
+            if (entity == null) continue;
+            if (_onlyActive && !entity.IsActive) continue;
+            if (!MatchesRequiredComponents(entity)) continue;
+            if (!ApplyFilters(entity)) continue;
+            yield return entity;
+        }
+    }
+
+    private bool MatchesRequiredComponents(Entity entity)
+    {
+        for (int i = 0; i < _withComponents.Count; i++)
+            if (!entity.HasComponent(_withComponents[i])) return false;
+        return true;
     }
 
     /// <summary>Executes the query and returns the first matching entity, or null.</summary>
@@ -642,7 +623,8 @@ public class EntityQuery
     /// </summary>
     private bool ApplyFilters(Entity entity)
     {
-        if (_withoutComponents.Any(type => entity.HasComponent(type))) return false;
+        for (int i = 0; i < _withoutComponents.Count; i++)
+            if (entity.HasComponent(_withoutComponents[i])) return false;
 
         foreach (var kvp in _componentFilters)
         {
@@ -650,10 +632,31 @@ public class EntityQuery
             if (component == null || !kvp.Value(component)) return false;
         }
 
-        if (_withTags.Any(tag => !entity.Tags.Contains(tag))) return false;
-        if (_withoutTags.Any(tag => entity.Tags.Contains(tag))) return false;
-        if (_withAllTags.Count > 0 && !_withAllTags.All(tag => entity.Tags.Contains(tag))) return false;
-        if (_withAnyTags.Count > 0 && !_withAnyTags.Any(tag => entity.Tags.Contains(tag))) return false;
+        for (int i = 0; i < _withTags.Count; i++)
+            if (!entity.Tags.Contains(_withTags[i])) return false;
+
+        for (int i = 0; i < _withoutTags.Count; i++)
+            if (entity.Tags.Contains(_withoutTags[i])) return false;
+
+        if (_withAllTags.Count > 0)
+        {
+            for (int i = 0; i < _withAllTags.Count; i++)
+                if (!entity.Tags.Contains(_withAllTags[i])) return false;
+        }
+
+        if (_withAnyTags.Count > 0)
+        {
+            bool found = false;
+            for (int i = 0; i < _withAnyTags.Count; i++)
+            {
+                if (entity.Tags.Contains(_withAnyTags[i]))
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
 
         if (_spatialCenter.HasValue && _spatialRadius.HasValue)
         {

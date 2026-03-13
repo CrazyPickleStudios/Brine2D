@@ -1,8 +1,8 @@
 using System.Numerics;
-using System.Linq;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
+using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
 using Brine2D.Rendering;
 
@@ -18,6 +18,8 @@ public class CameraSystem : UpdateSystemBase
     public int UpdateOrder => 500; 
 
     private readonly ICameraManager _cameraManager;
+    private CachedEntityQuery<CameraFollowComponent>? _followQuery;
+    private readonly Dictionary<string, (Entity Entity, CameraFollowComponent Follow)> _bestTargets = new();
 
     public CameraSystem(ICameraManager cameraManager)
     {
@@ -26,36 +28,29 @@ public class CameraSystem : UpdateSystemBase
 
     public override void Update(IEntityWorld world, GameTime gameTime)
     {
+        _followQuery ??= world.CreateCachedQuery<CameraFollowComponent>().Build();
         var deltaTime = (float)gameTime.DeltaTime;
 
-        // Advance shake on all registered cameras
         foreach (var camera in _cameraManager.GetAllCameras().Values)
             camera.UpdateShake(deltaTime);
 
-        // Group targets by camera name
-        var targetsByCamera = world.GetEntitiesWithComponent<CameraFollowComponent>() 
-            .Select(e => new { Entity = e, Follow = e.GetComponent<CameraFollowComponent>() })
-            .Where(x => x.Follow?.IsActive == true)
-            .GroupBy(x => x.Follow!.CameraName);
-
-        foreach (var cameraGroup in targetsByCamera)
+        _bestTargets.Clear();
+        foreach (var (entity, follow) in _followQuery)
         {
-            var cameraName = cameraGroup.Key;
+            if (!follow.IsActive) continue;
+            if (!_bestTargets.TryGetValue(follow.CameraName, out var current) ||
+                follow.Priority > current.Follow.Priority)
+                _bestTargets[follow.CameraName] = (entity, follow);
+        }
+
+        foreach (var (cameraName, (entity, follow)) in _bestTargets)
+        {
             var camera = _cameraManager.GetCamera(cameraName);
 
             if (camera == null)
                 continue;
 
-            // Find the highest priority target for this camera
-            var target = cameraGroup
-                .OrderByDescending(x => x.Follow!.Priority)
-                .FirstOrDefault();
-
-            if (target == null)
-                continue;
-
-            var follow = target.Follow!;
-            var transform = target.Entity.GetComponent<TransformComponent>();
+            var transform = entity.GetComponent<TransformComponent>();
 
             if (transform == null)
                 continue;

@@ -1,9 +1,10 @@
 using System.Numerics;
 using Brine2D.Core;
-using Brine2D.Pooling;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
+using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
+using Brine2D.Pooling;
 using Brine2D.Rendering;
 using Microsoft.Extensions.ObjectPool;
 
@@ -23,6 +24,7 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
     public bool IsEnabled { get; set; } = true;
 
     private readonly Random _random = new();
+    private CachedEntityQuery<ParticleEmitterComponent>? _emitterQuery;
     private readonly ObjectPool<Particle> _particlePool;
 
     public ParticleSystem(ObjectPoolProvider poolProvider)
@@ -33,26 +35,20 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
 
     public void Update(IEntityWorld world, GameTime gameTime)
     {
+        _emitterQuery ??= world.CreateCachedQuery<ParticleEmitterComponent>().Build();
         var deltaTime = (float)gameTime.DeltaTime;
-        
-        var emitters = world.GetEntitiesWithComponent<ParticleEmitterComponent>(); 
 
-        foreach (var entity in emitters)
+        foreach (var (entity, emitter) in _emitterQuery)
         {
-            var emitter = entity.GetComponent<ParticleEmitterComponent>();
             var transform = entity.GetComponent<TransformComponent>();
 
-            if (emitter == null || !emitter.IsEnabled)
+            if (!emitter.IsEnabled)
                 continue;
 
-            // Update existing particles
             UpdateParticles(emitter, deltaTime);
 
-            // Emit new particles
             if (emitter.IsEmitting && transform != null)
-            {
                 EmitParticles(emitter, transform, deltaTime);
-            }
         }
     }
 
@@ -222,13 +218,11 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem
 
     public void Render(IEntityWorld world, IRenderer renderer)
     {
-        var emitters = world.GetEntitiesWithComponent<ParticleEmitterComponent>();
+        _emitterQuery ??= world.CreateCachedQuery<ParticleEmitterComponent>().Build();
 
-        foreach (var entity in emitters)
+        foreach (var (entity, emitter) in _emitterQuery)
         {
-            var emitter = entity.GetComponent<ParticleEmitterComponent>();
-            
-            if (emitter is not { IsEnabled: true })
+            if (!emitter.IsEnabled)
                 continue;
 
             // Set blend mode for this emitter

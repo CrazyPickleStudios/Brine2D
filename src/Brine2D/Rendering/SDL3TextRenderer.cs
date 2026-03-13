@@ -180,7 +180,19 @@ internal sealed class SDL3TextRenderer : IDisposable
 
         return new Vector2(totalWidth, totalHeight);
     }
-    
+
+    public Vector2 MeasureGlyphSpan(ReadOnlySpan<char> text)
+    {
+        if (_defaultFontAtlas == null) return Vector2.Zero;
+        float width = 0;
+        foreach (char c in text)
+        {
+            if (_defaultFontAtlas.TryGetGlyph(c, out var glyph))
+                width += glyph.Advance;
+        }
+        return new Vector2(width, _defaultFontAtlas.LineHeight);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

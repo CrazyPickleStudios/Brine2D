@@ -1,337 +1,215 @@
-//using System;
-//using System.Threading;
-//using System.Threading.Tasks;
-//using Brine2D.Core;
-//using Brine2D.ECS;
-//using Brine2D.Engine;
-//using Brine2D.Rendering;
-//using FluentAssertions;
-//using Microsoft.Extensions.DependencyInjection;
-//using Microsoft.Extensions.Logging;
-//using Microsoft.Extensions.Logging.Abstractions;
-//using NSubstitute;
-//using Xunit;
+using System.Collections.Frozen;
+using Brine2D.Audio;
+using Brine2D.Core;
+using Brine2D.ECS;
+using Brine2D.Engine;
+using Brine2D.Hosting;
+using Brine2D.Input;
+using Brine2D.Rendering;
+using Brine2D.Systems.Audio;
+using Brine2D.Systems.Collision;
+using Brine2D.Systems.Physics;
+using Brine2D.Systems.Rendering;
+using Brine2D.Threading;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
-//namespace Brine2D.Tests.Engine;
+namespace Brine2D.Tests.Engine;
 
-//public class SceneManagerTests : TestBase
-//{
-//    private readonly IServiceProvider _serviceProvider;
-//    private readonly ILogger<SceneManager> _logger;
-//    private readonly IRenderer _mockRenderer;
+public class SceneManagerTests : TestBase
+{
+    [Fact]
+    public async Task LoadInitialScene_SetsCurrentScene_AndCallsLifecycleInOrder()
+    {
+        await using var manager = CreateManager(CreateScopeFactory(typeof(TrackingScene)));
 
-//    public SceneManagerTests()
-//    {
-//        var services = new ServiceCollection();
-//        services.AddLogging();
-//        services.AddSingleton<ILoggerFactory, NullLoggerFactory>();
-//        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
-        
-//        services.AddScoped<IEntityWorld, EntityWorld>();
-//        services.Configure<ECSOptions>(options => { });
-        
-//        _mockRenderer = Substitute.For<IRenderer>();
-//        services.AddSingleton(_mockRenderer);
-        
-//        // Register test scenes
-//        services.AddTransient<TestScene>();
-//        services.AddTransient<AnotherTestScene>();
-//        services.AddTransient<OrderedTestScene>();
-//        services.AddTransient<ManualScene>();
-//        services.AddTransient<TestLoadingScreen>();
-        
-//        _serviceProvider = services.BuildServiceProvider();
-//        _logger = NullLogger<SceneManager>.Instance;
-//    }
+        await manager.LoadInitialSceneAsync<TrackingScene>(null, CancellationToken.None);
 
-//    [Fact]
-//    public async Task ShouldSetCurrentSceneAfterLoading()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
+        var scene = Assert.IsType<TrackingScene>(manager.CurrentScene);
+        Assert.True(scene.LoadCalled);
+        Assert.True(scene.EnterCalled);
+        Assert.True(scene.LoadCalledBeforeEnter);
+    }
 
-//        // Act
-//        await manager.LoadSceneAsync<TestScene>();
+    [Fact]
+    public async Task LoadScene_ExitsAndUnloadsOldScene_WhenTransitioning()
+    {
+        await using var manager = CreateManager(CreateScopeFactory(typeof(TrackingScene), typeof(SimpleScene)));
 
-//        // Assert
-//        manager.CurrentScene.Should().NotBeNull();
-//        manager.CurrentScene.Should().BeOfType<TestScene>();
-//    }
+        await manager.LoadInitialSceneAsync<TrackingScene>(null, CancellationToken.None);
+        var first = Assert.IsType<TrackingScene>(manager.CurrentScene);
 
-//    [Fact]
-//    public async Task ShouldLoadSceneAndCallOnLoad()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
+        await manager.LoadInitialSceneAsync<SimpleScene>(null, CancellationToken.None);
 
-//        // Act
-//        await manager.LoadSceneAsync<TestScene>();
-//        var scene = manager.CurrentScene as TestScene;
+        Assert.True(first.ExitCalled);
+        Assert.True(first.UnloadCalled);
+        Assert.IsType<SimpleScene>(manager.CurrentScene);
+    }
 
-//        // Assert
-//        scene.Should().NotBeNull();
-//        scene!.LoadCalled.Should().BeTrue("OnLoadAsync should have been called");
-//        scene.EnterCalled.Should().BeTrue("OnEnter should have been called");
-//    }
+    [Fact]
+    public async Task LoadScene_CalledFromOnEnter_QueuesPendingTransition_ThatExecutesNextFrame()
+    {
+        await using var manager = CreateManager(CreateScopeFactory(typeof(SimpleScene)));
+        var sceneLoop = (ISceneLoop)manager;
 
-//    [Fact]
-//    public async Task ShouldUnloadSceneAndCallOnUnload()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
-//        await manager.LoadSceneAsync<TestScene>();
-//        var firstScene = manager.CurrentScene as TestScene;
+        await manager.LoadInitialSceneAsync<TransitionOnEnterScene>(
+            _ => new TransitionOnEnterScene(manager),
+            CancellationToken.None);
 
-//        // Act - Loading a new scene should unload the current one
-//        await manager.LoadSceneAsync<AnotherTestScene>();
+        // Simulate the next game loop frame — the pending transition queued from OnEnter should fire.
+        sceneLoop.BeginFrame();
+        sceneLoop.ProcessDeferredTransitions(CancellationToken.None);
 
-//        // Assert
-//        firstScene!.ExitCalled.Should().BeTrue("OnExit should have been called");
-//        firstScene.UnloadCalled.Should().BeTrue("OnUnloadAsync should have been called");
-//        manager.CurrentScene.Should().BeOfType<AnotherTestScene>();
-//    }
+        var pendingLoad = sceneLoop.ActiveLoadTask;
+        Assert.NotNull(pendingLoad);
+        await pendingLoad;
 
-//    [Fact]
-//    public async Task ShouldUpdateAndRenderActiveScene()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
-//        await manager.LoadSceneAsync<TestScene>();
-//        var scene = manager.CurrentScene as TestScene;
+        Assert.IsType<SimpleScene>(manager.CurrentScene);
+    }
 
-//        // Act
-//        manager.Update(new GameTime());
-//        manager.Render(new GameTime());
+    [Fact]
+    public async Task SceneLoadFailed_FiresEvent_AndAutoLoadsFallback_WhenNoHandlerQueuesRecovery()
+    {
+        var fallback = new FallbackSceneConfiguration(typeof(SimpleScene));
+        await using var manager = CreateManager(
+            CreateScopeFactory(typeof(ThrowingScene), typeof(SimpleScene)),
+            fallback: fallback);
 
-//        // Assert
-//        scene!.UpdateCalled.Should().BeTrue();
-//        scene.RenderCalled.Should().BeTrue();
-//    }
+        SceneLoadFailedEventArgs? capturedArgs = null;
+        manager.SceneLoadFailed += (_, args) => capturedArgs = args;
 
-//    [Fact]
-//    public async Task ShouldHandleSceneTransitions()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
-//        await manager.LoadSceneAsync<TestScene>();
-//        var firstScene = manager.CurrentScene;
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            manager.LoadInitialSceneAsync<ThrowingScene>(null, CancellationToken.None));
 
-//        // Act
-//        await manager.LoadSceneAsync<AnotherTestScene>();
-//        var secondScene = manager.CurrentScene;
+        var sceneLoop = (ISceneLoop)manager;
+        sceneLoop.BeginFrame();
+        sceneLoop.RaiseSceneLoadFailedIfPending();
+        sceneLoop.ProcessDeferredTransitions(CancellationToken.None);
 
-//        // Assert
-//        firstScene.Should().NotBe(secondScene);
-//        secondScene.Should().BeOfType<AnotherTestScene>();
-//    }
+        var fallbackLoad = sceneLoop.ActiveLoadTask;
+        Assert.NotNull(fallbackLoad);
+        await fallbackLoad;
 
-//    [Fact]
-//    public async Task ShouldHandleMultipleConsecutiveSceneLoads()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
+        Assert.NotNull(capturedArgs);
+        Assert.IsType<SimpleScene>(manager.CurrentScene);
+    }
 
-//        // Act
-//        await manager.LoadSceneAsync<TestScene>();
-//        await manager.LoadSceneAsync<AnotherTestScene>();
-//        await manager.LoadSceneAsync<TestScene>();
+    [Fact]
+    public async Task SceneLoadFailed_RecoveryHandlerQueuesScene_FallbackIsNotLoaded()
+    {
+        var fallback = new FallbackSceneConfiguration(typeof(SimpleScene));
+        await using var manager = CreateManager(
+            CreateScopeFactory(typeof(ThrowingScene), typeof(RecoveryScene), typeof(SimpleScene)),
+            fallback: fallback);
 
-//        // Assert
-//        manager.CurrentScene.Should().BeOfType<TestScene>();
-//    }
+        manager.SceneLoadFailed += (_, _) => manager.LoadScene<RecoveryScene>();
 
-//    [Fact]
-//    public async Task ShouldNotUpdateOrRenderBeforeSceneIsLoaded()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            manager.LoadInitialSceneAsync<ThrowingScene>(null, CancellationToken.None));
 
-//        // Act
-//        manager.Update(new GameTime());
-//        manager.Render(new GameTime());
+        var sceneLoop = (ISceneLoop)manager;
+        sceneLoop.BeginFrame();
+        sceneLoop.RaiseSceneLoadFailedIfPending();
+        sceneLoop.ProcessDeferredTransitions(CancellationToken.None);
 
-//        // Assert
-//        manager.CurrentScene.Should().BeNull();
-//    }
+        var recoveryLoad = sceneLoop.ActiveLoadTask;
+        Assert.NotNull(recoveryLoad);
+        await recoveryLoad;
 
-//    [Fact]
-//    public async Task ShouldCallOnEnterAfterLoad()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
-//        var scene = default(OrderedTestScene);
+        Assert.IsType<RecoveryScene>(manager.CurrentScene);
+    }
 
-//        // Act
-//        await manager.LoadSceneAsync<OrderedTestScene>();
-//        scene = manager.CurrentScene as OrderedTestScene;
+    private SceneManager CreateManager(
+        IServiceScopeFactory scopeFactory,
+        IMainThreadDispatcher? dispatcher = null,
+        FallbackSceneConfiguration? fallback = null,
+        SceneWorldConfiguration? worldConfig = null) =>
+        new(
+            logger: NullLogger<SceneManager>.Instance,
+            scopeFactory: scopeFactory,
+            mainThreadDispatcher: dispatcher ?? CreateInlineDispatcher(),
+            services: new SceneFrameworkServices(
+                NullLoggerFactory.Instance,
+                Substitute.For<IRenderer>(),
+                Substitute.For<IInputContext>(),
+                Substitute.For<IAudioService>(),
+                Substitute.For<IGameContext>()),
+            cameraManager: Substitute.For<ICameraManager>(),
+            options: new Brine2DOptions { LoadingScreenMinimumDisplayMs = 0 },
+            sceneWorldConfig: worldConfig ?? ExcludeAllDefaultSystems(),
+            fallbackSceneConfig: fallback);
 
-//        // Assert
-//        scene!.LoadCalled.Should().BeTrue("OnLoadAsync should have been called");
-//        scene.EnterCalled.Should().BeTrue("OnEnter should have been called");
-//        scene.LoadCalledBeforeEnter.Should().BeTrue("OnLoadAsync should be called before OnEnter");
-//    }
+    private static IMainThreadDispatcher CreateInlineDispatcher()
+    {
+        var dispatcher = Substitute.For<IMainThreadDispatcher>();
+        dispatcher
+            .RunOnMainThreadAsync(Arg.Any<Action>(), Arg.Any<CancellationToken>())
+            .Returns(ci => { ci.Arg<Action>()(); return Task.CompletedTask; });
+        return dispatcher;
+    }
 
-//    [Fact]
-//    public async Task ShouldHandleSceneWithTransition()
-//    {
-//        // Arrange
-//        var manager = CreateManager();
-//        var transition = new TestTransition();
+    private static IServiceScopeFactory CreateScopeFactory(params Type[] sceneTypes)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<IEntityWorld>(_ => Substitute.For<IEntityWorld>());
+        services.AddScoped<ICamera>(_ => Substitute.For<ICamera>());
+        foreach (var type in sceneTypes)
+            services.AddTransient(type);
+        return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+    }
 
-//        // Act
-//        await manager.LoadSceneAsync<TestScene>(transition);
+    private static SceneWorldConfiguration ExcludeAllDefaultSystems() => new(
+        configure: null,
+        excludedSystems: new[]
+        {
+            typeof(SpriteRenderingSystem),
+            typeof(ParticleSystem),
+            typeof(VelocitySystem),
+            typeof(CollisionDetectionSystem),
+            typeof(AudioSystem),
+            typeof(CameraSystem),
+            typeof(DebugRenderer),
+        }.ToFrozenSet());
 
-//        // Assert
-//        transition.BeginCalled.Should().BeTrue();
-//        manager.CurrentScene.Should().BeOfType<TestScene>();
-//    }
+    private sealed class SimpleScene : Scene { }
 
-//    [Fact]
-//    public async Task ShouldHandleSceneWithLoadingScreenGeneric()
-//    {
-//        // Arrange
-//        var services = new ServiceCollection();
-//        services.AddLogging();
-//        services.AddScoped<IEntityWorld, EntityWorld>();
-//        services.Configure<ECSOptions>(options => { });
-//        services.AddSingleton(_mockRenderer);
-//        services.AddTransient<TestScene>();
-//        services.AddTransient<TestLoadingScreen>(); 
-        
-//        var serviceProvider = services.BuildServiceProvider();
-//        var manager = new SceneManager(
-//            NullLogger<SceneManager>.Instance,
-//            serviceProvider,
-//            renderer: _mockRenderer
-//        );
+    private sealed class RecoveryScene : Scene { }
 
-//        // Act - Use generic overload
-//        await manager.LoadSceneAsync<TestScene, TestLoadingScreen>();
+    private sealed class TrackingScene : Scene
+    {
+        public bool LoadCalled { get; private set; }
+        public bool EnterCalled { get; private set; }
+        public bool ExitCalled { get; private set; }
+        public bool UnloadCalled { get; private set; }
+        public bool LoadCalledBeforeEnter { get; private set; }
 
-//        // Assert
-//        manager.CurrentScene.Should().BeOfType<TestScene>();
-//    }
+        protected internal override Task OnLoadAsync(CancellationToken ct, IProgress<float>? progress = null)
+        {
+            LoadCalled = true;
+            LoadCalledBeforeEnter = !EnterCalled;
+            return Task.CompletedTask;
+        }
 
-//    // --- Helpers and test doubles ---
+        protected internal override void OnEnter() => EnterCalled = true;
+        protected internal override void OnExit() => ExitCalled = true;
 
-//    private SceneManager CreateManager()
-//    {
-//        return new SceneManager(_logger, _serviceProvider, renderer: _mockRenderer);
-//    }
+        protected internal override Task OnUnloadAsync(CancellationToken ct)
+        {
+            UnloadCalled = true;
+            return Task.CompletedTask;
+        }
+    }
 
-//    public class TestScene : Scene
-//    {
-//        public bool LoadCalled { get; private set; }
-//        public bool EnterCalled { get; private set; }
-//        public bool UnloadCalled { get; private set; }
-//        public bool ExitCalled { get; private set; }
-//        public bool UpdateCalled { get; private set; }
-//        public bool RenderCalled { get; private set; }
+    private sealed class ThrowingScene : Scene
+    {
+        protected internal override Task OnLoadAsync(CancellationToken ct, IProgress<float>? progress = null) =>
+            Task.FromException(new InvalidOperationException("Deliberate test failure"));
+    }
 
-//        public TestScene() { }
-
-//        protected internal override Task OnLoadAsync(CancellationToken cancellationToken)
-//        {
-//            LoadCalled = true;
-//            return Task.CompletedTask;
-//        }
-
-//        protected internal override void OnEnter()
-//        {
-//            EnterCalled = true;
-//        }
-
-//        protected internal override Task OnUnloadAsync(CancellationToken cancellationToken)
-//        {
-//            UnloadCalled = true;
-//            return Task.CompletedTask;
-//        }
-
-//        protected internal override void OnExit()
-//        {
-//            ExitCalled = true;
-//        }
-
-//        protected internal override void OnUpdate(GameTime gameTime) => UpdateCalled = true;
-//        protected internal override void OnRender(GameTime gameTime) => RenderCalled = true;
-//    }
-
-//    public class AnotherTestScene : Scene
-//    {
-//        public AnotherTestScene() { }
-//    }
-
-//    public class OrderedTestScene : Scene
-//    {
-//        public bool LoadCalled { get; private set; }
-//        public bool EnterCalled { get; private set; }
-//        public bool LoadCalledBeforeEnter { get; private set; }
-
-//        public OrderedTestScene() { }
-
-//        protected internal override Task OnLoadAsync(CancellationToken cancellationToken)
-//        {
-//            LoadCalled = true;
-//            LoadCalledBeforeEnter = !EnterCalled;
-//            return Task.CompletedTask;
-//        }
-
-//        protected internal override void OnEnter()
-//        {
-//            EnterCalled = true;
-//        }
-//    }
-
-//    public class ManualScene : Scene
-//    {
-//        public ManualScene()
-//        {
-//            EnableAutomaticFrameManagement = false;
-//        }
-//    }
-
-//    public class TestTransition : ISceneTransition
-//    {
-//        public bool BeginCalled { get; private set; }
-//        public bool UpdateCalled { get; private set; }
-//        public bool RenderCalled { get; private set; }
-//        public float Progress => 1.0f;
-//        public float Duration => 0.01f;
-//        public bool IsComplete => true;
-
-//        public void Begin() => BeginCalled = true;
-//        public void Update(GameTime gameTime) => UpdateCalled = true;
-//        public void Render(IRenderer? renderer) => RenderCalled = true;
-//    }
-
-//    public class TestLoadingScreen : LoadingScene
-//    {
-//        public bool LoadCalled { get; private set; }
-//        public bool EnterCalled { get; private set; }
-//        public bool UnloadCalled { get; private set; }
-
-//        public TestLoadingScreen() { }
-
-//        protected internal override Task OnLoadAsync(CancellationToken cancellationToken)
-//        {
-//            LoadCalled = true;
-//            return Task.CompletedTask;
-//        }
-
-//        protected internal override void OnEnter()
-//        {
-//            EnterCalled = true;
-//        }
-
-//        protected internal override Task OnUnloadAsync(CancellationToken cancellationToken)
-//        {
-//            UnloadCalled = true;
-//            return Task.CompletedTask;
-//        }
-
-//        protected override void OnRenderLoading(GameTime gameTime)
-//        {
-//            // Override to do nothing for tests
-//        }
-//    }
-//}
+    private sealed class TransitionOnEnterScene(ISceneManager sceneManager) : Scene
+    {
+        protected internal override void OnEnter() => sceneManager.LoadScene<SimpleScene>();
+    }
+}

@@ -56,7 +56,7 @@ public class TextureAtlasDemoScene : DemoSceneBase
         _spriteBatcher = new SpriteBatcher();
     }
 
-    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== Texture Atlas Demo Scene ===");
         Logger.LogInformation("Controls:");

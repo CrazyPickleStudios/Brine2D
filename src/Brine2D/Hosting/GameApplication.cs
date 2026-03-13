@@ -10,7 +10,7 @@ namespace Brine2D.Hosting;
 /// <summary>
 /// The main game application host.
 /// </summary>
-public sealed class GameApplication : IAsyncDisposable, IDisposable
+public sealed class GameApplication : IAsyncDisposable
 {
     private readonly IHost _host;
     private readonly ILogger<GameApplication> _logger;
@@ -44,11 +44,22 @@ public sealed class GameApplication : IAsyncDisposable, IDisposable
     /// </summary>
     /// <typeparam name="TScene">The initial scene type to load.</typeparam>
     /// <param name="cancellationToken">Token to cancel the game execution.</param>
+    /// <returns>
+    /// A task that completes when the game exits. The task will fault if engine initialization
+    /// or the initial scene load fails on the game thread.
+    /// </returns>
     /// <remarks>
     /// The game runs on a dedicated thread; SDL3 window events are posted to and must be polled
     /// from the thread that created the window.
+    /// <para>
+    /// The initial scene is loaded synchronously before the game loop starts, so a
+    /// <see cref="LoadingScene"/> cannot be displayed during this first load. To show a loading
+    /// screen from startup, load a lightweight placeholder scene first and transition to the
+    /// real scene (with a loading screen) from its <c>OnEnter</c>.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown if the game is already running.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown if the application has been disposed.</exception>
     public Task RunAsync<TScene>(CancellationToken cancellationToken = default)
         where TScene : Scene
         => RunAsync<TScene>(sceneFactory: null, cancellationToken);
@@ -63,12 +74,24 @@ public sealed class GameApplication : IAsyncDisposable, IDisposable
     /// Factory function to create the scene, or <see langword="null"/> to resolve via DI.
     /// </param>
     /// <param name="cancellationToken">Token to cancel the game execution.</param>
+    /// <returns>
+    /// A task that completes when the game exits. The task will fault if engine initialization
+    /// or the initial scene load fails on the game thread.
+    /// </returns>
+    /// <remarks>
+    /// The initial scene is loaded synchronously before the game loop starts, so a
+    /// <see cref="LoadingScene"/> cannot be displayed during this first load. To show a loading
+    /// screen from startup, load a lightweight placeholder scene first and transition to the
+    /// real scene (with a loading screen) from its <c>OnEnter</c>.
+    /// </remarks>
     /// <example>
     /// <code>
     /// await game.RunAsync&lt;GameScene&gt;(sp =>
     ///     new GameScene(sp.GetRequiredService&lt;IRenderer&gt;(), levelNumber: 5));
     /// </code>
     /// </example>
+    /// <exception cref="InvalidOperationException">Thrown if the game is already running.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown if the application has been disposed.</exception>
     public Task RunAsync<TScene>(
         Func<IServiceProvider, TScene>? sceneFactory,
         CancellationToken cancellationToken = default)
@@ -78,10 +101,8 @@ public sealed class GameApplication : IAsyncDisposable, IDisposable
             Services.GetRequiredService<GameEngine>()
                 .InitializeAsync(token).GetAwaiter().GetResult();
 
-            var sceneManager = Services.GetRequiredService<ISceneManager>();
-            (sceneFactory is null
-                ? sceneManager.LoadSceneAsync<TScene>(cancellationToken: token)
-                : sceneManager.LoadSceneAsync(sceneFactory, cancellationToken: token))
+            Services.GetRequiredService<SceneManager>()
+                .LoadInitialSceneAsync(sceneFactory, token)
                 .GetAwaiter().GetResult();
 
             _logger.LogInformation("Game initialized on thread {ThreadId}, starting event loop...",
@@ -89,6 +110,71 @@ public sealed class GameApplication : IAsyncDisposable, IDisposable
 
             Services.GetRequiredService<GameLoop>().Run(token);
         }, cancellationToken);
+
+    /// <summary>
+    /// Disposes the game application and releases all resources.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
+
+        _logger.LogInformation("Disposing game application...");
+
+        Exception? forcedShutdownException = null;
+
+        var cts = _gameThreadCts;
+        var tcs = _gameThreadTcs;
+
+        if (cts != null && !cts.Token.IsCancellationRequested)
+        {
+            _logger.LogDebug("Requesting game thread cancellation...");
+            cts.Cancel();
+        }
+
+        if (tcs != null)
+        {
+            var timeout = TimeSpan.FromSeconds(_options.ShutdownTimeoutSeconds);
+            _logger.LogDebug("Waiting for game thread to exit (timeout: {Timeout}s)...", timeout.TotalSeconds);
+
+            var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeout));
+
+            if (completed != tcs.Task)
+            {
+                _logger.LogWarning("Game thread did not exit within timeout. Forcing shutdown.");
+                _applicationLifetime.StopApplication();
+
+                await Task.WhenAny(tcs.Task,
+                    Task.Delay(TimeSpan.FromSeconds(_options.ForceShutdownGracePeriodSeconds)));
+
+                if (tcs.Task.IsCompleted && tcs.Task.Exception is { } forcedEx)
+                {
+                    _logger.LogError(forcedEx, "Game thread threw a fatal exception during forced shutdown.");
+                    forcedShutdownException = forcedEx.InnerExceptions.Count == 1
+                        ? forcedEx.InnerException!
+                        : forcedEx;
+                }
+            }
+        }
+        else
+        {
+            await _host.StopAsync(CancellationToken.None);
+        }
+
+        cts?.Dispose();
+        _gameThreadCts = null;
+        _gameThreadTcs = null;
+
+        _logger.LogInformation("Game application disposed.");
+
+        if (_host is IAsyncDisposable asyncHost)
+            await asyncHost.DisposeAsync();
+        else
+            _host.Dispose();
+
+        if (forcedShutdownException != null)
+            ExceptionDispatchInfo.Capture(forcedShutdownException).Throw();
+    }
 
     private Task RunOnGameThread(Action<CancellationToken> work, CancellationToken cancellationToken)
     {
@@ -132,22 +218,16 @@ public sealed class GameApplication : IAsyncDisposable, IDisposable
             }
             finally
             {
-                try
-                {
-                    Services.GetRequiredService<IMainThreadDispatcher>().SignalShutdown();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error signaling dispatcher shutdown on thread {ThreadId}", threadId);
-                }
-
-                try { Services.GetRequiredService<GameEngine>().ShutdownAsync().GetAwaiter().GetResult(); }
+                try { Services.GetRequiredService<GameEngine>().Shutdown(); }
                 catch (Exception ex) { _logger.LogError(ex, "Error shutting down game engine on thread {ThreadId}", threadId); }
 
                 try { _host.StopAsync(CancellationToken.None).GetAwaiter().GetResult(); }
                 catch (Exception ex) { _logger.LogError(ex, "Error stopping host on thread {ThreadId}", threadId); }
 
-                // Capture before resetting _running; a concurrent RunAsync could replace _gameThreadTcs once _running is 0.
+                // Capture the TCS before resetting _running. Once _running is 0 a concurrent
+                // RunAsync call is free to replace _gameThreadTcs. The new caller's await on
+                // RunAsync won't resume until their own game thread signals, so no work is lost —
+                // but the previous caller's Task must still be completed via the captured reference.
                 var tcs = _gameThreadTcs;
                 Volatile.Write(ref _running, 0);
 
@@ -168,69 +248,4 @@ public sealed class GameApplication : IAsyncDisposable, IDisposable
         gameThread.Start();
         return _gameThreadTcs.Task;
     }
-
-    /// <summary>
-    /// Disposes the game application and releases all resources.
-    /// </summary>
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1)
-            return;
-
-        _logger.LogInformation("Disposing game application...");
-
-        Exception? forcedShutdownException = null;
-
-        if (_gameThreadCts != null && !_gameThreadCts.Token.IsCancellationRequested)
-        {
-            _logger.LogDebug("Requesting game thread cancellation...");
-            _gameThreadCts.Cancel();
-        }
-
-        if (_gameThreadTcs != null)
-        {
-            var timeout = TimeSpan.FromSeconds(_options.ShutdownTimeoutSeconds);
-            _logger.LogDebug("Waiting for game thread to exit (timeout: {Timeout}s)...", timeout.TotalSeconds);
-
-            var completed = await Task.WhenAny(_gameThreadTcs.Task, Task.Delay(timeout));
-
-            if (completed != _gameThreadTcs.Task)
-            {
-                _logger.LogWarning("Game thread did not exit within timeout. Forcing shutdown.");
-                _applicationLifetime.StopApplication();
-
-                await Task.WhenAny(_gameThreadTcs.Task,
-                    Task.Delay(TimeSpan.FromSeconds(_options.ForceShutdownGracePeriodSeconds)));
-
-                if (_gameThreadTcs.Task.IsCompleted && _gameThreadTcs.Task.Exception is { } forcedEx)
-                {
-                    _logger.LogError(forcedEx, "Game thread threw a fatal exception during forced shutdown.");
-                    forcedShutdownException = forcedEx.InnerExceptions.Count == 1
-                        ? forcedEx.InnerException!
-                        : forcedEx;
-                }
-            }
-        }
-        else
-        {
-            await _host.StopAsync(CancellationToken.None);
-        }
-
-        _gameThreadCts?.Dispose();
-        _gameThreadCts = null;
-
-        _logger.LogInformation("Game application disposed.");
-
-        if (_host is IAsyncDisposable asyncHost)
-            await asyncHost.DisposeAsync();
-        else
-            _host.Dispose();
-
-        if (forcedShutdownException != null)
-            ExceptionDispatchInfo.Capture(forcedShutdownException).Throw();
-    }
-
-    [Obsolete("GameApplication requires async disposal. Use 'await using' instead of 'using'.", error: true)]
-    public void Dispose() => throw new NotSupportedException(
-        "GameApplication must be disposed asynchronously. Use 'await using var game = ...' instead.");
 }

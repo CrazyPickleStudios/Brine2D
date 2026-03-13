@@ -45,7 +45,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         _audio = audio;
     }
 
-    protected override async Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override async Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== Spatial Audio Demo Scene ===");
         Logger.LogInformation("Move the player (WASD) to hear spatial audio!");

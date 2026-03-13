@@ -2,6 +2,7 @@ using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
+using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
 using Brine2D.Systems.Physics;
 
@@ -17,19 +18,19 @@ public class AISystem : UpdateSystemBase
     public int UpdateOrder => 50; 
 
     private readonly Random _random = new();
+    private CachedEntityQuery<AIControllerComponent>? _aiQuery;
 
     public override void Update(IEntityWorld world, GameTime gameTime)
     {
+        _aiQuery ??= world.CreateCachedQuery<AIControllerComponent>().Build();
         var deltaTime = (float)gameTime.DeltaTime;
-        var aiEntities = world.GetEntitiesWithComponent<AIControllerComponent>(); 
 
-        foreach (var entity in aiEntities)
+        foreach (var (entity, ai) in _aiQuery)
         {
-            var ai = entity.GetComponent<AIControllerComponent>();
             var transform = entity.GetComponent<TransformComponent>();
             var velocity = entity.GetComponent<VelocityComponent>();
 
-            if (ai == null || transform == null || !ai.IsEnabled)
+            if (transform == null || !ai.IsEnabled)
                 continue;
 
             // Update AI behavior

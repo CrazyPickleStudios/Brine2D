@@ -119,7 +119,22 @@ public class SDL3TextureLoader : ITextureLoader
 
         _textureContext.ReleaseTexture(texture);
         _loadedTextures.Remove(texture);
-        texture.Dispose();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        _logger.LogInformation("Disposing texture loader and {Count} textures", _loadedTextures.Count);
+
+        foreach (var texture in _loadedTextures.ToList())
+        {
+            _textureContext.ReleaseTexture(texture);
+        }
+
+        _loadedTextures.Clear();
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 
     private ITexture CreateTextureFromSurface(SurfaceInfo surfaceInfo, TextureScaleMode scaleMode, string path)
@@ -174,23 +189,6 @@ public class SDL3TextureLoader : ITextureLoader
         {
             handle.Free();
         }
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-
-        _logger.LogInformation("Disposing texture loader and {Count} textures", _loadedTextures.Count);
-
-        foreach (var texture in _loadedTextures.ToList())
-        {
-            _textureContext.ReleaseTexture(texture);
-            texture.Dispose();
-        }
-
-        _loadedTextures.Clear();
-        _disposed = true;
-        GC.SuppressFinalize(this);
     }
 
     private struct SurfaceInfo

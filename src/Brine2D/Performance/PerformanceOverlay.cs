@@ -41,6 +41,19 @@ public class PerformanceOverlay
     private List<(string Name, ScopedTimingData Timing)> _displayedSystems = new();
     private double _displayedTotalFrameTime = 0;
     
+    private string _fpsText = string.Empty;
+    private string _frameTimeText = string.Empty;
+    private string _minMaxAvgText = string.Empty;
+    private string _drawCallsText = string.Empty;
+    private string _entitiesText = string.Empty;
+    private string _spritesText = string.Empty;
+    private string _batchesText = string.Empty;
+    private string _memoryText = string.Empty;
+    private string _gcText = string.Empty;
+    private Color _fpsColor;
+    private Color _batchEfficiencyColor;
+    private Color _gcColor;
+
     /// <summary>
     /// Gets or sets whether the overlay is visible.
     /// </summary>
@@ -165,17 +178,15 @@ public class PerformanceOverlay
         renderer.DrawRectangleFilled(x - 5, y - 5, bgWidth, bgHeight, new Color(0, 0, 0, 180));
         
         // FPS Stats
-        var fpsColor = GetFpsColor(_displayedFPS);
-        renderer.DrawText($"FPS: {_displayedFPS:F1}", x, currentY, fpsColor);
+        renderer.DrawText(_fpsText, x, currentY, _fpsColor);
         currentY += lineHeight;
         
-        renderer.DrawText($"Frame: {_displayedFrameTime:F2}ms", x, currentY, Color.White);
+        renderer.DrawText(_frameTimeText, x, currentY, Color.White);
         currentY += lineHeight;
         
         if (_showDetailedStats)
         {
-            renderer.DrawText($"Min/Max/Avg: {_displayedMinFPS:F0} / {_displayedMaxFPS:F0} / {_displayedAvgFPS:F1}", 
-                x, currentY, new Color(180, 180, 180));
+            renderer.DrawText(_minMaxAvgText, x, currentY, new Color(180, 180, 180));
             currentY += lineHeight;
             
             currentY += 5;
@@ -183,18 +194,16 @@ public class PerformanceOverlay
             renderer.DrawText("=== Rendering ===", x, currentY, new Color(255, 255, 100));
             currentY += lineHeight;
             
-            renderer.DrawText($"Draw Calls: {_displayedDrawCalls}", x, currentY, Color.White);
+            renderer.DrawText(_drawCallsText, x, currentY, Color.White);
             currentY += lineHeight;
             
-            renderer.DrawText($"Entities: {_displayedEntityCount}", x, currentY, Color.White);
+            renderer.DrawText(_entitiesText, x, currentY, Color.White);
             currentY += lineHeight;
             
-            renderer.DrawText($"Sprites: {_displayedSpriteCount} ({_displayedCulledSprites} culled)", x, currentY, Color.White);
+            renderer.DrawText(_spritesText, x, currentY, Color.White);
             currentY += lineHeight;
             
-            var batchEfficiencyColor = GetBatchEfficiencyColor(_displayedBatchEfficiency);
-            renderer.DrawText($"Batches: {_displayedBatchCount} ({_displayedBatchEfficiency:F1}x)", 
-                x, currentY, batchEfficiencyColor);
+            renderer.DrawText(_batchesText, x, currentY, _batchEfficiencyColor);
             currentY += lineHeight;
             
             currentY += 5;
@@ -202,12 +211,10 @@ public class PerformanceOverlay
             renderer.DrawText("=== Memory ===", x, currentY, new Color(255, 255, 100));
             currentY += lineHeight;
             
-            renderer.DrawText($"Total: {_displayedMemoryMB:F2} MB", x, currentY, Color.White);
+            renderer.DrawText(_memoryText, x, currentY, Color.White);
             currentY += lineHeight;
             
-            var gcColor = GetGCColor(_displayedGen2);
-            renderer.DrawText($"GC: {_displayedGen0} / {_displayedGen1} / {_displayedGen2}", 
-                x, currentY, gcColor);
+            renderer.DrawText(_gcText, x, currentY, _gcColor);
             currentY += lineHeight;
         }
         
@@ -411,7 +418,6 @@ public class PerformanceOverlay
         _displayedGen1 = _monitor.Gen1Collections;
         _displayedGen2 = _monitor.Gen2Collections;
 
-        // Update system profiling stats (always, not just when visible)
         if (_systemProfiler != null)
         {
             _displayedSystems = _systemProfiler.ScopedTimings
@@ -422,6 +428,19 @@ public class PerformanceOverlay
 
             _displayedTotalFrameTime = _displayedSystems.Sum(s => s.Timing.CurrentMs);
         }
+
+        _fpsText = $"FPS: {_displayedFPS:F1}";
+        _frameTimeText = $"Frame: {_displayedFrameTime:F2}ms";
+        _minMaxAvgText = $"Min/Max/Avg: {_displayedMinFPS:F0} / {_displayedMaxFPS:F0} / {_displayedAvgFPS:F1}";
+        _drawCallsText = $"Draw Calls: {_displayedDrawCalls}";
+        _entitiesText = $"Entities: {_displayedEntityCount}";
+        _spritesText = $"Sprites: {_displayedSpriteCount} ({_displayedCulledSprites} culled)";
+        _batchesText = $"Batches: {_displayedBatchCount} ({_displayedBatchEfficiency:F1}x)";
+        _memoryText = $"Total: {_displayedMemoryMB:F2} MB";
+        _gcText = $"GC: {_displayedGen0} / {_displayedGen1} / {_displayedGen2}";
+        _fpsColor = GetFpsColor(_displayedFPS);
+        _batchEfficiencyColor = GetBatchEfficiencyColor(_displayedBatchEfficiency);
+        _gcColor = GetGCColor(_displayedGen2);
     }
     
     private Color GetFpsColor(double fps)

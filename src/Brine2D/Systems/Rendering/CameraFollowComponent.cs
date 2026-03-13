@@ -1,5 +1,6 @@
 using System.Numerics;
 using Brine2D.ECS;
+using Brine2D.Rendering;
 
 namespace Brine2D.Systems.Rendering;
 
@@ -10,10 +11,10 @@ namespace Brine2D.Systems.Rendering;
 public class CameraFollowComponent : Component
 {
     /// <summary>
-    /// Name of the camera to control (default: "main").
+    /// Name of the camera to control (default: <see cref="ICameraManager.MainCameraName"/>).
     /// Allows different entities to control different cameras (e.g., minimap, split-screen).
     /// </summary>
-    public string CameraName { get; set; } = "main";
+    public string CameraName { get; set; } = ICameraManager.MainCameraName;
 
     /// <summary>
     /// Follow speed. Higher = snappier. 0 = instant snap.

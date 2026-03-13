@@ -56,7 +56,7 @@ public class QueryDemoScene : DemoSceneBase
         _gameContext = gameContext;
     }
 
-    protected override Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== Query Demo Scene ===");
         Logger.LogInformation("Controls:");
@@ -216,7 +216,7 @@ public class QueryDemoScene : DemoSceneBase
 
         // Draw UI
         Renderer.DrawText($"Demo: {_currentDemo} (TAB to cycle)", 10, 10, Color.White);
-        Renderer.DrawText($"Results: {results.Count()} entities", 10, 35, Color.Yellow);
+        Renderer.DrawText($"Results: {results.Count} entities", 10, 35, Color.Yellow);
         Renderer.DrawText("SPACE: Refresh | WASD: Move Player", 10, 60, Color.Gray);
 
         RenderPerformanceOverlay();
@@ -252,9 +252,9 @@ public class QueryDemoScene : DemoSceneBase
         }
     }
 
-    private IEnumerable<Entity> GetCurrentQueryResults()
+    private List<Entity> GetCurrentQueryResults()
     {
-        if (_player == null) return Enumerable.Empty<Entity>();
+        if (_player == null) return [];
         
         var playerPos = _player.GetComponent<TransformComponent>()?.Position ?? Vector2.Zero;
 
@@ -262,37 +262,38 @@ public class QueryDemoScene : DemoSceneBase
         {
             "Spatial" => World.Query()
                 .WithinRadius(playerPos, 200f)
-                .Execute(),
-            
+                .Execute().ToList(),
+
             "Filtering" => World.Query()
                 .With<HealthDemoComponent>(h => h.Health < 50)
-                .Execute(),
-            
+                .Execute().ToList(),
+
             "Tags" => World.Query()
                 .WithAllTags("Enemy", "Boss")
-                .Execute(),
-            
+                .Execute().ToList(),
+
             "Sorting" => World.Query()
                 .With<HealthDemoComponent>()
                 .OrderBy(e => e.GetComponent<HealthDemoComponent>()!.Health)
                 .Take(5)
-                .Execute(),
-            
+                .Execute().ToList(),
+
             "Pagination" => World.Query()
                 .With<TransformComponent>()
                 .Skip(5)
                 .Take(10)
-                .Execute(),
-            
+                .Execute().ToList(),
+
             "Random" => new[] { World.Query()
                 .With<TransformComponent>()
                 .Random() }
                 .Where(e => e != null)
-                .Cast<Entity>(),
-            
-            "Cloning" => GetCloningDemoResults(),
-            
-            _ => Enumerable.Empty<Entity>()
+                .Cast<Entity>()
+                .ToList(),
+
+            "Cloning" => GetCloningDemoResults().ToList(),
+
+            _ => []
         };
     }
 

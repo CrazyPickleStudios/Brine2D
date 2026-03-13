@@ -6,8 +6,9 @@ namespace Brine2D.Rendering.Text;
 /// <summary>
 /// Options for text rendering with rich formatting support.
 /// </summary>
-public sealed class TextRenderOptions
+public readonly struct TextRenderOptions
 {
+    public TextRenderOptions() { }
     /// <summary>
     /// Default color if not specified in markup.
     /// </summary>

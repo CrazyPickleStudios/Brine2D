@@ -9,6 +9,7 @@ namespace Brine2D.Rendering;
 public class SDL3Texture : ITexture
 {
     private readonly ILogger<SDL3Texture> _logger;
+    private readonly nint _device;
     private nint _textureHandle;
     private bool _disposed;
 
@@ -17,11 +18,12 @@ public class SDL3Texture : ITexture
     public int Height { get; }
     public bool IsLoaded => _textureHandle != nint.Zero && !_disposed;
     public TextureScaleMode ScaleMode { get; set; }
-    
+
     internal nint Handle => _textureHandle;
 
     public SDL3Texture(
         string source,
+        nint device,
         nint textureHandle,
         int width,
         int height,
@@ -29,6 +31,7 @@ public class SDL3Texture : ITexture
         ILogger<SDL3Texture> logger)
     {
         Source = source ?? throw new ArgumentNullException(nameof(source));
+        _device = device;
         _textureHandle = textureHandle;
         Width = width;
         Height = height;
@@ -40,11 +43,10 @@ public class SDL3Texture : ITexture
     {
         if (_disposed) return;
 
-        if (_textureHandle != nint.Zero)
+        if (_textureHandle != nint.Zero && _device != nint.Zero)
         {
-            // Note: GPU textures need to be released with SDL_ReleaseGPUTexture
-            // which requires the device handle. This is handled in the texture loader's Dispose
-            _logger.LogDebug("Marking GPU texture for disposal: {Source}", Source);
+            SDL3.SDL.ReleaseGPUTexture(_device, _textureHandle);
+            _logger.LogDebug("Released GPU texture: {Source}", Source);
             _textureHandle = nint.Zero;
         }
 

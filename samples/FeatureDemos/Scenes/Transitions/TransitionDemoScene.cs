@@ -34,7 +34,7 @@ public class TransitionDemoScene : DemoSceneBase
         _sceneName = $"Scene {Random.Shared.Next(1, 100)}";
     }
 
-    protected override Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("=== Transition Demo Scene ===");
         Logger.LogInformation("Controls:");
@@ -51,32 +51,28 @@ public class TransitionDemoScene : DemoSceneBase
 
     protected override void OnUpdate(GameTime gameTime)
     {
-        // Check for return to menu (ESC)
         if (CheckReturnToMenu()) return;
 
-        // Fast fade transition
         if (Input.IsKeyPressed(Key.D1))
         {
             Logger.LogInformation("Loading Scene A with fast fade...");
-            _ = SceneManager.LoadSceneAsync<SceneA>(
+            SceneManager.LoadScene<SceneA>(
                 new FadeTransition(duration: 0.5f, color: Color.Black)
             );
         }
 
-        // Slow fade transition
         if (Input.IsKeyPressed(Key.D2))
         {
             Logger.LogInformation("Loading Scene B with slow fade...");
-            _ = SceneManager.LoadSceneAsync<SceneB>(
+            SceneManager.LoadScene<SceneB>(
                 new FadeTransition(duration: 2f, color: new Color(50, 0, 100))
             );
         }
 
-        // With loading screen
         if (Input.IsKeyPressed(Key.D3))
         {
             Logger.LogInformation("Loading Scene C with loading screen...");
-            _ = SceneManager.LoadSceneAsync<SceneC, CustomLoadingScreen>(
+            SceneManager.LoadScene<SceneC, CustomLoadingScreen>(
                 transition: new FadeTransition(duration: 1f, color: Color.Black)
             );
         }

@@ -12,7 +12,7 @@ public class GameTimeTests
         // Arrange
         var totalTime = TimeSpan.FromSeconds(10);
         var elapsedTime = TimeSpan.FromSeconds(0.016);
-        ulong frameCount = 600;
+        long frameCount = 600;
 
         // Act
         var gameTime = new GameTime(totalTime, elapsedTime, frameCount);
@@ -36,7 +36,7 @@ public class GameTimeTests
         // Assert
         Assert.Equal(totalTime, gameTime.TotalTime);
         Assert.Equal(elapsedTime, gameTime.ElapsedTime);
-        Assert.Equal(0ul, gameTime.FrameCount);
+        Assert.Equal(0, gameTime.FrameCount);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class GameTimeTests
         // Assert
         Assert.Equal(TimeSpan.Zero, gameTime.TotalTime);
         Assert.Equal(TimeSpan.Zero, gameTime.ElapsedTime);
-        Assert.Equal(0ul, gameTime.FrameCount);
+        Assert.Equal(0, gameTime.FrameCount);
     }
 
     #endregion
@@ -186,7 +186,7 @@ public class GameTimeTests
         var frameCount = gameTime.FrameCount;
 
         // Assert
-        Assert.Equal(216000ul, frameCount);
+        Assert.Equal(216000, frameCount);
     }
 
     [Fact]
@@ -194,15 +194,15 @@ public class GameTimeTests
     {
         // Arrange
         var gameTime = new GameTime(
-            TimeSpan.FromDays(1000), 
-            TimeSpan.FromSeconds(1), 
-            ulong.MaxValue);
+            TimeSpan.FromDays(1000),
+            TimeSpan.FromSeconds(1),
+            long.MaxValue);
 
         // Act
         var frameCount = gameTime.FrameCount;
 
         // Assert
-        Assert.Equal(ulong.MaxValue, frameCount);
+        Assert.Equal(long.MaxValue, frameCount);
     }
 
     #endregion
@@ -212,10 +212,10 @@ public class GameTimeTests
     [Fact]
     public void GameTime_At60FPS_HasCorrectValues()
     {
-        // Arrange - Simulate 60 FPS game at 10 seconds runtime
+        // Arrange
         var totalTime = TimeSpan.FromSeconds(10);
-        var elapsedTime = TimeSpan.FromSeconds(1.0 / 60.0); // 16.67ms
-        ulong frameCount = 600;
+        var elapsedTime = TimeSpan.FromSeconds(1.0 / 60.0);
+        long frameCount = 600;
 
         // Act
         var gameTime = new GameTime(totalTime, elapsedTime, frameCount);
@@ -223,7 +223,7 @@ public class GameTimeTests
         // Assert
         Assert.Equal(10.0, gameTime.TotalSeconds);
         Assert.Equal(0.016666, gameTime.DeltaTime, precision: 5);
-        Assert.Equal(600ul, gameTime.FrameCount);
+        Assert.Equal(600L, gameTime.FrameCount);
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class GameTimeTests
         // Arrange - Simulate 30 FPS game at 5 seconds runtime
         var totalTime = TimeSpan.FromSeconds(5);
         var elapsedTime = TimeSpan.FromSeconds(1.0 / 30.0); // 33.33ms
-        ulong frameCount = 150;
+        long frameCount = 150;
 
         // Act
         var gameTime = new GameTime(totalTime, elapsedTime, frameCount);
@@ -240,7 +240,7 @@ public class GameTimeTests
         // Assert
         Assert.Equal(5.0, gameTime.TotalSeconds);
         Assert.Equal(0.033333, gameTime.DeltaTime, precision: 5);
-        Assert.Equal(150ul, gameTime.FrameCount);
+        Assert.Equal(150, gameTime.FrameCount);
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class GameTimeTests
         // Assert
         Assert.Equal(0.016, gameTime.TotalSeconds, precision: 3);
         Assert.Equal(0.016, gameTime.DeltaTime, precision: 3);
-        Assert.Equal(1ul, gameTime.FrameCount);
+        Assert.Equal(1, gameTime.FrameCount);
     }
 
     [Fact]
@@ -264,7 +264,7 @@ public class GameTimeTests
         // Arrange - 1 hour game session at 60 FPS
         var totalTime = TimeSpan.FromHours(1);
         var elapsedTime = TimeSpan.FromSeconds(1.0 / 60.0);
-        ulong frameCount = 216000; // 60 * 60 * 60
+        long frameCount = 216000; // 60 * 60 * 60
 
         // Act
         var gameTime = new GameTime(totalTime, elapsedTime, frameCount);
@@ -272,7 +272,7 @@ public class GameTimeTests
         // Assert
         Assert.Equal(3600.0, gameTime.TotalSeconds);
         Assert.Equal(0.016666, gameTime.DeltaTime, precision: 5);
-        Assert.Equal(216000ul, gameTime.FrameCount);
+        Assert.Equal(216000, gameTime.FrameCount);
     }
 
     #endregion

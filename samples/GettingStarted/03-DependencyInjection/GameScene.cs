@@ -24,7 +24,7 @@ public class GameScene : Scene
         _gameOptions  = gameOptions;
     }
 
-    protected override Task OnLoadAsync(CancellationToken cancellationToken)
+    protected override Task OnLoadAsync(CancellationToken cancellationToken, IProgress<float>? progress = null)
     {
         Logger.LogInformation("GameScene: OnLoad");
         Renderer.ClearColor = new Color(52, 78, 65, 255);

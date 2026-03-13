@@ -1,5 +1,9 @@
 # Brine2D
 
+<p align="center">
+  <img src=".github/images/logo.png" alt="Brine2D Logo" width="200">
+</p>
+
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![Build Status](https://github.com/CrazyPickleStudios/Brine2D/workflows/CI/badge.svg)](https://github.com/CrazyPickleStudios/Brine2D/actions)
 [![codecov](https://codecov.io/github/CrazyPickleStudios/Brine2D/graph/badge.svg?token=RIDC7GF0J4)](https://codecov.io/github/CrazyPickleStudios/Brine2D)
@@ -35,7 +39,7 @@ await game.RunAsync<MainMenuScene>();
 
 That's a complete entry point. `Build()` validates that every scene's dependencies are registered before the window opens. A missing service means a clear error message at startup, not a `NullReferenceException` mid-game.
 
-**No content pipeline. No editor. No `.mgcb` files.**  
+**No content pipeline. No editor. No special build steps.**  
 Drop assets into a folder and load them. That's it.
 
 ~~~csharp
@@ -49,10 +53,13 @@ public class LevelAssets : AssetManifest
 
 public class GameScene : Scene
 {
+    private readonly IAssetLoader _assetLoader;
     private readonly LevelAssets _manifest = new();
 
-    protected override async Task OnLoadAsync(CancellationToken ct)
-        => await _assets.PreloadAsync(_manifest, progress: loadingScreen.Progress, ct);
+    public GameScene(IAssetLoader assetLoader) => _assetLoader = assetLoader;
+
+    protected override async Task OnLoadAsync(CancellationToken ct, IProgress<float>? progress = null)
+        => await _assetLoader.PreloadAsync(_manifest, cancellationToken: ct);
 
     protected override void OnEnter()
     {
@@ -99,7 +106,7 @@ public class GameScene : Scene
 {
     protected override void OnEnter()
     {
-        Renderer.ClearColor = Color.CornflowerBlue;
+        Renderer.ClearColor = Color.DarkSlateBlue;
 
         World.CreateEntity("Player")
             .AddComponent<TransformComponent>(t => t.Position = new Vector2(640, 360))
@@ -110,7 +117,7 @@ public class GameScene : Scene
     protected override void OnUpdate(GameTime gameTime)
     {
         if (Input.IsKeyPressed(Key.Escape))
-            Environment.Exit(0);
+            Game.RequestExit();
     }
 
     protected override void OnRender(GameTime gameTime)
@@ -146,12 +153,15 @@ dotnet run
 ~~~csharp
 public class GameScene : Scene
 {
+    private readonly IAssetLoader _assetLoader;
     private LevelAssets _assets = new();
 
+    public GameScene(IAssetLoader assetLoader) => _assetLoader = assetLoader;
+
     // 1. OnLoadAsync: I/O only. Runs while loading screen is visible.
-    protected override async Task OnLoadAsync(CancellationToken ct)
+    protected override async Task OnLoadAsync(CancellationToken ct, IProgress<float>? progress = null)
     {
-        await _assets.PreloadAsync(Assets, progress: null, ct);
+        await _assetLoader.PreloadAsync(_assets, cancellationToken: ct);
     }
 
     // 2. OnEnter: Scene logic. Assets are ready. Default systems already added.
@@ -192,7 +202,7 @@ public class GameScene : Scene
 | `World` | `IEntityWorld` | Scene-scoped entity world, auto-disposed |
 | `Renderer` | `IRenderer` | Draw calls and render state |
 | `Input` | `IInputContext` | Keyboard, mouse, gamepad |
-| `Audio` | `AudioService` | Music and sound effects |
+| `Audio` | `IAudioService` | Music and sound effects |
 | `Logger` | `ILogger` | Scoped to your scene type |
 | `Game` | `IGameContext` | Frame time, frame count |
 
@@ -212,38 +222,38 @@ public class GameScene : Scene
 
 **Default systems (added automatically in execution order):**
 
-| System | Order | Purpose |
-|---|---|---|
-| `SpriteRenderingSystem` | -100 | Sprite batching and frustum culling |
-| `ParticleSystem` | 0 | Particle effects with object pooling |
-| `VelocitySystem` | 100 | Position integration |
-| `CollisionDetectionSystem` | 200 | AABB and circle colliders |
-| `AudioSystem` | 300 | Spatial audio processing |
-| `CameraSystem` | 400 | Camera follow and zoom |
-| `DebugRenderer` | 900 | Debug visualization (disabled by default) |
+| System | Pipeline | Order | Purpose |
+|---|---|---|---|
+| `SpriteRenderingSystem` | Render | 0 | Sprite batching and frustum culling |
+| `AudioSystem` | Update | 0 | Spatial audio processing |
+| `VelocitySystem` | Update | 100 | Position integration |
+| `CollisionDetectionSystem` | Update | 200 | AABB and circle colliders |
+| `ParticleSystem` | Both | 250 / 100 | Particle effects with object pooling |
+| `CameraSystem` | Update | 500 | Camera follow and zoom |
+| `DebugRenderer` | Render | 1000 | Debug visualization (disabled by default) |
 
 ---
 
 ### Scene Navigation
 
 ~~~csharp
-// Simple load
-await SceneManager.LoadSceneAsync<GameScene>();
+// Simple load (inject ISceneManager via constructor)
+_sceneManager.LoadScene<GameScene>();
 
 // With a fade transition
-await SceneManager.LoadSceneAsync<GameScene>(
+_sceneManager.LoadScene<GameScene>(
     new FadeTransition(duration: 0.5f, color: Color.Black));
 
 // With a loading screen (scene loads in background, window never freezes)
-await SceneManager.LoadSceneAsync<GameScene, MyLoadingScreen>(
+_sceneManager.LoadScene<GameScene, MyLoadingScreen>(
     new FadeTransition(duration: 1f));
 
 // With a factory, for passing runtime data DI can't provide
-await SceneManager.LoadSceneAsync(sp =>
+_sceneManager.LoadScene(sp =>
     new LevelScene(sp.GetRequiredService<IRenderer>(), levelNumber: 3));
 ~~~
 
-Calling `LoadSceneAsync` from inside `OnUpdate` is safe; the transition is deferred to the frame boundary automatically.
+Calling `LoadScene` from inside `OnUpdate` is safe; the transition is deferred to the frame boundary automatically.
 
 ---
 
@@ -275,7 +285,7 @@ public class PlayerMovementBehavior : EntityBehavior
     public override void Update(GameTime gameTime)
     {
         if (_input.IsKeyDown(Key.W))
-            _transform.Position -= Vector2.UnitY * 200f * gameTime.DeltaTime;
+            _transform.Position -= Vector2.UnitY * 200f * (float)gameTime.DeltaTime;
     }
 }
 ~~~
@@ -293,8 +303,8 @@ public class GravitySystem : UpdateSystemBase
             .With<RigidbodyComponent>()
             .ForEach((entity, transform, body) =>
             {
-                body.Velocity += new Vector2(0, 980f) * gameTime.DeltaTime;
-                transform.Position += body.Velocity * gameTime.DeltaTime;
+                body.Velocity += new Vector2(0, 980f) * (float)gameTime.DeltaTime;
+                transform.Position += body.Velocity * (float)gameTime.DeltaTime;
             });
     }
 }
@@ -332,12 +342,15 @@ public class LevelAssets : AssetManifest
 ~~~
 
 ~~~csharp
+private readonly IAssetLoader _assetLoader;
 private readonly LevelAssets _assets = new();
 
-protected override async Task OnLoadAsync(CancellationToken ct)
+public GameScene(IAssetLoader assetLoader) => _assetLoader = assetLoader;
+
+protected override async Task OnLoadAsync(CancellationToken ct, IProgress<float>? progress = null)
 {
-    // All assets loaded in parallel. Progress reported to loading screen.
-    await _assets.PreloadAsync(Assets, progress: loadingScreen.Progress, ct);
+    // All assets loaded in parallel
+    await _assetLoader.PreloadAsync(_assets, cancellationToken: ct);
 }
 
 protected override void OnEnter()
@@ -351,9 +364,9 @@ protected override void OnEnter()
 **Option 2: Direct loading (quick scripts, one-off assets)**
 
 ~~~csharp
-var tex  = await _assets.GetOrLoadTextureAsync("assets/images/logo.png");
-var sfx  = await _assets.GetOrLoadSoundAsync("assets/audio/click.wav");
-var font = await _assets.GetOrLoadFontAsync("assets/fonts/mono.ttf", size: 14);
+var tex  = await _assetLoader.GetOrLoadTextureAsync("assets/images/logo.png");
+var sfx  = await _assetLoader.GetOrLoadSoundAsync("assets/audio/click.wav");
+var font = await _assetLoader.GetOrLoadFontAsync("assets/fonts/mono.ttf", size: 14);
 ~~~
 
 All three share the same thread-safe cache, so loading the same path twice returns the cached instance.
@@ -523,7 +536,7 @@ public class CameraShakeSystem : UpdateSystemBase
             .With<CameraShakeComponent>()
             .ForEach<CameraShakeComponent>((entity, shake) =>
             {
-                shake.Remaining -= gameTime.DeltaTime;
+                shake.Remaining -= (float)gameTime.DeltaTime;
                 if (shake.Remaining <= 0)
                     entity.RemoveComponent<CameraShakeComponent>();
             });
@@ -548,7 +561,7 @@ protected override void OnEnter()
     World.AddSystem<CameraShakeSystem>();
 
     // Remove a default system you don't need
-    World.RemoveSystem(World.GetSystem<ParticleSystem>()!);
+    World.RemoveSystem<ParticleSystem>();
 
     // Configure a default system
     World.GetSystem<DebugRenderer>()!.IsEnabled = true;
@@ -599,7 +612,7 @@ builder.Services.AddSingleton<IPlayerService, PlayerService>();
 builder.Services.AddSingleton<ISaveSystem, LocalSaveSystem>();
 
 // Optional features
-builder.Services.AddBrine2D().UseInputLayers(); // context-sensitive input routing
+builder.ConfigureBrine2D(b => b.UseInputLayers()); // context-sensitive input routing
 builder.Services.AddPostProcessing();
 builder.Services.AddTextureAtlasing();
 builder.Services.AddTilemapServices();
@@ -663,11 +676,9 @@ Renderer.DrawText(
 ### Advanced Rendering
 
 ~~~csharp
-// Post-processing
-Renderer.PostProcessing?.AddEffect("Bloom");
-Renderer.PostProcessing?.AddEffect("Grayscale");
+// Post-processing (register via builder.Services.AddPostProcessing() in Program.cs)
 
-// Off-screen render target (minimap, portals, etc.)
+// Off-screen render target
 using var minimap = Renderer.CreateRenderTarget(256, 256);
 Renderer.PushRenderTarget(minimap);
 RenderMinimapContent();

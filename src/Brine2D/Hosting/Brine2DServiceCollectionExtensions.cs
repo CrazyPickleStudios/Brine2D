@@ -63,9 +63,18 @@ public static class Brine2DServiceCollectionExtensions
         services.TryAddSingleton<GameLoop>();
 
         services.TryAddSingleton<IGameContext, GameContext>();
+        services.TryAddSingleton<SceneFrameworkServices>();
         services.TryAddSingleton<SceneManager>();
         services.TryAddSingleton<ISceneManager>(sp => sp.GetRequiredService<SceneManager>());
+        services.TryAddSingleton<ISceneLoop>(sp => sp.GetRequiredService<SceneManager>());
         services.TryAddSingleton<ICameraManager, CameraManager>();
+
+        // Scene load error info: written by SceneManager, read by fallback scenes via ISceneLoadErrorInfo.
+        services.TryAddSingleton<SceneLoadErrorInfo>();
+        services.TryAddSingleton<ISceneLoadErrorInfo>(sp => sp.GetRequiredService<SceneLoadErrorInfo>());
+
+        // Built-in fallback scene; replaced project-wide via builder.UseFallbackScene<T>().
+        services.TryAddTransient<DefaultFallbackScene>();
 
         // Camera registration with ICameraManager is handled by SceneManager.SetupScene; DI factories must be side-effect-free.
         services.TryAddScoped<ICamera>(sp =>
