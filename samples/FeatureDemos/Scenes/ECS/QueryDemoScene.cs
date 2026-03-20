@@ -487,8 +487,7 @@ public class QueryDemoScene : DemoSceneBase
         // Random multiple
         var random3 = World.Query()
             .WithTag("Enemy")
-            .Random(3)
-            .Execute();
+            .Random(3);
 
         Logger.LogInformation("Random(3) enemies:");
         foreach (var entity in random3)

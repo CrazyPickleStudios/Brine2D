@@ -9,8 +9,8 @@ namespace Brine2D.Rendering;
 public sealed class RenderingOptions
 {
     /// <summary>
-    /// Gets or sets whether VSync is enabled.
-    /// When true, frame rate is synchronized with display refresh rate.
+    /// Synchronizes frame rate with the display refresh rate. Default: <see langword="true"/>.
+    /// When disabled, use <see cref="TargetFPS"/> to cap the frame rate manually.
     /// </summary>
     public bool VSync { get; set; } = true;
 
@@ -36,7 +36,18 @@ public sealed class RenderingOptions
     public int MaxDeltaTimeMs { get; set; } = 100;
 
     /// <summary>
-    /// Gets or sets the clear color used when clearing the screen each frame.
+    /// Gets or sets the number of vertices that can be staged per GPU transfer pass.
     /// </summary>
+    /// <remarks>
+    /// This value sizes the GPU vertex buffer and per-frame transfer buffers (3 in flight).
+    /// Each vertex is 32 bytes, so memory cost is approximately <c>MaxVerticesPerFrame × 32 × 4</c> bytes
+    /// (1 vertex buffer + 3 transfer buffers). The default of 50,000 uses ~6.4 MB total.
+    /// When this limit is reached mid-frame, the renderer automatically flushes pending draw calls
+    /// to the GPU and reuses the buffer space — no vertices are dropped.
+    /// Larger values reduce the number of mid-frame flush passes at the cost of more GPU memory.
+    /// </remarks>
+    [Range(1000, 1_000_000, ErrorMessage = "MaxVerticesPerFrame must be between 1,000 and 1,000,000")]
+    public int MaxVerticesPerFrame { get; set; } = 50_000;
+
     public Color ClearColor { get; set; } = Color.FromArgb(255, 52, 78, 65);
 }

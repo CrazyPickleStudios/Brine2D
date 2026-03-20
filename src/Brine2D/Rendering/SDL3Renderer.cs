@@ -271,7 +271,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     
         _batchRenderer = new SDL3BatchRenderer(
             _loggerFactory.CreateLogger<SDL3BatchRenderer>(),
-            _stateManager);
+            _stateManager,
+            renderingOptions);
 
         _renderTargetManager = new SDL3RenderTargetManager(
             _loggerFactory.CreateLogger<SDL3RenderTargetManager>(),
@@ -704,7 +705,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         var bufferCreateInfo = new SDL3.SDL.GPUBufferCreateInfo
         {
             Usage = SDL3.SDL.GPUBufferUsageFlags.Vertex,
-            Size = (uint)(SDL3BatchRenderer.VertexSize * SDL3BatchRenderer.MaxVertices)  
+            Size = (uint)(SDL3BatchRenderer.VertexSize * _batchRenderer.MaxVertices)
         };
 
         _vertexBuffer = SDL3.SDL.CreateGPUBuffer(_device, ref bufferCreateInfo);
@@ -716,7 +717,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             throw new InvalidOperationException($"Failed to create vertex buffer: {error}");
         }
 
-        _logger.LogDebug("Vertex buffer created ({Size} vertices)", SDL3BatchRenderer.MaxVertices);  
+        _logger.LogDebug("Vertex buffer created ({Size} vertices)", _batchRenderer.MaxVertices);
     }
 
     private void UpdateProjectionMatrix(int width, int height)
@@ -789,6 +790,12 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
     {
         if (_batchRenderer.VertexCount == 0) return;
         if (!_frameManager.HasActiveFrame) return;
+
+        if (_batchRenderer.FrameVertexOffset + _batchRenderer.VertexCount > _batchRenderer.MaxVertices)
+        {
+            ExecuteDrawCalls();
+            _batchRenderer.ResetFrameVertexOffset();
+        }
 
         var (firstVertex, vertexCount) = _batchRenderer.StageForUpload();
         if (vertexCount == 0) return;

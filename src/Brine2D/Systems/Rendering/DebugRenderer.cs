@@ -17,7 +17,7 @@ namespace Brine2D.Systems.Rendering;
 public class DebugRenderer : RenderSystemBase
 {
     public string Name => "DebugRenderer"; 
-    public int RenderOrder => 1000;
+    public override int RenderOrder => 1000;
 
     public bool ShowColliders { get; set; } = true;
     public bool ShowVelocities { get; set; } = true;

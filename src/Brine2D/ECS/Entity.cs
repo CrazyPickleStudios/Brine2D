@@ -1,4 +1,5 @@
-﻿using Brine2D.Core;
+﻿using System.Buffers;
+using Brine2D.Core;
 using Brine2D.ECS.Components;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
@@ -13,30 +14,65 @@ namespace Brine2D.ECS;
 /// </summary>
 public class Entity
 {
-    private readonly ILogger<Entity>? _logger;
+    private ILogger<Entity>? _logger;
     private readonly HashSet<string> _tags = new();
 
-    // Hierarchy support
     private Entity? _parent;
     private readonly List<Entity> _children = new();
-    // Cached read-only wrapper; reflects live _children without re-allocating on each access.
     private ReadOnlyCollection<Entity>? _readOnlyChildren;
     private readonly List<EntityBehavior> _behaviors = new();
+    private ReadOnlyCollection<EntityBehavior>? _readOnlyBehaviors;
 
-    // Concrete type for internal use, interface for public API
     private EntityWorld? _world;
-
+    
     // Global counter across all EntityWorld instances — IDs are intentionally unique
     // process-wide, not per-world. In tests, avoid asserting specific ID values.
-    private static int _nextId;
+    private static long _nextId;
 
     /// <summary>
-    /// Unique integer ID for this entity. Assigned atomically at creation.
+    /// Unique ID for this entity. Assigned atomically at creation.
     /// IDs start at 1; 0 is reserved as an invalid/null sentinel.
     /// </summary>
-    public int Id { get; } = Interlocked.Increment(ref _nextId);
+    public long Id { get; } = Interlocked.Increment(ref _nextId);
     public string Name { get; set; } = string.Empty;
-    public bool IsActive { get; set; } = true;
+
+    private bool _isActive = true;
+
+    /// <summary>
+    /// Indicates whether this entity is active in the world.
+    /// Inactive entities are skipped by the ECS processing and
+    /// excluded from queries. Set this to false to deactivate
+    /// the entity without destroying it.
+    /// </summary>
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_isActive == value) return;
+            _isActive = value;
+            _world?.NotifyActiveChanged();
+        }
+    }
+
+    /// <summary>
+    /// Sets <see cref="IsActive"/> without notifying the world.
+    /// Used during entity destruction to avoid O(n × q) redundant
+    /// query invalidations that will be superseded by pool removal.
+    /// </summary>
+    internal void SetActiveWithoutNotification(bool value) => _isActive = value;
+
+    /// <summary>
+    /// Forwards <see cref="Component.IsEnabled"/> change notifications to the world
+    /// so cached queries built with <c>OnlyEnabled()</c> are invalidated.
+    /// </summary>
+    internal void NotifyComponentEnabledChanged() => _world?.NotifyComponentEnabledChanged();
+
+    /// <summary>
+    /// True after <see cref="OnDestroy"/> has removed this entity's components from all pools.
+    /// Used by <see cref="EntityWorld"/> to skip the redundant safety-net cleanup pass.
+    /// </summary>
+    internal bool PoolsCleared { get; private set; }
 
     /// <summary>
     /// The entity world this entity belongs to, or null if not yet added to a world.
@@ -51,6 +87,13 @@ public class Entity
     {
         _world = world;
     }
+
+    /// <summary>
+    /// Sets the logger for this entity.
+    /// Internal — called by <see cref="EntityWorld.CreateEntity{T}"/> after construction
+    /// when the <c>new()</c> constraint prevents constructor injection.
+    /// </summary>
+    internal void SetLogger(ILogger<Entity>? logger) => _logger = logger;
 
     /// <summary>
     /// Gets the tags for this entity as a read-only set.
@@ -75,14 +118,6 @@ public class Entity
     /// </summary>
     public bool IsRoot => _parent == null;
 
-    /// <summary>
-    /// Internal constructor. Entities should be created via World.CreateEntity().
-    /// </summary>
-    internal Entity(ILogger<Entity>? logger = null)
-    {
-        _logger = logger;
-    }
-
     #region Lifecycle Methods (Override for object-oriented ECS)
 
     /// <summary>
@@ -103,35 +138,69 @@ public class Entity
     /// Note: Component.OnRemoved() is intentionally NOT called here for performance.
     /// Entity destruction is final. If you need OnRemoved callbacks, call
     /// RemoveComponent&lt;T&gt;() explicitly before destroying the entity.
+    /// Children are destroyed synchronously so their OnDestroy can safely
+    /// access parent state (components, behaviors, etc.). Each child is then
+    /// queued for deferred removal from the world so that the entity lookup
+    /// and tag index are properly cleaned up.
     /// </remarks>
     public virtual void OnDestroy()
     {
-        // Cascade destruction to children.
-        // Use array snapshot since DestroyEntity modifies _children via child.SetParent(null).
         if (_children.Count > 0)
         {
-            var childSnapshot = _children.ToArray();
-            foreach (var child in childSnapshot)
-                _world?.DestroyEntity(child);
+            var count = _children.Count;
+            var childSnapshot = ArrayPool<Entity>.Shared.Rent(count);
+            try
+            {
+                _children.CopyTo(childSnapshot, 0);
+                for (int i = 0; i < count; i++)
+                {
+                    var child = childSnapshot[i];
+                    if (!child.PoolsCleared)
+                    {
+                        child.SetActiveWithoutNotification(false);
+                        child.OnDestroy();
+                    }
+
+                    // Queues deferred removal so the entity lookup and tag index are cleaned up.
+                    // The removal callback in ProcessEntityRemovals will skip OnDestroy because
+                    // PoolsCleared is already set by the synchronous call above.
+                    _world?.DestroyEntity(child);
+                }
+            }
+            finally
+            {
+                ArrayPool<Entity>.Shared.Return(childSnapshot, clearArray: true);
+            }
         }
 
-        // Detach from parent
         if (_parent != null)
         {
             _parent._children.Remove(this);
             _parent = null;
         }
 
-        // Detach all behaviors; give them a chance to clean up
-        foreach (var behavior in _behaviors)
+        var behaviorCount = _behaviors.Count;
+        if (behaviorCount > 0)
         {
-            behavior.OnDetached();
-            _world?.NotifyBehaviorRemoved(this, behavior);
+            var behaviorSnapshot = ArrayPool<EntityBehavior>.Shared.Rent(behaviorCount);
+            try
+            {
+                _behaviors.CopyTo(behaviorSnapshot, 0);
+                for (int i = 0; i < behaviorCount; i++)
+                {
+                    behaviorSnapshot[i].OnDetached();
+                    _world?.NotifyBehaviorRemoved(this, behaviorSnapshot[i]);
+                }
+            }
+            finally
+            {
+                ArrayPool<EntityBehavior>.Shared.Return(behaviorSnapshot, clearArray: true);
+            }
+            _behaviors.Clear();
         }
-        _behaviors.Clear();
 
-        // Remove all components from pools via world (encapsulated, single lock)
-        (_world as EntityWorld)?.RemoveEntityFromAllPools(Id);
+        _world?.RemoveEntityFromAllPools(Id);
+        PoolsCleared = true;
 
         _children.Clear();
     }
@@ -154,6 +223,12 @@ public class Entity
         if (newParent != null && newParent.IsDescendantOf(this))
         {
             _logger?.LogWarning("Cannot set parent - would create circular reference");
+            return this;
+        }
+
+        if (newParent != null && _world != null && newParent._world != null && _world != newParent._world)
+        {
+            _logger?.LogWarning("Cannot parent entities across different worlds");
             return this;
         }
 
@@ -202,15 +277,22 @@ public class Entity
     }
 
     /// <summary>
-    /// Gets all descendant entities (children, grandchildren, etc.) recursively.
+    /// Gets all descendant entities (children, grandchildren, etc.) via iterative depth-first traversal.
     /// </summary>
     public IEnumerable<Entity> GetDescendants()
     {
-        foreach (var child in _children)
+        if (_children.Count == 0) yield break;
+
+        var stack = new Stack<Entity>();
+        for (int i = _children.Count - 1; i >= 0; i--)
+            stack.Push(_children[i]);
+
+        while (stack.Count > 0)
         {
-            yield return child;
-            foreach (var descendant in child.GetDescendants())
-                yield return descendant;
+            var current = stack.Pop();
+            yield return current;
+            for (int i = current._children.Count - 1; i >= 0; i--)
+                stack.Push(current._children[i]);
         }
     }
 
@@ -219,15 +301,9 @@ public class Entity
     /// </summary>
     public Entity? FindDescendant(string name)
     {
-        foreach (var child in _children)
-        {
-            if (child.Name == name)
-                return child;
-
-            var found = child.FindDescendant(name);
-            if (found != null)
-                return found;
-        }
+        foreach (var descendant in GetDescendants())
+            if (descendant.Name == name)
+                return descendant;
         return null;
     }
 
@@ -291,6 +367,13 @@ public class Entity
     /// Creates and adds a component with inline configuration.
     /// If the entity already has this component type, the configure action is applied to the existing one.
     /// </summary>
+    /// <remarks>
+    /// For new components, <paramref name="configure"/> runs before the component is attached.
+    /// <see cref="Component.Entity"/> is <see langword="null"/> during configuration and
+    /// <see cref="Component.OnAdded"/> has not yet been called.
+    /// For duplicate components, <paramref name="configure"/> is applied to the existing
+    /// instance which is already attached.
+    /// </remarks>
     public Entity AddComponent<T>(Action<T>? configure) where T : Component, new()
     {
         if (HasComponent<T>())
@@ -310,8 +393,29 @@ public class Entity
     /// <summary>
     /// Adds an existing component instance to this entity.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the entity has been destroyed or is not attached to a world.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the runtime type of <paramref name="component"/> does not match <typeparamref name="T"/>,
+    /// which would cause the component to be stored under the wrong pool key.
+    /// </exception>
     public Entity AddComponent<T>(T component) where T : Component
     {
+        if (PoolsCleared)
+            throw new InvalidOperationException(
+                $"Cannot add component to entity '{Name}' ({Id}) - it has been destroyed");
+
+        if (_world == null)
+            throw new InvalidOperationException(
+                "Cannot add component - entity is not in a world");
+
+        if (typeof(T) != component.GetType())
+            throw new ArgumentException(
+                $"Component runtime type '{component.GetType().Name}' does not match generic parameter '{typeof(T).Name}'. " +
+                $"Use AddComponent<{component.GetType().Name}>() to ensure correct pool registration.",
+                nameof(component));
+
         if (HasComponent<T>())
         {
             _logger?.LogDebug("Entity {Name} ({Id}) already has component {Type}, skipping",
@@ -320,8 +424,8 @@ public class Entity
         }
 
         component.Entity = this;
-        _world?.AddComponentToPool(this.Id, component);
-        _world?.NotifyComponentAdded(this, component);
+        _world.AddComponentToPool(this.Id, component);
+        _world.NotifyComponentAdded(this, component);
         component.OnAdded();
 
         return this;
@@ -437,7 +541,8 @@ public class Entity
             _logger?.LogWarning("Attempted to add null or empty tag to entity {Name}", Name);
             return this;
         }
-        _tags.Add(tag);
+        if (_tags.Add(tag))
+            _world?.NotifyTagAdded(this, tag);
         return this;
     }
 
@@ -445,27 +550,42 @@ public class Entity
     {
         foreach (var tag in tags)
         {
-            if (!string.IsNullOrWhiteSpace(tag))
-                _tags.Add(tag);
+            if (!string.IsNullOrWhiteSpace(tag) && _tags.Add(tag))
+                _world?.NotifyTagAdded(this, tag);
         }
         return this;
     }
 
     public Entity RemoveTag(string tag)
     {
-        _tags.Remove(tag);
+        if (_tags.Remove(tag))
+            _world?.NotifyTagRemoved(this, tag);
         return this;
     }
 
     public bool HasTag(string tag) => _tags.Contains(tag);
 
-    public bool HasAllTags(params string[] tags) => tags.All(t => _tags.Contains(t));
+    public bool HasAllTags(params string[] tags)
+    {
+        foreach (var tag in tags)
+            if (!_tags.Contains(tag)) return false;
+        return true;
+    }
 
-    public bool HasAnyTag(params string[] tags) => tags.Any(t => _tags.Contains(t));
+    public bool HasAnyTag(params string[] tags)
+    {
+        foreach (var tag in tags)
+            if (_tags.Contains(tag)) return true;
+        return false;
+    }
 
     public Entity ClearTags()
     {
-        _tags.Clear();
+        if (_tags.Count > 0)
+        {
+            _world?.NotifyTagsCleared(this, _tags);
+            _tags.Clear();
+        }
         return this;
     }
 
@@ -491,7 +611,7 @@ public class Entity
             throw new InvalidOperationException("Cannot add behavior - entity is not in a world");
 
         // Duplicate guard, matches AddSystem<T>() pattern
-        if (_behaviors.Any(b => b is T))
+        if (HasBehavior<T>())
         {
             _logger?.LogWarning("Entity {Name} already has behavior {Type}, skipping", Name, typeof(T).Name);
             return this;
@@ -511,10 +631,35 @@ public class Entity
     }
 
     /// <summary>
+    /// Checks if this entity has a behavior of the specified type.
+    /// </summary>
+    public bool HasBehavior<T>() where T : EntityBehavior
+    {
+        foreach (var b in _behaviors)
+            if (b is T) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if this entity has a behavior of the specified type (non-generic version).
+    /// Used internally by query infrastructure for dynamic type checking.
+    /// </summary>
+    internal bool HasBehavior(Type behaviorType)
+    {
+        foreach (var b in _behaviors)
+            if (behaviorType.IsInstanceOfType(b)) return true;
+        return false;
+    }
+
+    /// <summary>
     /// Gets a behavior of the specified type attached to this entity.
     /// </summary>
     public T? GetBehavior<T>() where T : EntityBehavior
-        => _behaviors.OfType<T>().FirstOrDefault();
+    {
+        foreach (var b in _behaviors)
+            if (b is T match) return match;
+        return null;
+    }
 
     /// <summary>
     /// Removes a behavior from this entity.
@@ -536,7 +681,7 @@ public class Entity
     /// <summary>
     /// Gets all behaviors attached to this entity.
     /// </summary>
-    public IEnumerable<EntityBehavior> GetAllBehaviors() => _behaviors;
+    public IReadOnlyList<EntityBehavior> GetAllBehaviors() => _readOnlyBehaviors ??= _behaviors.AsReadOnly();
 
     #endregion
 
@@ -544,7 +689,7 @@ public class Entity
     {
         var parentInfo = _parent != null ? $", Parent: {_parent.Name}" : "";
         var childrenInfo = _children.Count > 0 ? $", Children: {_children.Count}" : "";
-        var componentCount = GetAllComponents().Count();
+        var componentCount = _world?.GetComponentCountForEntity(Id) ?? 0;
         var componentsInfo = componentCount > 0 ? $", Components: {componentCount}" : "";
         var behaviorsInfo = _behaviors.Count > 0 ? $", Behaviors: {_behaviors.Count}" : "";
         return $"Entity {Name} ({Id}) - Active: {IsActive}, Tags: {_tags.Count}{componentsInfo}{behaviorsInfo}{parentInfo}{childrenInfo}";

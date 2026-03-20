@@ -53,6 +53,7 @@ public class MainMenuScene : Scene
             // ECS
             new("Query System",          () => _sceneManager.LoadScene<QueryDemoScene>(new FadeTransition(0.5f, Color.Black)),           "Advanced entity queries",        "ECS"),
             new("Particle System",       () => _sceneManager.LoadScene<ParticleDemoScene>(new FadeTransition(0.5f, Color.Black)),         "Pooled particle effects",        "ECS"),
+            new("Fixed Update",          () => _sceneManager.LoadScene<FixedUpdateDemoScene>(new FadeTransition(0.5f, Color.Black)),      "Deterministic fixed timestep",   "ECS"),
 
             // Rendering
             new("Texture Atlasing",      () => _sceneManager.LoadScene<TextureAtlasDemoScene>(new FadeTransition(0.5f, Color.Black)),     "Sprite batching & atlases",      "Rendering"),
@@ -82,8 +83,10 @@ public class MainMenuScene : Scene
         _itemLabels = new string[_demos.Count];
         for (int i = 0; i < _demos.Count; i++)
         {
-            var numberStr = i < 9 ? $"{i + 1}" : "0";
-            _itemLabels[i] = $"{numberStr}. {_demos[i].DisplayName}";
+            var numberStr = i < 9 ? $"{i + 1}" : i == 9 ? "0" : null;
+            _itemLabels[i] = numberStr != null
+                ? $"{numberStr}. {_demos[i].DisplayName}"
+                : $"   {_demos[i].DisplayName}";
         }
 
         _categoryHeaders = _demos

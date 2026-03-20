@@ -418,7 +418,7 @@ public class CachedEntityQueryTests : TestBase
     }
 
     [Fact]
-    public void Count_BeforeExecution_ReturnsZero()
+    public void Count_BeforeExecution_ReturnsCorrectCount()
     {
         // Arrange
         var world = CreateTestWorld();
@@ -427,15 +427,15 @@ public class CachedEntityQueryTests : TestBase
 
         var query = world.CreateCachedQuery<TransformComponent>().Build();
 
-        // Act - Count without executing
+        // Act - Count without calling Execute() first
         var count = query.Count();
 
-        // Assert - Returns 0 because cache is dirty
-        Assert.Equal(0, count);
+        // Assert - Count auto-refreshes the cache
+        Assert.Equal(1, count);
     }
 
     [Fact]
-    public void Count_AfterInvalidation_ReturnsZero()
+    public void Count_AfterInvalidation_ReturnsCorrectCount()
     {
         // Arrange
         var world = CreateTestWorld();
@@ -444,13 +444,13 @@ public class CachedEntityQueryTests : TestBase
 
         var query = world.CreateCachedQuery<TransformComponent>().Build();
         query.Execute(); // Cache results
-        
+
         // Act
         query.Invalidate();
         var count = query.Count();
 
-        // Assert - Returns 0 because cache is dirty
-        Assert.Equal(0, count);
+        // Assert - Count auto-refreshes the cache after invalidation
+        Assert.Equal(1, count);
     }
 
     #endregion

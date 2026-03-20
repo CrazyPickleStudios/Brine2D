@@ -15,7 +15,7 @@ namespace Brine2D.Systems.Rendering;
 public class CameraSystem : UpdateSystemBase
 {
     public string Name => "CameraSystem"; 
-    public int UpdateOrder => 500; 
+    public override int UpdateOrder => 500;
 
     private readonly ICameraManager _cameraManager;
     private CachedEntityQuery<CameraFollowComponent>? _followQuery;

@@ -28,6 +28,10 @@ public class ParticleDemoScene : DemoSceneBase
     private ITextureAtlasCollection? _particleAtlas;
     private ITexture? _particleTexture;
 
+    private const int MaxBurstEmitters = 8;
+    private const float BurstEmissionWindow = 0.15f;
+    private readonly List<(Entity Entity, float Age)> _burstEmitters = new();
+
     private enum EffectType
     {
         Fire,
@@ -113,6 +117,8 @@ public class ParticleDemoScene : DemoSceneBase
         HandlePerformanceHotkeys();
         if (CheckReturnToMenu()) return;
 
+        var deltaTime = (float)gameTime.DeltaTime;
+
         // Switch effects (1-8 keys)
         if (_input.IsKeyPressed(Key.D1)) SwitchEffect(EffectType.Fire);
         if (_input.IsKeyPressed(Key.D2)) SwitchEffect(EffectType.Explosion);
@@ -150,8 +156,40 @@ public class ParticleDemoScene : DemoSceneBase
         // Spawn burst on click
         if (_input.IsMouseButtonPressed(MouseButton.Left))
         {
-            var mousePos = _input.MousePosition;
-            SpawnBurst(mousePos, _currentEffect);
+            SpawnBurst(_input.MousePosition, _currentEffect);
+        }
+
+        CleanupBurstEmitters(deltaTime);
+    }
+
+    private void CleanupBurstEmitters(float deltaTime)
+    {
+        for (int i = _burstEmitters.Count - 1; i >= 0; i--)
+        {
+            var (entity, age) = _burstEmitters[i];
+            var emitter = entity.GetComponent<ParticleEmitterComponent>();
+
+            if (emitter == null)
+            {
+                _burstEmitters.RemoveAt(i);
+                continue;
+            }
+
+            var newAge = age + deltaTime;
+
+            if (newAge > BurstEmissionWindow && emitter.IsEmitting)
+            {
+                emitter.IsEmitting = false;
+            }
+
+            if (!emitter.IsEmitting && emitter.ParticleCount == 0)
+            {
+                World.DestroyEntity(entity);
+                _burstEmitters.RemoveAt(i);
+                continue;
+            }
+
+            _burstEmitters[i] = (entity, newAge);
         }
     }
 
@@ -190,9 +228,15 @@ public class ParticleDemoScene : DemoSceneBase
             Renderer.DrawText($"  Active Particles: {emitter.ParticleCount} / {emitter.MaxParticles}", 10, y, Color.White);
             y += lineHeight;
             
-            var allEmitters = World.GetEntitiesWithComponent<ParticleEmitterComponent>();
-            var totalParticles = allEmitters.Sum(e => e.GetComponent<ParticleEmitterComponent>()?.ParticleCount ?? 0);
+            var totalParticles = emitter.ParticleCount;
+            foreach (var (entity, _) in _burstEmitters)
+            {
+                totalParticles += entity.GetComponent<ParticleEmitterComponent>()?.ParticleCount ?? 0;
+            }
             Renderer.DrawText($"  Total Particles: {totalParticles}", 10, y, Color.White);
+            y += lineHeight;
+            
+            Renderer.DrawText($"  Active Bursts: {_burstEmitters.Count} / {MaxBurstEmitters}", 10, y, Color.White);
             y += lineHeight;
             
             var fps = gameTime.DeltaTime > 0 ? 1.0 / gameTime.DeltaTime : 0;
@@ -269,6 +313,8 @@ public class ParticleDemoScene : DemoSceneBase
         {
             World.DestroyEntity(_currentEmitter);
         }
+
+        DestroyAllBurstEmitters();
         
         var centerPosition = new Vector2(640, 360);
         
@@ -281,6 +327,15 @@ public class ParticleDemoScene : DemoSceneBase
             SpawnBurst(centerPosition, effect);
             Logger.LogInformation("Initial explosion burst!");
         }
+    }
+
+    private void DestroyAllBurstEmitters()
+    {
+        foreach (var (entity, _) in _burstEmitters)
+        {
+            World.DestroyEntity(entity);
+        }
+        _burstEmitters.Clear();
     }
 
     private void CreateEffect(EffectType effect, Vector2 position)
@@ -484,9 +539,16 @@ public class ParticleDemoScene : DemoSceneBase
 
     private void SpawnBurst(Vector2 position, EffectType effect)
     {
+        if (_burstEmitters.Count >= MaxBurstEmitters)
+        {
+            var (oldest, _) = _burstEmitters[0];
+            World.DestroyEntity(oldest);
+            _burstEmitters.RemoveAt(0);
+        }
+
         Logger.LogInformation("Spawning burst at {X}, {Y}", position.X, position.Y);
         
-        var entity = World.CreateEntity("Burst");
+        var entity = World.CreateEntity($"Burst_{effect}");
         
         entity.AddComponent<TransformComponent>();
         entity.AddComponent<ParticleEmitterComponent>();
@@ -550,5 +612,7 @@ public class ParticleDemoScene : DemoSceneBase
                 emitter.ParticleAtlasRegion = _particleAtlas.GetRegion("particle");
             }
         }
+
+        _burstEmitters.Add((entity, 0f));
     }
 }

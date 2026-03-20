@@ -250,6 +250,22 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
             : LoadSceneInternalFactoryAsync(sp => sceneFactory(sp), null, null, cancellationToken);
     }
 
+    public void FixedUpdate(GameTime fixedTime)
+    {
+        if (_activeTransition != null && !_activeTransition.IsComplete)
+            return;
+
+        if (_activeLoadingScreen != null)
+            return;
+
+        var currentScene = CurrentScene;
+        if (currentScene == null)
+            return;
+
+        currentScene.OnFixedUpdate(fixedTime);
+        currentScene.World.FixedUpdate(fixedTime);
+    }
+
     public void Update(GameTime gameTime)
     {
         if (_activeTransition != null)

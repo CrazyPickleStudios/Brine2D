@@ -14,7 +14,7 @@ internal sealed class SDL3BatchRenderer : IDisposable
     private readonly ILogger<SDL3BatchRenderer> _logger;
     private readonly SDL3StateManager _stateManager;
     private readonly List<Vertex> _vertexBatch;
-    
+
     private nint _device;
     private nint _vertexBuffer;
     private nint _whiteTexture;
@@ -25,14 +25,15 @@ internal sealed class SDL3BatchRenderer : IDisposable
     private readonly nint[] _transferBuffers = new nint[FramesInFlight];
     private int _currentFrameSlot;
     private int _frameVertexOffset;
+    private bool _transferBufferCycleNeeded;
 
     private nint _currentBoundTexture = nint.Zero;
     private TextureScaleMode _currentTextureScaleMode = TextureScaleMode.Linear;
-    
-    public const int MaxVertices = 10000;
+
+    public readonly int MaxVertices;
     private const TextureScaleMode WhiteTextureScaleMode = TextureScaleMode.Nearest;
     public static int VertexSize => Marshal.SizeOf<Vertex>();
-    
+
     [StructLayout(LayoutKind.Sequential)]
     private struct Vertex
     {
@@ -40,13 +41,16 @@ internal sealed class SDL3BatchRenderer : IDisposable
         public Vector4 Color;
         public Vector2 TexCoord;
     }
-    
+
     public SDL3BatchRenderer(
         ILogger<SDL3BatchRenderer> logger,
-        SDL3StateManager stateManager)
+        SDL3StateManager stateManager,
+        RenderingOptions renderingOptions)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
+        ArgumentNullException.ThrowIfNull(renderingOptions);
+        MaxVertices = renderingOptions.MaxVerticesPerFrame;
         _vertexBatch = new List<Vertex>(MaxVertices);
     }
     
@@ -83,6 +87,7 @@ internal sealed class SDL3BatchRenderer : IDisposable
     }
     
     public int VertexCount => _vertexBatch.Count;
+    public int FrameVertexOffset => _frameVertexOffset;
     public nint CurrentBoundTexture => _currentBoundTexture;
     public TextureScaleMode CurrentTextureScaleMode => _currentTextureScaleMode;
     
@@ -111,31 +116,6 @@ internal sealed class SDL3BatchRenderer : IDisposable
         AddQuad(x, y, width, height, color, onFlushNeeded: onFlushNeeded);
     }
     
-    public void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1, Action? onFlushNeeded = null)
-    {
-        EnsureVertexCapacity(6, onFlushNeeded);
-        EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode, onFlushNeeded);
-
-        var dx = x2 - x1;
-        var dy = y2 - y1;
-        var length = MathF.Sqrt(dx * dx + dy * dy);
-
-        if (length == 0) return;
-
-        var angle = MathF.Atan2(dy, dx);
-        var halfThickness = Math.Max(thickness, 0.5f) / 2f;
-        var perpX = -MathF.Sin(angle) * halfThickness;
-        var perpY = MathF.Cos(angle) * halfThickness;
-
-        AddVertex(x1 + perpX, y1 + perpY, color);
-        AddVertex(x2 + perpX, y2 + perpY, color);
-        AddVertex(x1 - perpX, y1 - perpY, color);
-
-        AddVertex(x2 + perpX, y2 + perpY, color);
-        AddVertex(x2 - perpX, y2 - perpY, color);
-        AddVertex(x1 - perpX, y1 - perpY, color);
-    }
-    
     public void DrawCircleFilled(float centerX, float centerY, float radius, Color color, Action? onFlushNeeded = null)
     {
         int segments = CalculateCircleSegments(radius);
@@ -149,9 +129,9 @@ internal sealed class SDL3BatchRenderer : IDisposable
             float angle1 = i * angleStep;
             float angle2 = (i + 1) * angleStep;
 
-            AddVertex(centerX, centerY, color);
-            AddVertex(centerX + MathF.Cos(angle1) * radius, centerY + MathF.Sin(angle1) * radius, color);
-            AddVertex(centerX + MathF.Cos(angle2) * radius, centerY + MathF.Sin(angle2) * radius, color);
+            AddVertex(centerX, centerY, color, pixelSnap: false);
+            AddVertex(centerX + MathF.Cos(angle1) * radius, centerY + MathF.Sin(angle1) * radius, color, pixelSnap: false);
+            AddVertex(centerX + MathF.Cos(angle2) * radius, centerY + MathF.Sin(angle2) * radius, color, pixelSnap: false);
         }
     }
     
@@ -159,7 +139,11 @@ internal sealed class SDL3BatchRenderer : IDisposable
     {
         int segments = CalculateCircleSegments(radius);
         EnsureVertexCapacity(segments * 6, onFlushNeeded);
+        EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode, onFlushNeeded);
 
+        float halfThickness = Math.Max(thickness, 0.5f) / 2f;
+        float innerRadius = radius - halfThickness;
+        float outerRadius = radius + halfThickness;
         float angleStep = MathF.PI * 2f / segments;
 
         for (int i = 0; i < segments; i++)
@@ -167,12 +151,28 @@ internal sealed class SDL3BatchRenderer : IDisposable
             float angle1 = i * angleStep;
             float angle2 = (i + 1) * angleStep;
 
-            float x1 = centerX + MathF.Cos(angle1) * radius;
-            float y1 = centerY + MathF.Sin(angle1) * radius;
-            float x2 = centerX + MathF.Cos(angle2) * radius;
-            float y2 = centerY + MathF.Sin(angle2) * radius;
+            float cos1 = MathF.Cos(angle1);
+            float sin1 = MathF.Sin(angle1);
+            float cos2 = MathF.Cos(angle2);
+            float sin2 = MathF.Sin(angle2);
 
-            DrawLine(x1, y1, x2, y2, color, thickness, onFlushNeeded);
+            float outerX1 = centerX + cos1 * outerRadius;
+            float outerY1 = centerY + sin1 * outerRadius;
+            float innerX1 = centerX + cos1 * innerRadius;
+            float innerY1 = centerY + sin1 * innerRadius;
+
+            float outerX2 = centerX + cos2 * outerRadius;
+            float outerY2 = centerY + sin2 * outerRadius;
+            float innerX2 = centerX + cos2 * innerRadius;
+            float innerY2 = centerY + sin2 * innerRadius;
+
+            AddVertex(outerX1, outerY1, color, pixelSnap: false);
+            AddVertex(outerX2, outerY2, color, pixelSnap: false);
+            AddVertex(innerX1, innerY1, color, pixelSnap: false);
+
+            AddVertex(outerX2, outerY2, color, pixelSnap: false);
+            AddVertex(innerX2, innerY2, color, pixelSnap: false);
+            AddVertex(innerX1, innerY1, color, pixelSnap: false);
         }
     }
     
@@ -238,8 +238,8 @@ internal sealed class SDL3BatchRenderer : IDisposable
             x * sin + y * cos + centerY
         );
     }
-    
-    private void AddVertex(float x, float y, Color color, float u = 0, float v = 0)
+
+    private void AddVertex(float x, float y, Color color, float u = 0, float v = 0, bool pixelSnap = true)
     {
         var position = new Vector2(x, y);
 
@@ -248,7 +248,10 @@ internal sealed class SDL3BatchRenderer : IDisposable
             position = _stateManager.Camera.WorldToScreen(position);
         }
 
-        position = new Vector2(MathF.Round(position.X), MathF.Round(position.Y));
+        if (pixelSnap)
+        {
+            position = new Vector2(MathF.Round(position.X), MathF.Round(position.Y));
+        }
 
         _vertexBatch.Add(new Vertex
         {
@@ -257,7 +260,7 @@ internal sealed class SDL3BatchRenderer : IDisposable
             TexCoord = new Vector2(u, v)
         });
     }
-    
+
     private void EnsureTextureBound(nint textureHandle, TextureScaleMode scaleMode, Action? onFlushNeeded)
     {
         if (_currentBoundTexture != nint.Zero &&
@@ -297,7 +300,10 @@ internal sealed class SDL3BatchRenderer : IDisposable
             return (firstVertex, 0);
         }
 
-        var mappedData = SDL3.SDL.MapGPUTransferBuffer(_device, _transferBuffers[_currentFrameSlot], false);
+        bool cycle = _transferBufferCycleNeeded;
+        _transferBufferCycleNeeded = false;
+
+        var mappedData = SDL3.SDL.MapGPUTransferBuffer(_device, _transferBuffers[_currentFrameSlot], cycle);
         if (mappedData != nint.Zero)
         {
             fixed (Vertex* vertexPtr = CollectionsMarshal.AsSpan(_vertexBatch))
@@ -336,6 +342,12 @@ internal sealed class SDL3BatchRenderer : IDisposable
         SDL3.SDL.UploadToGPUBuffer(copyPass, ref source, ref destination, false);
     }
 
+    public void ResetFrameVertexOffset()
+    {
+        _frameVertexOffset = 0;
+        _transferBufferCycleNeeded = true;
+    }
+
     public void Dispose()
     {
         if (_device == nint.Zero) return;
@@ -354,11 +366,37 @@ internal sealed class SDL3BatchRenderer : IDisposable
         new(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
     
     private static int CalculateCircleSegments(float radius) =>
-        Math.Max(16, (int)(radius * 2));
+        Math.Clamp((int)(MathF.Sqrt(radius) * 10), 32, 256);
     
     public void NewFrame(int absoluteFrameIndex)
     {
         _currentFrameSlot = absoluteFrameIndex % FramesInFlight;
         _frameVertexOffset = 0;
+        _transferBufferCycleNeeded = false;
+    }
+
+    public void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1, Action? onFlushNeeded = null)
+    {
+        EnsureVertexCapacity(6, onFlushNeeded);
+        EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode, onFlushNeeded);
+
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        var length = MathF.Sqrt(dx * dx + dy * dy);
+
+        if (length == 0) return;
+
+        var angle = MathF.Atan2(dy, dx);
+        var halfThickness = Math.Max(thickness, 0.5f) / 2f;
+        var perpX = -MathF.Sin(angle) * halfThickness;
+        var perpY = MathF.Cos(angle) * halfThickness;
+
+        AddVertex(x1 + perpX, y1 + perpY, color, pixelSnap: false);
+        AddVertex(x2 + perpX, y2 + perpY, color, pixelSnap: false);
+        AddVertex(x1 - perpX, y1 - perpY, color, pixelSnap: false);
+
+        AddVertex(x2 + perpX, y2 + perpY, color, pixelSnap: false);
+        AddVertex(x2 - perpX, y2 - perpY, color, pixelSnap: false);
+        AddVertex(x1 - perpX, y1 - perpY, color, pixelSnap: false);
     }
 }

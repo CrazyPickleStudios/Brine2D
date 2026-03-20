@@ -3,87 +3,70 @@ using System.ComponentModel.DataAnnotations;
 namespace Brine2D.ECS;
 
 /// <summary>
-/// Configuration options for the Entity Component System.
+/// Configuration for the hybrid ECS: entity capacity, parallelism, and fixed-timestep tuning.
 /// </summary>
-/// <remarks>
-/// These options control both the data-oriented ECS (queries, systems) and
-/// object-oriented ECS (component methods, update loops) aspects of Brine2D's
-/// hybrid ECS architecture.
-/// </remarks>
 public class ECSOptions
 {
+    private ParallelOptions? _parallelOptions;
+    private int? _workerThreadCount;
+
     /// <summary>
-    /// Gets or sets the initial entity capacity to pre-allocate.
+    /// Pre-allocated entity slot count. Avoids resizing during gameplay.
     /// </summary>
-    /// <remarks>
-    /// The ECS will pre-allocate internal storage for this many entities
-    /// to avoid resizing during gameplay. If you expect more entities,
-    /// increase this value to reduce memory allocations during runtime.
-    /// </remarks>
     [Range(16, 1_000_000, ErrorMessage = "InitialEntityCapacity must be between 16 and 1,000,000")]
     public int InitialEntityCapacity { get; set; } = 1000;
-    
+
     /// <summary>
-    /// Gets or sets whether query results should be cached for performance.
+    /// When <see langword="true"/>, systems execute in parallel across worker threads.
     /// </summary>
-    /// <remarks>
-    /// When enabled, the results of entity queries are cached and only
-    /// recomputed when entities are added/removed or components change.
-    /// This significantly improves performance for queries that run every frame.
-    /// Disable only if you have extreme memory constraints.
-    /// </remarks>
-    public bool EnableQueryCaching { get; set; } = true;
-    
-    /// <summary>
-    /// Gets or sets whether multi-threading is enabled for system execution.
-    /// </summary>
-    /// <remarks>
-    /// When enabled, systems can execute in parallel across multiple threads
-    /// for improved performance on multi-core processors. This applies to both
-    /// data-oriented systems (via system pipelines) and object-oriented systems
-    /// (via parallel entity processing).
-    /// </remarks>
     public bool EnableMultiThreading { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the number of worker threads for parallel system execution.
+    /// Worker thread count for parallel execution.
+    /// <see langword="null"/> (default) uses <see cref="Environment.ProcessorCount"/>.
+    /// Only applies when <see cref="EnableMultiThreading"/> is <see langword="true"/>.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// If null (default), the ECS will use <see cref="Environment.ProcessorCount"/>
-    /// to automatically determine the optimal thread count based on available CPU cores.
-    /// </para>
-    /// <para>
-    /// Set to a specific value to limit thread usage (useful for leaving cores
-    /// available for other systems or for platforms with limited resources).
-    /// </para>
-    /// <para>
-    /// This setting is only used when <see cref="EnableMultiThreading"/> is true.
-    /// </para>
-    /// </remarks>
     [Range(1, 128, ErrorMessage = "WorkerThreadCount must be between 1 and 128 if specified")]
-    public int? WorkerThreadCount { get; set; } = null;
+    public int? WorkerThreadCount
+    {
+        get => _workerThreadCount;
+        set
+        {
+            _workerThreadCount = value;
+            _parallelOptions = null;
+        }
+    }
 
     /// <summary>
-    /// Gets or sets the minimum number of entities required before parallel processing is used.
+    /// Entity count below which parallel processing falls back to sequential.
+    /// Lower = more aggressive parallelism (good for CPU-heavy logic);
+    /// higher = less thread overhead (good for lightweight components).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// When processing entities in object-oriented ECS mode (calling Update/FixedUpdate
-    /// on components), parallel processing has overhead. For small entity counts, 
-    /// sequential processing is faster.
-    /// </para>
-    /// <para>
-    /// This threshold determines when to switch from sequential to parallel processing.
-    /// If the number of entities being processed is less than this value, they will
-    /// be processed sequentially even if <see cref="EnableMultiThreading"/> is true.
-    /// </para>
-    /// <para>
-    /// Default is 100. Lower values use parallel processing more aggressively (better
-    /// for CPU-heavy component logic). Higher values prefer sequential processing
-    /// (better for lightweight components with high iteration overhead).
-    /// </para>
-    /// </remarks>
     [Range(1, int.MaxValue, ErrorMessage = "ParallelEntityThreshold must be at least 1")]
     public int ParallelEntityThreshold { get; set; } = 100;
+
+    /// <summary>
+    /// Fixed timestep in milliseconds for <see cref="Systems.IFixedUpdateSystem"/> and
+    /// <see cref="EntityBehavior.FixedUpdate"/>. Default (~16.667ms) gives 60 steps/s.
+    /// </summary>
+    [Range(1.0, 200.0, ErrorMessage = "FixedTimeStepMs must be between 1 and 200")]
+    public double FixedTimeStepMs { get; set; } = 1000.0 / 60.0;
+
+    /// <summary>
+    /// Maximum fixed steps per frame. Caps the catch-up loop after long frames
+    /// (debugger pauses, heavy loads) so the game doesn't freeze. Excess time is discarded.
+    /// </summary>
+    [Range(1, 60, ErrorMessage = "MaxFixedStepsPerFrame must be between 1 and 60")]
+    public int MaxFixedStepsPerFrame { get; set; } = 8;
+
+    /// <summary>
+    /// Returns a cached <see cref="ParallelOptions"/> instance derived from
+    /// <see cref="WorkerThreadCount"/>. The cached instance is automatically
+    /// invalidated when <see cref="WorkerThreadCount"/> changes.
+    /// </summary>
+    internal ParallelOptions GetParallelOptions()
+        => _parallelOptions ??= new ParallelOptions
+        {
+            MaxDegreeOfParallelism = WorkerThreadCount ?? -1
+        };
 }

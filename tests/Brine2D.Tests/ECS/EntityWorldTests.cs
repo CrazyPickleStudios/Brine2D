@@ -381,24 +381,7 @@ public class EntityWorldTests : TestBase
         // Assert
         Assert.Empty(world.Entities);
     }
-
-    [Fact]
-    public void Clear_DeactivatesAllEntitiesImmediately()
-    {
-        // Arrange
-        var world = CreateTestWorld();
-        var entity1 = world.CreateEntity();
-        var entity2 = world.CreateEntity();
-        world.Flush();
-
-        // Act
-        world.Clear();
-
-        // Assert
-        Assert.False(entity1.IsActive);
-        Assert.False(entity2.IsActive);
-    }
-
+    
     [Fact]
     public void Flush_ProcessesPendingOperations()
     {

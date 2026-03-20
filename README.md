@@ -1,13 +1,14 @@
-# Brine2D
+<div align="center">
+   <img src=".github/images/logo.png" alt="Brine2D - 2D Game Engine for .NET" width="200">
 
-<p align="center">
-  <img src=".github/images/logo.png" alt="Brine2D Logo" width="200">
-</p>
+  <br />
+  <br />
 
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![Build Status](https://github.com/CrazyPickleStudios/Brine2D/workflows/CI/badge.svg)](https://github.com/CrazyPickleStudios/Brine2D/actions)
-[![codecov](https://codecov.io/github/CrazyPickleStudios/Brine2D/graph/badge.svg?token=RIDC7GF0J4)](https://codecov.io/github/CrazyPickleStudios/Brine2D)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
+  [![Build Status](https://github.com/CrazyPickleStudios/Brine2D/workflows/CI/badge.svg)](https://github.com/CrazyPickleStudios/Brine2D/actions)
+  [![codecov](https://codecov.io/github/CrazyPickleStudios/Brine2D/graph/badge.svg?token=RIDC7GF0J4)](https://codecov.io/github/CrazyPickleStudios/Brine2D)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+</div>
 
 **A modern, opinionated 2D game engine for .NET 10**, built on SDL3 and designed for C# developers who want a great experience without an editor or a content pipeline.
 
@@ -181,16 +182,19 @@ public class GameScene : Scene
     // 3. OnUpdate: Every frame
     protected override void OnUpdate(GameTime gameTime) { }
 
-    // 4. OnRender: Every frame, after systems render
+    // 4. OnFixedUpdate: Fixed timestep (default 60 Hz). Zero or more times per frame.
+    protected override void OnFixedUpdate(GameTime fixedTime) { }
+
+    // 5. OnRender: Every frame, after systems render
     protected override void OnRender(GameTime gameTime) { }
 
-    // 5. OnExit: Before unload
+    // 6. OnExit: Before unload
     protected override void OnExit()
     {
         Audio.StopMusic();
     }
 
-    // 6. OnUnloadAsync: Release resources
+    // 7. OnUnloadAsync: Release resources
     protected override Task OnUnloadAsync(CancellationToken ct) => Task.CompletedTask;
 }
 ~~~
@@ -287,6 +291,9 @@ public class PlayerMovementBehavior : EntityBehavior
         if (_input.IsKeyDown(Key.W))
             _transform.Position -= Vector2.UnitY * 200f * (float)gameTime.DeltaTime;
     }
+
+    // Also supports FixedUpdate for deterministic physics/simulation logic
+    public override void FixedUpdate(GameTime fixedTime) { }
 }
 ~~~
 
@@ -421,28 +428,6 @@ public override void Update(IEntityWorld world, GameTime gameTime)
 }
 ~~~
 
-**Query factory (reusable template):**
-~~~csharp
-// Captures state once; each call returns a fresh independent clone
-private Func<EntityQuery> _nearbyEnemies;
-
-protected override void OnEnter()
-{
-    _nearbyEnemies = World.Query()
-        .With<EnemyComponent>()
-        .WithTag("active")
-        .ToFactory();
-}
-
-protected override void OnUpdate(GameTime gt)
-{
-    // Modify per-frame without affecting the template
-    _nearbyEnemies()
-        .WithinRadius(PlayerPosition, 200f)
-        .ForEach<EnemyComponent>((entity, enemy) => enemy.Alert());
-}
-~~~
-
 **Supported filters:**
 
 | Method | Description |
@@ -509,6 +494,8 @@ builder.Configure(options =>
     options.ECS.EnableMultiThreading       = true;
     options.ECS.ParallelEntityThreshold    = 100;   // auto-parallel at 100+ entities
     options.ECS.WorkerThreadCount          = null;  // null = all CPU cores
+    options.ECS.FixedTimeStepMs            = 1000.0 / 60.0; // ~16.67ms = 60 Hz
+    options.ECS.MaxFixedStepsPerFrame      = 8;     // caps catch-up after long frames
 
     // Loading screens
     options.LoadingScreenMinimumDisplayMs  = 200;   // 0 = disable flash prevention
@@ -555,6 +542,37 @@ public class CameraShakeSystem : UpdateSystemBase
 | `SystemUpdateOrder.Animation` | 400 | Animation updates |
 | `SystemUpdateOrder.LateUpdate` | 800 | Post-physics cleanup |
 
+**Fixed update systems** run at a fixed timestep (deterministic physics, networking):
+
+~~~csharp
+public class PhysicsIntegrationSystem : FixedUpdateSystemBase
+{
+    public override int FixedUpdateOrder => SystemFixedUpdateOrder.Physics; // 0
+
+    public override void FixedUpdate(IEntityWorld world, GameTime fixedTime)
+    {
+        world.Query()
+            .With<TransformComponent>()
+            .With<RigidbodyComponent>()
+            .ForEach((entity, transform, body) =>
+            {
+                transform.Position += body.Velocity * (float)fixedTime.DeltaTime;
+            });
+    }
+}
+~~~
+
+**Fixed update ordering constants:**
+
+| Constant | Value | Use for |
+|---|---|---|
+| `SystemFixedUpdateOrder.EarlyFixedUpdate` | -100 | Force application, input-driven velocities |
+| `SystemFixedUpdateOrder.PrePhysics` | -50 | Constraint setup |
+| `SystemFixedUpdateOrder.Physics` | 0 | Position integration |
+| `SystemFixedUpdateOrder.PostPhysics` | 50 | Physics cleanup |
+| `SystemFixedUpdateOrder.Collision` | 100 | Collision detection and resolution |
+| `SystemFixedUpdateOrder.LateFixedUpdate` | 200 | Post-collision cleanup |
+
 ~~~csharp
 protected override void OnEnter()
 {
@@ -582,7 +600,17 @@ builder.ConfigureScene(world =>
     world.GetSystem<DebugRenderer>()!.IsEnabled = true;
     world.AddSystem<AnalyticsSystem>();
 });
+
+// Add a custom system to every scene as a default
+builder.AddDefaultSystem<FogOfWarSystem>();
+builder.AddDefaultSystem<FogOfWarSystem>(s => s.Radius = 200f); // with configuration
+
+// Permanently exclude a default system project-wide (avoids construction cost entirely)
+builder.ExcludeDefaultSystem<ParticleSystem>();
+builder.ExcludeDefaultSystem<CollisionDetectionSystem>();
 ~~~
+
+`ExcludeDefaultSystem` removes the system from every scene. To conditionally disable a system at runtime instead, use `ConfigureScene` with `IsEnabled = false`.
 
 ---
 
@@ -601,6 +629,29 @@ public GameScene(IPlayerService playerService, IInputContext input) { ... }
 ~~~
 
 Unregistered scenes still load via `ActivatorUtilities`. You'll just get a warning in the log.
+
+**Fallback scene for load failures:**
+
+~~~csharp
+// Replace the built-in error scene with your own
+builder.UseFallbackScene<MyErrorScene>();
+~~~
+
+~~~csharp
+public class MyErrorScene : Scene
+{
+    private readonly ISceneLoadErrorInfo _error;
+
+    public MyErrorScene(ISceneLoadErrorInfo error) => _error = error;
+
+    protected override void OnEnter()
+    {
+        Logger.LogError(_error.Exception, "Failed to load {Scene}", _error.FailedSceneName);
+    }
+}
+~~~
+
+If a scene load fails and no `SceneLoadFailed` event handler queues a recovery transition, the fallback scene is shown automatically.
 
 ---
 
@@ -731,6 +782,7 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 - Scene management: async loading, transitions, loading screens, frame-boundary deferral
 - Fluent entity queries: spatial indexing, zero-allocation `ForEach`, cached queries
 - Event bus: type-safe pub/sub
+- Fixed timestep pipeline: `FixedUpdateSystemBase`, `OnFixedUpdate`, deterministic simulation
 - Ordered system execution with named phase constants
 - Headless mode: full engine without a window, for dedicated servers and unit tests
 - Delta time clamping: frame spikes from debugger pauses can't corrupt simulation
@@ -769,6 +821,7 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 - Unified asset loader: one service, all types, thread-safe cache
 - `AssetManifest`: typed, compile-time-safe asset declarations
 - Startup-time dependency validation for registered scenes
+- Fallback scenes for graceful error recovery on load failures
 
 ---
 

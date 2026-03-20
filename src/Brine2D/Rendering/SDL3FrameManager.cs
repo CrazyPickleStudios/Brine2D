@@ -46,6 +46,8 @@ internal sealed class SDL3FrameManager
     
     /// <summary>
     /// Begin a new frame by acquiring command buffer and swapchain texture.
+    /// Waits for the oldest in-flight fence first to guarantee the corresponding
+    /// swapchain image and transfer buffer have been released by the GPU.
     /// </summary>
     /// <returns>True if frame resources were successfully acquired, false otherwise.</returns>
     public bool BeginFrame()
@@ -54,6 +56,15 @@ internal sealed class SDL3FrameManager
             return false;
 
         IsFirstFlush = true;
+
+        var oldFence = _inFlightFences[_fenceSlot];
+        if (oldFence != nint.Zero)
+        {
+            var fenceArray = new nint[] { oldFence };
+            SDL3.SDL.WaitForGPUFences(_device, true, fenceArray, (uint)fenceArray.Length);
+            SDL3.SDL.ReleaseGPUFence(_device, oldFence);
+            _inFlightFences[_fenceSlot] = nint.Zero;
+        }
 
         _commandBuffer = SDL3.SDL.AcquireGPUCommandBuffer(_device);
         if (_commandBuffer == nint.Zero)
@@ -134,10 +145,9 @@ internal sealed class SDL3FrameManager
     }
     
     /// <summary>
-    /// End the current frame, submit the command buffer, and block until the
-    /// fence from <see cref="MaxInFlightFrames"/> frames ago is signaled.
-    /// This bounds the CPU to at most <see cref="MaxInFlightFrames"/> frames ahead
-    /// of the GPU regardless of VSync or frame-rate cap settings.
+    /// End the current frame and submit the command buffer.
+    /// The fence is stored for the next <see cref="BeginFrame"/> call to wait on,
+    /// bounding the CPU to at most <see cref="MaxInFlightFrames"/> frames ahead of the GPU.
     /// </summary>
     public void EndFrame()
     {
@@ -150,14 +160,6 @@ internal sealed class SDL3FrameManager
         var fence = SDL3.SDL.SubmitGPUCommandBufferAndAcquireFence(_commandBuffer);
         _commandBuffer = nint.Zero;
         _swapchainTexture = nint.Zero;
-
-        var oldFence = _inFlightFences[_fenceSlot];
-        if (oldFence != nint.Zero)
-        {
-            var fenceArray = new nint[] { oldFence };
-            SDL3.SDL.WaitForGPUFences(_device, true, fenceArray, (uint)fenceArray.Length);
-            SDL3.SDL.ReleaseGPUFence(_device, oldFence);
-        }
 
         _inFlightFences[_fenceSlot] = fence;
         _fenceSlot = (_fenceSlot + 1) % MaxInFlightFrames;

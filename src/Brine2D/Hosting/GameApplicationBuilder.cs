@@ -228,7 +228,7 @@ public sealed class GameApplicationBuilder
     /// builder.AddDefaultSystem&lt;FogOfWarSystem&gt;();
     /// </code>
     /// </example>
-    public GameApplicationBuilder AddDefaultSystem<T>() where T : class
+    public GameApplicationBuilder AddDefaultSystem<T>() where T : class, ISystem
     {
         EnsureNotBuilt();
         _additionalDefaultSystems.Add((typeof(T), w => w.AddSystem<T>()));
@@ -244,7 +244,7 @@ public sealed class GameApplicationBuilder
     /// builder.AddDefaultSystem&lt;FogOfWarSystem&gt;(s => s.Radius = 200f);
     /// </code>
     /// </example>
-    public GameApplicationBuilder AddDefaultSystem<T>(Action<T> configure) where T : class
+    public GameApplicationBuilder AddDefaultSystem<T>(Action<T> configure) where T : class, ISystem
     {
         EnsureNotBuilt();
         ArgumentNullException.ThrowIfNull(configure);

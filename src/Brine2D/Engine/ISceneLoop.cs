@@ -4,7 +4,7 @@ namespace Brine2D.Engine;
 
 /// <summary>
 /// Frame-level contract consumed exclusively by <see cref="GameLoop"/>.
-/// Drives the scene system through each frame's lifecycle: begin, update, render, and deferred work.
+/// Drives the scene system through each frame's lifecycle: begin, fixed update, update, render, and deferred work.
 /// </summary>
 internal interface ISceneLoop
 {
@@ -24,6 +24,7 @@ internal interface ISceneLoop
     void BeginFrame();
     void ProcessDeferredTransitions(CancellationToken ct);
     void RaiseSceneLoadFailedIfPending();
+    void FixedUpdate(GameTime fixedTime);
     void Update(GameTime gameTime);
     void Render(GameTime gameTime);
 }

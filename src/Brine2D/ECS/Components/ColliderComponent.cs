@@ -31,14 +31,8 @@ public class ColliderComponent : Component
     /// </summary>
     public bool IsTrigger { get; set; } = false;
 
-    /// <summary>
-    /// Offset from entity position.
-    /// </summary>
     public Vector2 Offset { get; set; } = Vector2.Zero;
 
-    /// <summary>
-    /// Shape type for this collider.
-    /// </summary>
     public CollisionShapeType ShapeType { get; private set; }
 
     /// <summary>
@@ -61,31 +55,26 @@ public class ColliderComponent : Component
     /// </summary>
     public HashSet<Entity> CollidingEntities { get; } = new();
 
-    // Events
     public event Action<ColliderComponent>? OnCollisionEnter;
     public event Action<ColliderComponent>? OnCollisionExit;
     public event Action<ColliderComponent>? OnTriggerEnter;
     public event Action<ColliderComponent>? OnTriggerExit;
 
-    /// <summary>
-    /// Creates a circle collider shape.
-    /// </summary>
+    /// <summary>Nulls <see cref="Shape"/> so <c>CollisionDetectionSystem</c> recreates it next frame.</summary>
     public void SetCircle(float radius)
     {
         ShapeType = CollisionShapeType.Circle;
         Radius = radius;
-        Shape = null; // Force recreate in CollisionDetectionSystem
+        Shape = null;
     }
 
-    /// <summary>
-    /// Creates a box (AABB) collider shape.
-    /// </summary>
+    /// <inheritdoc cref="SetCircle"/>
     public void SetBox(float width, float height)
     {
         ShapeType = CollisionShapeType.Box;
         Width = width;
         Height = height;
-        Shape = null; // Force recreate in CollisionDetectionSystem
+        Shape = null;
     }
 
     protected internal override void OnRemoved()
@@ -116,10 +105,4 @@ public class ColliderComponent : Component
         else
             OnCollisionExit?.Invoke(other);
     }
-}
-
-public enum CollisionShapeType
-{
-    Circle,
-    Box
 }

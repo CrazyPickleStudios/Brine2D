@@ -130,6 +130,12 @@ public abstract class SceneBase
     protected internal virtual void OnUpdate(GameTime gameTime) { }
 
     /// <summary>
+    /// Called at a fixed timestep for deterministic simulation logic.
+    /// Runs zero or more times per frame depending on accumulated time.
+    /// </summary>
+    protected internal virtual void OnFixedUpdate(GameTime fixedTime) { }
+
+    /// <summary>
     /// Called every frame to render visuals, after all ECS systems have rendered via <c>World.Render</c>.
     /// Use this for overlays, HUD, or anything that must appear on top of ECS-rendered content.
     /// </summary>

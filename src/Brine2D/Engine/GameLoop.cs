@@ -1,4 +1,5 @@
 ﻿using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.Input;
 using Brine2D.Rendering;
 using Brine2D.Threading;
@@ -29,6 +30,12 @@ internal sealed partial class GameLoop
 
     private long _frameCount;
     private int _targetFramesPerSecond;
+
+    private readonly TimeSpan _fixedTimeStep;
+    private readonly int _maxFixedStepsPerFrame;
+    private TimeSpan _fixedTimeAccumulator;
+    private TimeSpan _fixedTotalTime;
+    private long _fixedStepCount;
 
     // Sleeps FrameSleepHeadroomMs short of the target deadline; spin-wait closes the sub-millisecond gap.
     private const int FrameSleepHeadroomMs = 2;
@@ -70,6 +77,7 @@ internal sealed partial class GameLoop
         IEventPump eventPump,
         IMainThreadDispatcher mainThreadDispatcher,
         RenderingOptions renderingOptions,
+        ECSOptions ecsOptions,
         InputLayerManager? inputLayerManager = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -84,6 +92,10 @@ internal sealed partial class GameLoop
         var renderOptions = renderingOptions ?? throw new ArgumentNullException(nameof(renderingOptions));
         TargetFramesPerSecond = renderOptions.TargetFPS;
         MaxDeltaTime = TimeSpan.FromMilliseconds(renderOptions.MaxDeltaTimeMs);
+
+        var ecs = ecsOptions ?? throw new ArgumentNullException(nameof(ecsOptions));
+        _fixedTimeStep = TimeSpan.FromMilliseconds(ecs.FixedTimeStepMs);
+        _maxFixedStepsPerFrame = ecs.MaxFixedStepsPerFrame;
     }
 
     /// <summary>
@@ -175,6 +187,20 @@ internal sealed partial class GameLoop
 
                 if (sceneTransitionFailed)
                     _sceneLoop.RaiseSceneLoadFailedIfPending();
+
+                _fixedTimeAccumulator += elapsedTime;
+                int steps = 0;
+                while (_fixedTimeAccumulator >= _fixedTimeStep && steps < _maxFixedStepsPerFrame)
+                {
+                    _fixedTimeAccumulator -= _fixedTimeStep;
+                    _fixedTotalTime += _fixedTimeStep;
+                    var fixedTime = new GameTime(_fixedTotalTime, _fixedTimeStep, _fixedStepCount++);
+                    _sceneLoop.FixedUpdate(fixedTime);
+                    steps++;
+                }
+
+                if (_fixedTimeAccumulator > _fixedTimeStep * _maxFixedStepsPerFrame)
+                    _fixedTimeAccumulator = TimeSpan.Zero;
 
                 _sceneLoop.Update(gameTime);
                 _sceneLoop.Render(gameTime);

@@ -21,6 +21,11 @@ public interface IEntityWorld : IDisposable
     IReadOnlyList<IUpdateSystem> UpdateSystems { get; }
 
     /// <summary>
+    /// Gets all fixed update systems in this world.
+    /// </summary>
+    IReadOnlyList<IFixedUpdateSystem> FixedUpdateSystems { get; }
+
+    /// <summary>
     /// Gets all render systems in this world.
     /// </summary>
     IReadOnlyList<IRenderSystem> RenderSystems { get; }
@@ -30,26 +35,25 @@ public interface IEntityWorld : IDisposable
     /// <summary>
     /// Adds a system to this world, automatically creating it with dependency injection.
     /// Systems that implement IUpdateSystem are added to the update pipeline.
+    /// Systems that implement IFixedUpdateSystem are added to the fixed update pipeline.
     /// Systems that implement IRenderSystem are added to the render pipeline.
-    /// Systems can implement both interfaces.
+    /// Systems can implement multiple interfaces.
     /// </summary>
     /// <typeparam name="T">The system type to create and add.</typeparam>
     /// <param name="configure">Optional configuration action for the system.</param>
-    void AddSystem<T>(Action<T>? configure = null) where T : class;
+    void AddSystem<T>(Action<T>? configure = null) where T : class, ISystem;
 
     /// <summary>
     /// Removes a system of the specified type from this world.
-    /// If the system implements both <see cref="IUpdateSystem"/> and <see cref="IRenderSystem"/>
-    /// it will be removed from both pipelines.
+    /// If the system implements multiple pipeline interfaces it will be removed from all.
     /// </summary>
-    bool RemoveSystem<T>() where T : class;
+    bool RemoveSystem<T>() where T : class, ISystem;
 
     /// <summary>
     /// Removes a system by instance reference.
-    /// If the system implements both <see cref="IUpdateSystem"/> and <see cref="IRenderSystem"/>
-    /// it will be removed from both pipelines.
+    /// If the system implements multiple pipeline interfaces it will be removed from all.
     /// </summary>
-    bool RemoveSystem(object system);
+    bool RemoveSystem(ISystem system);
 
     /// <summary>
     /// Gets an update system of the specified type.
@@ -57,12 +61,17 @@ public interface IEntityWorld : IDisposable
     T? GetUpdateSystem<T>() where T : class, IUpdateSystem;
 
     /// <summary>
+    /// Gets a fixed update system of the specified type.
+    /// </summary>
+    T? GetFixedUpdateSystem<T>() where T : class, IFixedUpdateSystem;
+
+    /// <summary>
     /// Gets a render system of the specified type.
     /// </summary>
     T? GetRenderSystem<T>() where T : class, IRenderSystem;
 
     /// <summary>
-    /// Gets a system of the specified type (checks both update and render systems).
+    /// Gets a system of the specified type (checks all pipelines).
     /// </summary>
     T? GetSystem<T>() where T : class;
 
@@ -70,6 +79,11 @@ public interface IEntityWorld : IDisposable
     /// Checks if an update system of the specified type exists in this world.
     /// </summary>
     bool HasUpdateSystem<T>() where T : class, IUpdateSystem;
+
+    /// <summary>
+    /// Checks if a fixed update system of the specified type exists in this world.
+    /// </summary>
+    bool HasFixedUpdateSystem<T>() where T : class, IFixedUpdateSystem;
 
     /// <summary>
     /// Checks if a render system of the specified type exists in this world.
@@ -98,7 +112,7 @@ public interface IEntityWorld : IDisposable
     /// <summary>
     /// Gets an entity by its unique ID.
     /// </summary>
-    Entity? GetEntityById(int id);
+    Entity? GetEntityById(long id);
 
     /// <summary>
     /// Gets an entity by name (returns first match).
@@ -106,11 +120,12 @@ public interface IEntityWorld : IDisposable
     Entity? GetEntityByName(string name);
 
     /// <summary>
-    /// Gets all entities with a specific tag.
+    /// Gets all active entities with a specific tag.
     /// </summary>
     /// <remarks>
-    /// Returns a lazy enumerable for efficient iteration without allocation.
-    /// Call .ToList() if you need to store results or iterate multiple times.
+    /// Returns a materialized list built from the internal tag index in O(matching entities).
+    /// For per-frame use, prefer <see cref="ForEachWithTag"/> or a cached query to avoid
+    /// allocating a new list each call.
     /// </remarks>
     IEnumerable<Entity> GetEntitiesByTag(string tag);
 
@@ -118,31 +133,30 @@ public interface IEntityWorld : IDisposable
     /// Gets all entities with a specific component type.
     /// </summary>
     /// <remarks>
-    /// Uses an ArrayPool snapshot internally; allocation is bounded and pooled,
-    /// but not zero. For per-frame use in systems, prefer
+    /// Returns a materialized list. For per-frame use in systems, prefer
     /// <see cref="CreateCachedQuery{T1}"/> which rebuilds only when components change.
     /// </remarks>
     IEnumerable<Entity> GetEntitiesWithComponent<T>() where T : Component;
 
     /// <summary>
-    /// Invokes <paramref name="action"/> for every active entity that has component
-    /// <typeparamref name="T"/>, iterating directly over the pool snapshot with no
-    /// iterator state-machine allocation.
+    /// Invokes <paramref name="action"/> for every active entity that has the specified
+    /// <paramref name="tag"/>, using the internal tag index for O(tagged entities) lookup
+    /// and an <see cref="System.Buffers.ArrayPool{T}"/> snapshot for safe iteration when
+    /// the action modifies tags.
     /// </summary>
     /// <remarks>
-    /// Prefer this over <see cref="GetEntitiesWithComponent{T}"/> in per-frame loops when
-    /// you do not need a cached query. For static or pre-cached delegates the call is
-    /// allocation-free; closures that capture variables will still allocate a delegate object.
+    /// Prefer this over <see cref="GetEntitiesByTag"/> in per-frame loops to avoid
+    /// materializing a new list each call.
     /// </remarks>
-    void ForEachWithComponent<T>(Action<Entity> action) where T : Component;
+    void ForEachWithTag(string tag, Action<Entity> action);
 
     /// <summary>
     /// Gets all entities that have both specified component types.
     /// Iterates the smaller pool to minimise cross-resolves.
     /// </summary>
     /// <remarks>
-    /// Uses an ArrayPool snapshot internally. For per-frame use in systems,
-    /// prefer <see cref="CreateCachedQuery{T1, T2}"/>.
+    /// Returns a materialized list. For per-frame use in systems,
+    /// prefer <see cref="CreateCachedQuery{T1, T2}"/>
     /// </remarks>
     IEnumerable<Entity> GetEntitiesWithComponents<T1, T2>()
         where T1 : Component
@@ -161,6 +175,12 @@ public interface IEntityWorld : IDisposable
     /// Updates all systems and entities in the world.
     /// </summary>
     void Update(GameTime gameTime);
+
+    /// <summary>
+    /// Runs one fixed timestep for all fixed update systems and entity behaviors.
+    /// Called by the game loop's accumulator; not intended for direct use.
+    /// </summary>
+    void FixedUpdate(GameTime fixedTime);
 
     /// <summary>
     /// Renders all systems and entities in the world.
@@ -204,6 +224,12 @@ public interface IEntityWorld : IDisposable
         where T1 : Component
         where T2 : Component
         where T3 : Component;
+
+    CachedEntityQueryBuilder<T1, T2, T3, T4> CreateCachedQuery<T1, T2, T3, T4>()
+        where T1 : Component
+        where T2 : Component
+        where T3 : Component
+        where T4 : Component;
 
     #endregion
 

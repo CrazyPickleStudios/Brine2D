@@ -1,103 +1,95 @@
 using System.Buffers;
+using System.Diagnostics;
 
 namespace Brine2D.ECS;
 
 /// <summary>
-/// Interface for component pools (type-erased for storage in dictionary).
-/// </summary>
-internal interface IComponentPool
-{
-    void Add(int entityId, Component component);
-    Component? Get(int entityId);
-    bool Remove(int entityId);
-    (Array Snapshot, int Length) GetSnapshot();
-    void ReturnSnapshot(Array snapshot);
-    int Count { get; }
-    Type ComponentType { get; }
-}
-
-/// <summary>
 /// Stores all components of a specific type for a single scene-scoped EntityWorld.
-/// ComponentPool is accessed exclusively from the game thread via EntityWorld, so individual
-/// Get/Add/Remove/GetTyped/Count operations are lock-free. GetSnapshot() retains its lock
-/// to produce a consistent array copy; if snapshot consumers are ever moved off the game
-/// thread the lock already provides the necessary fence.
+/// All access is game-thread-only via EntityWorld; no synchronization is required.
 /// Provides ArrayPool-based snapshots for zero-allocation iteration.
 /// </summary>
 /// <typeparam name="T">The component type.</typeparam>
 internal sealed class ComponentPool<T> : IComponentPool where T : Component
 {
-    private readonly Dictionary<int, T> _components = new();
-    private readonly object _lock = new();
+    private readonly Dictionary<long, T> _components = new();
 
     public Type ComponentType => typeof(T);
 
-    // No lock needed — game-thread-only access
     public int Count => _components.Count;
 
-    // No lock needed — game-thread-only access
-    public void Add(int entityId, Component component)
-        => _components[entityId] = (T)component;
+    public void Add(long entityId, Component component)
+    {
+        Debug.Assert(
+            !_components.ContainsKey(entityId),
+            $"ComponentPool<{typeof(T).Name}> already contains entity {entityId}; duplicate AddComponent bypassed Entity's guard.");
+        _components[entityId] = (T)component;
+    }
 
-    // No lock needed — game-thread-only access
-    public Component? Get(int entityId)
+    public Component? Get(long entityId)
         => _components.TryGetValue(entityId, out var c) ? c : null;
 
-    // No lock needed — game-thread-only access
-    public bool Remove(int entityId)
+    public bool Contains(long entityId)
+        => _components.ContainsKey(entityId);
+
+    public bool Remove(long entityId)
         => _components.Remove(entityId);
 
-    // No lock needed — game-thread-only access
-    public T? GetTyped(int entityId)
+    public T? GetTyped(long entityId)
         => _components.TryGetValue(entityId, out var c) ? c : null;
 
     /// <summary>
-    /// Creates an ArrayPool snapshot for iteration.
-    /// The lock is not strictly required today (game-thread-only access), but is retained
-    /// so that if snapshot consumers are ever moved to worker threads the fence is already
-    /// in place. MUST call <see cref="ReturnSnapshot"/> in a finally block.
+    /// Creates a strongly-typed ArrayPool snapshot for iteration.
+    /// Avoids the <see cref="Array"/> boxing round-trip of <see cref="GetSnapshot"/>.
+    /// MUST call <see cref="ReturnTypedSnapshot"/> in a finally block.
     /// </summary>
-    public (Array Snapshot, int Length) GetSnapshot()
+    public ((long EntityId, T Component)[] Snapshot, int Length) GetTypedSnapshot()
     {
-        lock (_lock)
-        {
-            var count = _components.Count;
-            var snapshot = ArrayPool<(int EntityId, T Component)>.Shared.Rent(count);
-            int i = 0;
-            foreach (var kvp in _components)
-                snapshot[i++] = (kvp.Key, kvp.Value);
-            return (snapshot, count);
-        }
+        var count = _components.Count;
+        var snapshot = ArrayPool<(long EntityId, T Component)>.Shared.Rent(count);
+        int i = 0;
+        foreach (var kvp in _components)
+            snapshot[i++] = (kvp.Key, kvp.Value);
+        return (snapshot, count);
     }
 
     /// <summary>
-    /// Returns a snapshot to the ArrayPool.
-    /// MUST be called after <see cref="GetSnapshot"/> to prevent memory leaks.
+    /// Returns a typed snapshot to the ArrayPool.
+    /// MUST be called after <see cref="GetTypedSnapshot"/> to prevent memory leaks.
     /// </summary>
-    public void ReturnSnapshot(Array snapshot)
+    public void ReturnTypedSnapshot((long, T)[] snapshot)
+        => ArrayPool<(long, T)>.Shared.Return(snapshot, clearArray: true);
+    
+    /// <summary>
+    /// Creates an ArrayPool snapshot of entity IDs only, for type-erased iteration.
+    /// MUST call <see cref="ReturnEntityIdSnapshot"/> in a finally block.
+    /// </summary>
+    public (long[] EntityIds, int Length) GetEntityIdSnapshot()
     {
-        if (snapshot is (int, T)[] typedSnapshot)
-            ArrayPool<(int, T)>.Shared.Return(typedSnapshot, clearArray: true);
+        var count = _components.Count;
+        var snapshot = ArrayPool<long>.Shared.Rent(count);
+        int i = 0;
+        foreach (var key in _components.Keys)
+            snapshot[i++] = key;
+        return (snapshot, count);
     }
+
+    /// <summary>
+    /// Returns an entity-ID snapshot to the ArrayPool.
+    /// MUST be called after <see cref="GetEntityIdSnapshot"/> to prevent memory leaks.
+    /// </summary>
+    public void ReturnEntityIdSnapshot(long[] snapshot)
+        => ArrayPool<long>.Shared.Return(snapshot, clearArray: true);
 
     /// <summary>
     /// Returns all component entries as a materialized list.
-    /// For hot-path iteration, prefer <see cref="GetSnapshot"/> + <see cref="ReturnSnapshot"/> directly.
+    /// Allocates a new list on every call; for hot-path iteration prefer
+    /// <see cref="GetTypedSnapshot"/> + <see cref="ReturnTypedSnapshot"/> directly.
     /// </summary>
-    public IEnumerable<(int EntityId, T Component)> All()
+    public List<(long EntityId, T Component)> All()
     {
-        var (snapshot, length) = GetSnapshot();
-        try
-        {
-            var result = new List<(int, T)>(length);
-            var typed = (ValueTuple<int, T>[])snapshot;
-            for (int i = 0; i < length; i++)
-                result.Add(typed[i]);
-            return result;
-        }
-        finally
-        {
-            ReturnSnapshot(snapshot);
-        }
+        var result = new List<(long, T)>(_components.Count);
+        foreach (var (key, value) in _components)
+            result.Add((key, value));
+        return result;
     }
 }

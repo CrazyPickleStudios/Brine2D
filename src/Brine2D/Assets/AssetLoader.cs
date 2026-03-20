@@ -6,64 +6,6 @@ using System.Diagnostics;
 
 namespace Brine2D.Assets;
 
-/// <summary>
-/// Unified async asset loading with caching.
-/// All asset types (textures, sounds, music, fonts) go through one service.
-/// Inject <see cref="IAssetLoader"/> into your scene or system constructor.
-/// No content pipeline, no build step: drag files into your assets folder and load them.
-/// </summary>
-public interface IAssetLoader
-{
-    // ---- Textures ----
-
-    /// <summary>Loads a texture. Does not cache. Use <see cref="GetOrLoadTextureAsync"/> for scenes.</summary>
-    Task<ITexture> LoadTextureAsync(
-        string path,
-        TextureScaleMode scaleMode = TextureScaleMode.Linear,
-        IProgress<float>? progress = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>Returns a cached texture, loading it on first request.</summary>
-    Task<ITexture> GetOrLoadTextureAsync(string path, CancellationToken cancellationToken = default);
-
-    // ---- Audio ----
-
-    /// <summary>Returns a cached sound effect, loading it on first request.</summary>
-    Task<ISoundEffect> GetOrLoadSoundAsync(string path, CancellationToken cancellationToken = default);
-
-    /// <summary>Returns cached music, loading it on first request.</summary>
-    Task<IMusic> GetOrLoadMusicAsync(string path, CancellationToken cancellationToken = default);
-
-    // ---- Fonts ----
-
-    /// <summary>
-    /// Returns a cached font, loading it on first request.
-    /// The (path, size) pair is the cache key; the same file at different sizes is two separate entries.
-    /// </summary>
-    Task<Font> GetOrLoadFontAsync(string path, int size, CancellationToken cancellationToken = default);
-
-    // ---- Manifest preloading ----
-
-    /// <summary>
-    /// Resolves all <see cref="AssetRef{T}"/> fields declared on <paramref name="manifest"/>
-    /// in parallel, reporting progress as each asset completes.
-    /// Call this in <c>OnLoadAsync</c>. Assets are safe to access from <c>OnEnter</c> onwards.
-    /// </summary>
-    Task PreloadAsync(
-        AssetManifest manifest,
-        IProgress<AssetLoadProgress>? progress = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>Preloads a list of descriptors in parallel (legacy / JSON manifest path).</summary>
-    Task PreloadAssetsAsync(
-        IEnumerable<AssetDescriptor> assets,
-        IProgress<AssetLoadProgress>? progress = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>Unloads all cached assets and frees GPU/audio resources.</summary>
-    void UnloadAll();
-}
-
 /// <inheritdoc cref="IAssetLoader"/>
 public class AssetLoader : IAssetLoader, IDisposable
 {
@@ -101,9 +43,7 @@ public class AssetLoader : IAssetLoader, IDisposable
         _audioService = audioService ?? throw new ArgumentNullException(nameof(audioService));
         _fontLoader = fontLoader ?? throw new ArgumentNullException(nameof(fontLoader));
     }
-
-    // ---- Textures ----
-
+    
     public async Task<ITexture> LoadTextureAsync(
         string path,
         TextureScaleMode scaleMode = TextureScaleMode.Linear,
@@ -137,9 +77,7 @@ public class AssetLoader : IAssetLoader, IDisposable
         // Apply the caller's token as a wait-deadline only; it does not cancel the load itself.
         return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
-
-    // ---- Audio ----
-
+    
     public Task<ISoundEffect> GetOrLoadSoundAsync(string path, CancellationToken cancellationToken = default)
     {
         if (_soundCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
@@ -163,9 +101,7 @@ public class AssetLoader : IAssetLoader, IDisposable
                 CancellationToken.None))).Value;
         return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
-
-    // ---- Fonts ----
-
+    
     public Task<Font> GetOrLoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
     {
         var key = $"{path}:{size}";
@@ -178,9 +114,7 @@ public class AssetLoader : IAssetLoader, IDisposable
                 CancellationToken.None))).Value;
         return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
     }
-
-    // ---- Manifest preloading ----
-
+    
     public async Task PreloadAsync(
         AssetManifest manifest,
         IProgress<AssetLoadProgress>? progress = null,
@@ -210,9 +144,7 @@ public class AssetLoader : IAssetLoader, IDisposable
             progress,
             cancellationToken);
     }
-
-    // ---- Shared parallel loader ----
-
+    
     private async Task RunParallelPreload(
         int total,
         IEnumerable<(string Path, Func<CancellationToken, Task> LoadFunc)> items,
@@ -276,9 +208,7 @@ public class AssetLoader : IAssetLoader, IDisposable
             "Use AssetManifest or call GetOrLoadFontAsync(path, size) directly.", path);
         return Task.CompletedTask;
     }
-
-    // ---- Generic cache helper ----
-
+    
     /// <summary>
     /// Loads an asset, writes it to <paramref name="cache"/>, and removes the in-flight
     /// entry from <paramref name="inflight"/> so future callers hit the completed cache directly.
@@ -305,9 +235,7 @@ public class AssetLoader : IAssetLoader, IDisposable
             inflight.TryRemove(key, out _);
         }
     }
-
-    // ---- Unload ----
-
+    
     public void UnloadAll()
     {
         foreach (var t in _textureCache.Values) _textureLoader.UnloadTexture(t);
@@ -327,19 +255,4 @@ public class AssetLoader : IAssetLoader, IDisposable
         UnloadAll();
         GC.SuppressFinalize(this);
     }
-}
-
-// ---- Supporting types ----
-
-public record AssetDescriptor(AssetType Type, string Path);
-
-public enum AssetType { Texture, Audio, Music, Font, Shader, Data }
-
-public record AssetLoadProgress
-{
-    public int TotalAssets  { get; init; }
-    public int LoadedAssets { get; init; }
-    public int FailedAssets { get; init; }
-    public string CurrentAsset { get; init; } = string.Empty;
-    public float ProgressPercent => TotalAssets > 0 ? (float)LoadedAssets / TotalAssets : 0f;
 }
