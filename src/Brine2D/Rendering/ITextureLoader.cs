@@ -25,7 +25,7 @@ public interface ITextureLoader : IDisposable
     /// Loads a texture from a file path asynchronously.
     /// </summary>
     /// <remarks>
-    /// Consider using <see cref="IAssetLoader.LoadTextureAsync"/> instead for automatic caching.
+    /// Consider using <see cref="IAssetLoader.GetOrLoadTextureAsync"/> instead for automatic caching.
     /// </remarks>
     Task<ITexture> LoadTextureAsync(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear, CancellationToken cancellationToken = default);
 
@@ -41,6 +41,8 @@ public interface ITextureLoader : IDisposable
 
     /// <summary>
     /// Unloads a texture and frees its resources.
+    /// Implementations must be idempotent — calling this twice with the same instance
+    /// must not throw or cause a double-free of native resources.
     /// </summary>
     void UnloadTexture(ITexture texture);
 }

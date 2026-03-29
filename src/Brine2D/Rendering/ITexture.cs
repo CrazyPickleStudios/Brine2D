@@ -18,9 +18,9 @@ public interface ITexture : IDisposable
     int Height { get; }
 
     /// <summary>
-    /// Gets the path or name of the texture source.
+    /// Gets the name or path of the texture.
     /// </summary>
-    string Source { get; }
+    string Name { get; }
 
     /// <summary>
     /// Gets whether the texture is loaded and ready to use.

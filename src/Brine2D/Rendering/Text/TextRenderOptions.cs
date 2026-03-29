@@ -17,7 +17,7 @@ public readonly struct TextRenderOptions
     /// <summary>
     /// Default font (null = use renderer's default font).
     /// </summary>
-    public Font? Font { get; init; }
+    public IFont? Font { get; init; }
     
     /// <summary>
     /// Base font size in points.

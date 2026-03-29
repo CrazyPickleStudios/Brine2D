@@ -17,12 +17,12 @@ internal sealed class SDL3TextRenderer : IDisposable
     private readonly MarkupParser _markupParser;
     private readonly IMarkupParser _defaultMarkupParser;
     
-    private Font? _defaultFont;
+    private IFont? _defaultFont;
     private FontAtlas? _defaultFontAtlas;
     
     private bool _disposed;
     
-    public Font? DefaultFont => _defaultFont;
+    public IFont? DefaultFont => _defaultFont;
     public FontAtlas? DefaultFontAtlas => _defaultFontAtlas;
     
     public SDL3TextRenderer(
@@ -70,15 +70,8 @@ internal sealed class SDL3TextRenderer : IDisposable
 
             var loadedFont = await _fontLoader.LoadFontAsync(tempPath, 16, cancellationToken);
 
-            if (loadedFont is Font sdlFont)
-            {
-                _defaultFont = sdlFont;
-                _logger.LogInformation("Default font loaded from embedded resource at 16pt");
-            }
-            else
-            {
-                _logger.LogWarning("Loaded font is not an SDL3Font");
-            }
+            _defaultFont = loadedFont;
+            _logger.LogInformation("Default font loaded from embedded resource at 16pt");
         }
         catch (Exception ex)
         {
@@ -86,15 +79,9 @@ internal sealed class SDL3TextRenderer : IDisposable
         }
     }
     
-    public void SetDefaultFont(Font? font)
+    public void SetDefaultFont(IFont? font)
     {
-        if (font != null && font is not Font)
-        {
-            _logger.LogWarning("Font must be an SDL3Font for GPU renderer");
-            return;
-        }
-
-        _defaultFont = font as Font;
+        _defaultFont = font;
 
         _defaultFontAtlas?.Dispose();
         _defaultFontAtlas = null;
@@ -110,7 +97,7 @@ internal sealed class SDL3TextRenderer : IDisposable
         if (_defaultFont == null || _defaultFontAtlas != null)
             return;
 
-        if (_defaultFont is not Font sdlFont)
+        if (_defaultFont is not SDL3Font sdlFont)
         {
             _logger.LogWarning("Default font is not an SDL3Font, cannot generate atlas");
             return;
@@ -141,7 +128,7 @@ internal sealed class SDL3TextRenderer : IDisposable
         if (string.IsNullOrEmpty(text) || _defaultFont == null)
             return Vector2.Zero;
 
-        if (_defaultFont is not Font sdlFont)
+        if (_defaultFont is not SDL3Font sdlFont)
             return Vector2.Zero;
 
         // Simple SDL measurement for plain text

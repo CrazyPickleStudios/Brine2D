@@ -1,258 +1,288 @@
 using Brine2D.Audio;
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
-using System.Diagnostics;
 
 namespace Brine2D.Assets;
 
-/// <inheritdoc cref="IAssetLoader"/>
-public class AssetLoader : IAssetLoader, IDisposable
+/// <summary>
+/// Scoped <see cref="IAssetLoader"/> wrapper that tracks all assets loaded within a DI scope
+/// and automatically releases them when the scope is disposed. Each scene receives its own
+/// instance, so assets are cleaned up during scene transitions without manual
+/// <c>Release*</c> or <c>Unload</c> calls.
+/// </summary>
+internal sealed class AssetLoader : IAssetLoader, IDisposable
 {
+    private readonly AssetCache _cache;
     private readonly ILogger<AssetLoader> _logger;
-    private readonly ITextureLoader _textureLoader;
-    private readonly IAudioService _audioService;
-    private readonly IFontLoader _fontLoader;
+    private readonly Dictionary<RefCountKey, int> _directRefs = new();
+    private readonly HashSet<AssetManifest> _manifests = new();
 
-    // Per-type completed-asset caches (keyed by path or "path:size" for fonts)
-    private readonly ConcurrentDictionary<string, ITexture>    _textureCache = new();
-    private readonly ConcurrentDictionary<string, ISoundEffect> _soundCache   = new();
-    private readonly ConcurrentDictionary<string, IMusic>       _musicCache   = new();
-    private readonly ConcurrentDictionary<string, Font>         _fontCache    = new();
-
-    // In-flight load deduplication. Lazy<Task<T>> guarantees the load factory is invoked
-    // exactly once per key even when multiple concurrent callers race on the same path —
-    // ConcurrentDictionary.GetOrAdd does NOT guarantee a single factory invocation.
-    private readonly ConcurrentDictionary<string, Lazy<Task<ITexture>>>    _loadingTextures = new();
-    private readonly ConcurrentDictionary<string, Lazy<Task<ISoundEffect>>> _loadingSounds   = new();
-    private readonly ConcurrentDictionary<string, Lazy<Task<IMusic>>>       _loadingMusic    = new();
-    private readonly ConcurrentDictionary<string, Lazy<Task<Font>>>         _loadingFonts    = new();
-
-    // 0 = live, 1 = disposed. Interlocked ensures the check-and-set is atomic so two
-    // concurrent Dispose() calls cannot both pass the guard and double-free native resources.
+    // Lock ordering: _lock is always acquired BEFORE AssetCache._stateLock (via
+    // _cache.TrackDirectRef / _cache.ReleaseDirectRef). This is safe because AssetCache
+    // has no back-reference to AssetLoader, making the reverse acquisition structurally
+    // impossible.
+    private readonly Lock _lock = new();
     private int _disposed;
 
-    public AssetLoader(
-        ILogger<AssetLoader> logger,
-        ITextureLoader textureLoader,
-        IAudioService audioService,
-        IFontLoader fontLoader)
+    public AssetLoader(AssetCache cache, ILogger<AssetLoader> logger)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
-        _audioService = audioService ?? throw new ArgumentNullException(nameof(audioService));
-        _fontLoader = fontLoader ?? throw new ArgumentNullException(nameof(fontLoader));
+        ArgumentNullException.ThrowIfNull(cache);
+        ArgumentNullException.ThrowIfNull(logger);
+        _cache = cache;
+        _logger = logger;
     }
-    
-    public async Task<ITexture> LoadTextureAsync(
+
+    public async Task<ITexture> GetOrLoadTextureAsync(
         string path,
         TextureScaleMode scaleMode = TextureScaleMode.Linear,
-        IProgress<float>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Path cannot be null or empty", nameof(path));
-
-        progress?.Report(0f);
-        var texture = await _textureLoader.LoadTextureAsync(path, scaleMode, cancellationToken);
-        progress?.Report(1f);
-
-        _logger.LogDebug("Texture loaded: {Path} ({Width}x{Height})", path, texture.Width, texture.Height);
-        return texture;
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        path = AssetCache.NormalizePath(path);
+        return await GetOrLoadCoreAsync(
+            RefCountKey.ForTexture(path, scaleMode),
+            ct => _cache.GetOrLoadTextureAsync(path, scaleMode, ct),
+            cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<ITexture> GetOrLoadTextureAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<ISoundEffect> GetOrLoadSoundAsync(string path, CancellationToken cancellationToken = default)
     {
-        if (_textureCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
-        // The Lazy factory always runs with CancellationToken.None so the underlying load
-        // completes and caches regardless of which caller started it. Concurrent callers
-        // waiting on the same Lazy are therefore never cancelled by proxy when an unrelated
-        // caller cancels its own token.
-        var task = _loadingTextures.GetOrAdd(path, _ => new Lazy<Task<ITexture>>(
-            () => LoadAndCache(
-                path,
-                ct => LoadTextureAsync(path, cancellationToken: ct),
-                _textureCache, _loadingTextures,
-                CancellationToken.None))).Value;
-        // Apply the caller's token as a wait-deadline only; it does not cancel the load itself.
-        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
-    }
-    
-    public Task<ISoundEffect> GetOrLoadSoundAsync(string path, CancellationToken cancellationToken = default)
-    {
-        if (_soundCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
-        var task = _loadingSounds.GetOrAdd(path, _ => new Lazy<Task<ISoundEffect>>(
-            () => LoadAndCache(
-                path,
-                ct => _audioService.LoadSoundAsync(path, ct),
-                _soundCache, _loadingSounds,
-                CancellationToken.None))).Value;
-        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        path = AssetCache.NormalizePath(path);
+        return await GetOrLoadCoreAsync(
+            RefCountKey.ForSound(path),
+            ct => _cache.GetOrLoadSoundAsync(path, ct),
+            cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<IMusic> GetOrLoadMusicAsync(string path, CancellationToken cancellationToken = default)
+    public async Task<IMusic> GetOrLoadMusicAsync(string path, CancellationToken cancellationToken = default)
     {
-        if (_musicCache.TryGetValue(path, out var cached)) return Task.FromResult(cached);
-        var task = _loadingMusic.GetOrAdd(path, _ => new Lazy<Task<IMusic>>(
-            () => LoadAndCache(
-                path,
-                ct => _audioService.LoadMusicAsync(path, ct),
-                _musicCache, _loadingMusic,
-                CancellationToken.None))).Value;
-        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        path = AssetCache.NormalizePath(path);
+        return await GetOrLoadCoreAsync(
+            RefCountKey.ForMusic(path),
+            ct => _cache.GetOrLoadMusicAsync(path, ct),
+            cancellationToken).ConfigureAwait(false);
     }
-    
-    public Task<Font> GetOrLoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
+
+    public async Task<IFont> GetOrLoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
     {
-        var key = $"{path}:{size}";
-        if (_fontCache.TryGetValue(key, out var cached)) return Task.FromResult(cached);
-        var task = _loadingFonts.GetOrAdd(key, _ => new Lazy<Task<Font>>(
-            () => LoadAndCache(
-                key,
-                ct => _fontLoader.LoadFontAsync(path, size, ct),
-                _fontCache, _loadingFonts,
-                CancellationToken.None))).Value;
-        return cancellationToken.CanBeCanceled ? task.WaitAsync(cancellationToken) : task;
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
+        path = AssetCache.NormalizePath(path);
+        return await GetOrLoadCoreAsync(
+            RefCountKey.ForFont(path, size),
+            ct => _cache.GetOrLoadFontAsync(path, size, ct),
+            cancellationToken).ConfigureAwait(false);
     }
-    
+
+    public bool ReleaseTexture(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        path = AssetCache.NormalizePath(path);
+        return ReleaseCoreRef(RefCountKey.ForTexture(path, scaleMode));
+    }
+
+    public bool ReleaseSound(string path)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        path = AssetCache.NormalizePath(path);
+        return ReleaseCoreRef(RefCountKey.ForSound(path));
+    }
+
+    public bool ReleaseMusic(string path)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        path = AssetCache.NormalizePath(path);
+        return ReleaseCoreRef(RefCountKey.ForMusic(path));
+    }
+
+    public bool ReleaseFont(string path, int size)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
+        path = AssetCache.NormalizePath(path);
+        return ReleaseCoreRef(RefCountKey.ForFont(path, size));
+    }
+
     public async Task PreloadAsync(
         AssetManifest manifest,
         IProgress<AssetLoadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(manifest);
-
-        var refs = manifest.GetAll();
-        await RunParallelPreload(
-            refs.Count,
-            refs.Select(r => (r.Path, LoadFunc: (Func<CancellationToken, Task>)(ct => r.LoadAsync(this, ct)))),
-            progress,
-            cancellationToken);
-    }
-
-    public async Task PreloadAssetsAsync(
-        IEnumerable<AssetDescriptor> assets,
-        IProgress<AssetLoadProgress>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(assets);
-
-        var list = assets.ToList();
-        await RunParallelPreload(
-            list.Count,
-            list.Select(a => (a.Path, LoadFunc: (Func<CancellationToken, Task>)(ct => LoadDescriptorAsync(a, ct)))),
-            progress,
-            cancellationToken);
-    }
-    
-    private async Task RunParallelPreload(
-        int total,
-        IEnumerable<(string Path, Func<CancellationToken, Task> LoadFunc)> items,
-        IProgress<AssetLoadProgress>? progress,
-        CancellationToken cancellationToken)
-    {
-        var loaded = 0;
-        var failed = 0;
-        var sw = Stopwatch.StartNew();
-
-        _logger.LogInformation("Preloading {Count} assets", total);
-
-        await Parallel.ForEachAsync(items, new ParallelOptions
+        ThrowIfDisposed();
+        bool newlyTracked;
+        lock (_lock)
         {
-            MaxDegreeOfParallelism = Environment.ProcessorCount,
-            CancellationToken = cancellationToken
-        }, async (item, ct) =>
-        {
-            try
-            {
-                await item.LoadFunc(ct);
-                Interlocked.Increment(ref loaded);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to preload asset: {Path}", item.Path);
-                Interlocked.Increment(ref failed);
-            }
-
-            progress?.Report(new AssetLoadProgress
-            {
-                TotalAssets = total,
-                LoadedAssets = loaded,
-                FailedAssets = failed,
-                CurrentAsset = item.Path
-            });
-        });
-
-        _logger.LogInformation(
-            "Preload complete: {Loaded}/{Total} loaded, {Failed} failed in {Ms}ms",
-            loaded, total, failed, sw.ElapsedMilliseconds);
-    }
-
-    private Task LoadDescriptorAsync(AssetDescriptor asset, CancellationToken ct) => asset.Type switch
-    {
-        AssetType.Texture => GetOrLoadTextureAsync(asset.Path, ct),
-        AssetType.Audio   => GetOrLoadSoundAsync(asset.Path, ct),
-        AssetType.Music   => GetOrLoadMusicAsync(asset.Path, ct),
-        AssetType.Font    => WarnSkipFont(asset.Path),
-        _                 => Task.CompletedTask
-    };
-
-    /// <summary>
-    /// Fonts require a size parameter and cannot be described by path alone.
-    /// Logs a warning so the caller is informed rather than silently skipping.
-    /// </summary>
-    private Task WarnSkipFont(string path)
-    {
-        _logger.LogWarning(
-            "Skipping preload of font '{Path}': fonts require a size parameter. " +
-            "Use AssetManifest or call GetOrLoadFontAsync(path, size) directly.", path);
-        return Task.CompletedTask;
-    }
-    
-    /// <summary>
-    /// Loads an asset, writes it to <paramref name="cache"/>, and removes the in-flight
-    /// entry from <paramref name="inflight"/> so future callers hit the completed cache directly.
-    /// Always called with <see cref="CancellationToken.None"/>; cancellation is applied
-    /// externally per-caller via <see cref="Task.WaitAsync(CancellationToken)"/>.
-    /// </summary>
-    private static async Task<T> LoadAndCache<T>(
-        string key,
-        Func<CancellationToken, Task<T>> load,
-        ConcurrentDictionary<string, T> cache,
-        ConcurrentDictionary<string, Lazy<Task<T>>> inflight,
-        CancellationToken ct)
-    {
+            ThrowIfDisposed();
+            newlyTracked = _manifests.Add(manifest);
+        }
         try
         {
-            var value = await load(ct);
-            cache[key] = value;
-            return value;
+            await _cache.PreloadAsync(manifest, progress, cancellationToken).ConfigureAwait(false);
         }
-        finally
+        catch (OperationCanceledException) when (newlyTracked)
         {
-            // Remove the Lazy wrapper once the load is settled (success or failure) so
-            // subsequent callers skip the inflight dict and either hit the cache or retry.
-            inflight.TryRemove(key, out _);
+            // Only cancellation rolls back the manifest. AggregateException from partial
+            // failures propagates without rollback so the caller can retry unresolved refs
+            // or explicitly call Unload to release the partial results.
+            RollbackManifest(manifest);
+            throw;
         }
     }
-    
+
+    public void Unload(AssetManifest manifest)
+    {
+        ThrowIfDisposed();
+        lock (_lock)
+        {
+            ThrowIfDisposed();
+            _manifests.Remove(manifest);
+        }
+        _cache.Unload(manifest);
+    }
+
     public void UnloadAll()
     {
-        foreach (var t in _textureCache.Values) _textureLoader.UnloadTexture(t);
-        foreach (var s in _soundCache.Values)   _audioService.UnloadSound(s);
-        foreach (var f in _fontCache.Values)    _fontLoader.UnloadFont(f);
-        // Music is typically streamed; unload via audio service if it supports it
-
-        _textureCache.Clear(); _loadingTextures.Clear();
-        _soundCache.Clear();   _loadingSounds.Clear();
-        _musicCache.Clear();   _loadingMusic.Clear();
-        _fontCache.Clear();    _loadingFonts.Clear();
+        ThrowIfDisposed();
+        ReleaseAllTracked();
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
-        UnloadAll();
-        GC.SuppressFinalize(this);
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
+
+        ReleaseAllTracked();
+    }
+
+    /// <summary>
+    /// Tracks the key on both this scope and the shared cache, executes the load, and
+    /// rolls back both ref counts if the load faults or the caller's token is cancelled.
+    /// When cancellation wins the race against a completing load, the asset may remain in
+    /// the cache with no live ref count until the next load of the same key or
+    /// <see cref="AssetCache.DisposeAsync"/>.
+    /// </summary>
+    private async Task<T> GetOrLoadCoreAsync<T>(
+        RefCountKey key,
+        Func<CancellationToken, Task<T>> loadFromCache,
+        CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            ThrowIfDisposed();
+            TrackDirectRef(key);
+            _cache.TrackDirectRef(key);
+        }
+        try
+        {
+            return await loadFromCache(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            RollbackDirectRef(key);
+            throw;
+        }
+    }
+
+    private bool ReleaseCoreRef(RefCountKey key)
+    {
+        lock (_lock)
+        {
+            ThrowIfDisposed();
+            if (!UntrackDirectRef(key))
+                return false;
+        }
+        return _cache.ReleaseDirectRef(key);
+    }
+
+    private void ReleaseAllTracked()
+    {
+        List<AssetManifest>? manifests;
+        Dictionary<RefCountKey, int>? refs;
+
+        lock (_lock)
+        {
+            manifests = _manifests.Count > 0 ? [.. _manifests] : null;
+            refs = _directRefs.Count > 0 ? new Dictionary<RefCountKey, int>(_directRefs) : null;
+            _manifests.Clear();
+            _directRefs.Clear();
+        }
+
+        if (manifests is not null)
+        {
+            foreach (var manifest in manifests)
+            {
+                try { _cache.Unload(manifest); }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to unload manifest {Type} during scope cleanup",
+                        manifest.GetType().Name);
+                }
+            }
+        }
+
+        if (refs is not null)
+        {
+            foreach (var (key, count) in refs)
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    try { _cache.ReleaseDirectRef(key); }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to release {Key} during scope cleanup", key);
+                    }
+                }
+            }
+        }
+    }
+
+    private void RollbackDirectRef(RefCountKey key)
+    {
+        bool wasTracked;
+        lock (_lock) { wasTracked = UntrackDirectRef(key); }
+        if (!wasTracked) return;
+        try { _cache.ReleaseDirectRef(key); }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void RollbackManifest(AssetManifest manifest)
+    {
+        lock (_lock) { _manifests.Remove(manifest); }
+        try { _cache.Unload(manifest); }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
+    }
+
+    private void TrackDirectRef(RefCountKey key)
+    {
+        _directRefs.TryGetValue(key, out var count);
+        _directRefs[key] = count + 1;
+    }
+
+    private bool UntrackDirectRef(RefCountKey key)
+    {
+        if (!_directRefs.TryGetValue(key, out var count))
+            return false;
+
+        if (--count <= 0)
+            _directRefs.Remove(key);
+        else
+            _directRefs[key] = count;
+
+        return true;
     }
 }

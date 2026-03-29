@@ -79,7 +79,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
         try
         {
             Logger.LogInformation("Loading shared sprite texture...");
-            _sharedTexture = await _assetLoader.LoadTextureAsync(
+            _sharedTexture = await _assetLoader.GetOrLoadTextureAsync(
                 "assets/images/logo.png",
                 TextureScaleMode.Nearest,
                 cancellationToken: cancellationToken);

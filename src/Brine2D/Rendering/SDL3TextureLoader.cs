@@ -11,7 +11,8 @@ public class SDL3TextureLoader : ITextureLoader
     private readonly ITextureContext _textureContext;
     private readonly IMainThreadDispatcher _mainThreadDispatcher;
     private readonly List<ITexture> _loadedTextures = new();
-    private bool _disposed;
+    private readonly Lock _texturesLock = new();
+    private int _disposed;
 
     public SDL3TextureLoader(
         ILogger<SDL3TextureLoader> logger,
@@ -28,23 +29,19 @@ public class SDL3TextureLoader : ITextureLoader
         TextureScaleMode scaleMode = TextureScaleMode.Linear,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Path cannot be null or empty", nameof(path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))
             throw new FileNotFoundException($"Texture file not found: {path}");
 
-        // Phase 1: I/O - Read file from disk (background thread)
         var fileData = await Task.Run(
             () => File.ReadAllBytes(path), 
             cancellationToken);
 
-        // Phase 2: CPU - Decode image (background thread)
         var surfaceInfo = await Task.Run(
             () => DecodeImageData(fileData, path),
             cancellationToken);
 
-        // Phase 3: GPU - Create texture (MUST be on main thread)
         ITexture texture = null!;
         _mainThreadDispatcher.RunOnMainThread(() =>
         {
@@ -56,13 +53,11 @@ public class SDL3TextureLoader : ITextureLoader
 
     public ITexture LoadTexture(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Path cannot be null or empty", nameof(path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))
             throw new FileNotFoundException($"Texture file not found: {path}");
 
-        // Load image surface using SDL_image
         var surface = SDL3.Image.Load(path);
         if (surface == IntPtr.Zero)
         {
@@ -83,11 +78,14 @@ public class SDL3TextureLoader : ITextureLoader
                 throw new InvalidOperationException($"Invalid surface dimensions: {width}x{height}");
             }
 
-            // Use the context to create texture (must be on main thread)
             var texture = _textureContext.CreateTextureFromSurface(surface, width, height, scaleMode);
-            
-            _loadedTextures.Add(texture);
-            _logger.LogInformation("Texture loaded: {Path} ({Width}x{Height})", path, width, height);
+
+            lock (_texturesLock)
+            {
+                _loadedTextures.Add(texture);
+            }
+
+            _logger.LogDebug("Texture loaded: {Path} ({Width}x{Height})", path, width, height);
 
             return texture;
         }
@@ -107,7 +105,10 @@ public class SDL3TextureLoader : ITextureLoader
         _mainThreadDispatcher.RunOnMainThread(() =>
         {
             texture = _textureContext.CreateBlankTexture(width, height, scaleMode);
-            _loadedTextures.Add(texture);
+            lock (_texturesLock)
+            {
+                _loadedTextures.Add(texture);
+            }
         }, waitForCompletion: true);
         
         return texture;
@@ -118,23 +119,29 @@ public class SDL3TextureLoader : ITextureLoader
         if (texture == null) return;
 
         _textureContext.ReleaseTexture(texture);
-        _loadedTextures.Remove(texture);
+        lock (_texturesLock)
+        {
+            _loadedTextures.Remove(texture);
+        }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
-        _logger.LogInformation("Disposing texture loader and {Count} textures", _loadedTextures.Count);
+        List<ITexture> textures;
+        lock (_texturesLock)
+        {
+            textures = [.._loadedTextures];
+            _loadedTextures.Clear();
+        }
 
-        foreach (var texture in _loadedTextures.ToList())
+        _logger.LogInformation("Disposing texture loader and {Count} textures", textures.Count);
+
+        foreach (var texture in textures)
         {
             _textureContext.ReleaseTexture(texture);
         }
-
-        _loadedTextures.Clear();
-        _disposed = true;
-        GC.SuppressFinalize(this);
     }
 
     private ITexture CreateTextureFromSurface(SurfaceInfo surfaceInfo, TextureScaleMode scaleMode, string path)
@@ -147,8 +154,12 @@ public class SDL3TextureLoader : ITextureLoader
                 surfaceInfo.Height,
                 scaleMode);
             
-            _loadedTextures.Add(texture);
-            _logger.LogInformation("Texture created: {Path} ({Width}x{Height})", 
+            lock (_texturesLock)
+            {
+                _loadedTextures.Add(texture);
+            }
+
+            _logger.LogDebug("Texture created: {Path} ({Width}x{Height})", 
                 path, texture.Width, texture.Height);
             
             return texture;

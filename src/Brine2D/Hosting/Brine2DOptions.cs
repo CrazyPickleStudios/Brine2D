@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using Brine2D.Assets;
 using Brine2D.Audio;
 using Brine2D.ECS;
 using Brine2D.Rendering;
@@ -12,6 +13,9 @@ namespace Brine2D.Hosting;
 public sealed class Brine2DOptions
 {
     private volatile bool _validated;
+
+    /// <summary>Asset loader configuration.</summary>
+    public AssetOptions Assets { get; init; } = new();
 
     /// <summary>Audio configuration.</summary>
     public AudioOptions Audio { get; init; } = new();
@@ -88,6 +92,7 @@ public sealed class Brine2DOptions
         if (!Headless)
             ValidateNested(Window, nameof(Window), allErrors);
 
+        ValidateNested(Assets, nameof(Assets), allErrors);
         ValidateNested(Rendering, nameof(Rendering), allErrors);
         ValidateNested(ECS, nameof(ECS), allErrors);
         ValidateNested(Audio, nameof(Audio), allErrors);

@@ -1,4 +1,3 @@
-using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.Rendering;
@@ -6,13 +5,14 @@ namespace Brine2D.Rendering;
 /// <summary>
 /// SDL_ttf implementation of font loader.
 /// </summary>
-public class SDL3FontLoader : IFontLoader, IDisposable
+public class SDL3FontLoader : IFontLoader
 {
     private readonly ILogger<SDL3FontLoader> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly List<Font> _loadedFonts = new();
+    private readonly List<SDL3Font> _loadedFonts = new();
+    private readonly Lock _fontsLock = new();
     private bool _initialized;
-    private bool _disposed;
+    private int _disposed;
 
     public SDL3FontLoader(ILogger<SDL3FontLoader> logger, ILoggerFactory loggerFactory)
     {
@@ -25,7 +25,7 @@ public class SDL3FontLoader : IFontLoader, IDisposable
     private void Initialize()
     {
         if (_initialized) return;
-
+        _loadedFonts.Clear();
         _logger.LogInformation("Initializing SDL_ttf");
 
         if (!SDL3.TTF.Init())
@@ -39,23 +39,21 @@ public class SDL3FontLoader : IFontLoader, IDisposable
         _logger.LogInformation("SDL_ttf initialized successfully");
     }
 
-    public async Task<Font> LoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
+    public async Task<IFont> LoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
     {
         return await Task.Run(() => LoadFont(path, size), cancellationToken);
     }
 
-    private Font LoadFont(string path, int size)
+    private SDL3Font LoadFont(string path, int size)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Path cannot be null or empty", nameof(path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))
             throw new FileNotFoundException($"Font file not found: {path}", path);
 
-        if (size <= 0)
-            throw new ArgumentException("Font size must be positive", nameof(size));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
 
-        _logger.LogInformation("Loading font: {Path} at {Size}pt", path, size);
+        _logger.LogDebug("Loading font: {Path} at {Size}pt", path, size);
 
         var fontHandle = SDL3.TTF.OpenFont(path, size);
 
@@ -66,44 +64,46 @@ public class SDL3FontLoader : IFontLoader, IDisposable
             throw new InvalidOperationException($"Failed to load font: {error}");
         }
 
-        var font = new Font(path, size, fontHandle, _loggerFactory.CreateLogger<Font>());
-        _loadedFonts.Add(font);
+        var font = new SDL3Font(path, size, fontHandle, _loggerFactory.CreateLogger<SDL3Font>());
+        lock (_fontsLock)
+        {
+            _loadedFonts.Add(font);
+        }
 
         _logger.LogDebug("Font loaded: {Path} at {Size}pt", path, size);
         return font;
     }
 
-    public void UnloadFont(Font font)
+    public void UnloadFont(IFont font)
     {
-        if (font is Font sdlFont)
+        if (font is SDL3Font sdlFont)
         {
-            _loadedFonts.Remove(sdlFont);
+            lock (_fontsLock)
+            {
+                _loadedFonts.Remove(sdlFont);
+            }
             sdlFont.Dispose();
         }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
-        foreach (var font in _loadedFonts.ToList())
+        List<SDL3Font> fonts;
+        lock (_fontsLock)
         {
-            font.Dispose();
+            fonts = [.._loadedFonts];
+            _loadedFonts.Clear();
         }
-        _loadedFonts.Clear();
+
+        foreach (var font in fonts)
+            font.Dispose();
 
         if (_initialized)
         {
             SDL3.TTF.Quit();
             _initialized = false;
         }
-
-        _disposed = true;
-        GC.SuppressFinalize(this);
-    }
-
-    ~SDL3FontLoader()
-    {
-        Dispose();
     }
 }

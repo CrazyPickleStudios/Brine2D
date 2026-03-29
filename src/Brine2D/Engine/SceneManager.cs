@@ -541,6 +541,12 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
         // already provided a fully constructed LoadingScene instance.
         IServiceScope? loadingScreenScope = null;
 
+        // Track the outgoing scene and its DI scope so we can tear it down AFTER
+        // the incoming scene's assets are loaded. This keeps shared assets' ref counts
+        // above zero during the transition, preventing unnecessary unload/reload cycles.
+        Scene? previousScene = null;
+        IServiceScope? previousSceneScope = null;
+
         try
         {
             _logger.LogInformation("Loading scene: {SceneName}", logName);
@@ -551,7 +557,7 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
                 _activeTransition.Begin();
             }
 
-            var oldScene = CurrentScene;
+            previousScene = CurrentScene;
             CurrentScene = null;
 
             // Resolve the loading screen from its type here, inside the try block, so any
@@ -568,17 +574,10 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
 
             await RunWithLoadingScreenAsync(loadingScreen, logName, ct, async () =>
             {
-                if (oldScene != null)
-                {
-                    _logger.LogDebug("Exiting current scene {SceneName}", oldScene.GetType().Name);
-                    await TeardownSceneAsync(oldScene, wasEntered: true, ct);
-                }
-
                 _activeLoadingScreen?.UpdateProgress(ProgressSceneCreated, "Creating scene...");
 
                 _logger.LogDebug("Creating new scene service scope");
-                _currentSceneScope?.Dispose();
-                _currentSceneScope = null;
+                previousSceneScope = _currentSceneScope;
                 _currentSceneScope = _scopeFactory.CreateScope();
 
                 newScene = resolveScene(_currentSceneScope);
@@ -602,7 +601,20 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
                         ProgressAssetsLoading + Math.Clamp(p, 0f, 1f) * (ProgressComplete - ProgressAssetsLoading)))
                     : null;
 
+                // Load incoming scene assets BEFORE tearing down the outgoing scene.
+                // Shared assets between the two scenes keep their ref counts > 0,
+                // avoiding unnecessary unload/reload cycles during the transition.
                 await newScene.OnLoadAsync(ct, sceneProgress);
+
+                if (previousScene != null)
+                {
+                    _logger.LogDebug("Tearing down previous scene: {SceneName}", previousScene.GetType().Name);
+                    await TeardownSceneAsync(previousScene, wasEntered: true, ct);
+                    previousScene = null;
+                }
+
+                previousSceneScope?.Dispose();
+                previousSceneScope = null;
 
                 _activeLoadingScreen?.UpdateProgress(ProgressComplete, "Ready!");
             });
@@ -649,6 +661,16 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
                 }
             }
 
+            if (previousScene != null)
+            {
+                try { await TeardownSceneAsync(previousScene, wasEntered: true); }
+                catch (Exception teardownEx)
+                {
+                    _logger.LogError(teardownEx, "Error tearing down previous scene during failed load: {SceneName}",
+                        previousScene.GetType().Name);
+                }
+            }
+
             await _mainThreadDispatcher.RunOnMainThreadAsync(() =>
             {
                 _activeLoadingScreen = null;
@@ -658,6 +680,7 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
 
             _currentSceneScope?.Dispose();
             _currentSceneScope = null;
+            previousSceneScope?.Dispose();
 
             if (!isCancellation)
                 _pendingSceneLoadFailure = new SceneLoadFailedEventArgs(logName, ex);
@@ -764,7 +787,7 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
         scene.Logger = _services.LoggerFactory.CreateLogger(scene.GetType());
         scene.Renderer = _services.Renderer;
         scene.Input = _services.InputContext;
-        scene.Audio = _services.AudioService;
+        scene.Audio = _services.AudioPlayer;
         scene.Game = _services.GameContext;
     }
 

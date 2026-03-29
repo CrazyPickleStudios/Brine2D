@@ -49,7 +49,7 @@ public class LevelAssets : AssetManifest
     public readonly AssetRef<ITexture>     Tileset = Texture("assets/images/tileset.png");
     public readonly AssetRef<ISoundEffect> Jump    = Sound("assets/audio/jump.wav");
     public readonly AssetRef<IMusic>       Theme   = Music("assets/audio/music/theme.ogg");
-    public readonly AssetRef<Font>         HUD     = Font("assets/fonts/ui.ttf", size: 20);
+    public readonly AssetRef<IFont>        HUD     = Font("assets/fonts/ui.ttf", size: 20);
 }
 
 public class GameScene : Scene
@@ -344,7 +344,7 @@ public class LevelAssets : AssetManifest
     public readonly AssetRef<ISoundEffect> Jump     = Sound("assets/audio/jump.wav");
     public readonly AssetRef<ISoundEffect> Hurt     = Sound("assets/audio/hurt.wav");
     public readonly AssetRef<IMusic>       Theme    = Music("assets/audio/music/level1.ogg");
-    public readonly AssetRef<Font>         HUDFont  = Font("assets/fonts/ui.ttf", size: 20);
+    public readonly AssetRef<IFont>        HUDFont  = Font("assets/fonts/ui.ttf", size: 20);
 }
 ~~~
 
@@ -385,7 +385,7 @@ All three share the same thread-safe cache, so loading the same path twice retur
 | `ITexture` | `GetOrLoadTextureAsync` | ✅ Yes |
 | `ISoundEffect` | `GetOrLoadSoundAsync` | ✅ Yes |
 | `IMusic` | `GetOrLoadMusicAsync` | ✅ Yes |
-| `Font` | `GetOrLoadFontAsync(path, size)` | ✅ Yes |
+| `IFont` | `GetOrLoadFontAsync(path, size)` | ✅ Yes |
 
 ---
 

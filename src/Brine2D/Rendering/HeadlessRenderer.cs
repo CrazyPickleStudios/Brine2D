@@ -53,10 +53,10 @@ internal sealed class HeadlessRenderer : IRenderer
     // ── Text rendering ───────────────────────────────────────────────────────
     public void DrawText(string text, float x, float y, Color color) { }
     public void DrawText(string text, float x, float y, TextRenderOptions options) { }
-    public void DrawText(string text, Vector2 position, Font? font = null,
+    public void DrawText(string text, Vector2 position, IFont? font = null,
         Color? color = null, float scale = 1.0f, float rotation = 0f, Vector2? origin = null) { }
 
-    public void SetDefaultFont(Font? font) { }
+    public void SetDefaultFont(IFont? font) { }
     public Vector2 MeasureText(string text, float? fontSize = null) => Vector2.Zero;
     public Vector2 MeasureText(string text, TextRenderOptions options) => Vector2.Zero;
 

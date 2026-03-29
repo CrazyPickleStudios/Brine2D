@@ -135,7 +135,7 @@ public class LevelAssets : AssetManifest
     public readonly AssetRef<ITexture>     Tileset = Texture(Assets.Images.Tileset, TextureScaleMode.Nearest);
     public readonly AssetRef<ISoundEffect> Jump    = Sound(Assets.Audio.Jump);
     public readonly AssetRef<IMusic>       Theme   = Music(Assets.Audio.Music.Theme);
-    public readonly AssetRef<Font>         HUD     = Font(Assets.Fonts.Ui, size: 20);
+    public readonly AssetRef<IFont>        HUD     = Font(Assets.Fonts.Ui, size: 20);
 }
 ~~~
 

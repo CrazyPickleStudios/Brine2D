@@ -7,172 +7,54 @@ namespace Brine2D.Audio;
 /// <summary>
 /// SDL3_mixer implementation of audio service with spatial audio support and proper callbacks.
 /// </summary>
-/// <remarks>
-/// This service provides comprehensive audio playback capabilities including:
-/// <list type="bullet">
-/// <item>Sound effect playback with spatial audio (panning)</item>
-/// <item>Music streaming with loop support</item>
-/// <item>Individual volume controls for master, music, and sound effects</item>
-/// <item>Track-based audio management with callbacks</item>
-/// <item>Proper resource disposal and cleanup</item>
-/// </list>
-/// </remarks>
 internal class AudioService : IAudioService
 {
-    /// <summary>
-    /// Logger instance for audio service operations.
-    /// </summary>
     private readonly ILogger<AudioService> _logger;
-
-    /// <summary>
-    /// Logger factory for creating loggers for child audio objects.
-    /// </summary>
     private readonly ILoggerFactory _loggerFactory;
-
-    /// <summary>
-    /// Collection of all currently loaded sound effects.
-    /// </summary>
-    private readonly List<SoundEffect> _loadedSounds = new();
-
-    /// <summary>
-    /// Collection of all currently loaded music tracks.
-    /// </summary>
-    private readonly List<Music> _loadedMusic = new();
-
-    /// <summary>
-    /// Collection of all active audio tracks (both sounds and music).
-    /// </summary>
+    private readonly List<SDL3SoundEffect> _loadedSounds = new();
+    private readonly List<SDL3Music> _loadedMusic = new();
     private readonly List<nint> _tracks = new();
-
-    /// <summary>
-    /// Handle to the SDL3 mixer device.
-    /// </summary>
+    private readonly Dictionary<nint, TrackCallbackData> _trackCallbacks = new();
+    private readonly Lock _tracksLock = new();
+    private readonly Lock _assetLock = new();
     private nint _mixer;
-
-    /// <summary>
-    /// Indicates whether this instance has been disposed.
-    /// </summary>
+    private nint _currentMusicTrack;
     private int _disposed;
-
-    /// <summary>
-    /// Internal storage for sound effect volume level.
-    /// </summary>
     private float _soundVolume = 1.0f;
 
-    /// <summary>
-    /// Gets or sets the master volume for all audio output.
-    /// </summary>
-    /// <value>
-    /// The master gain value. Valid range is 0.0 to 10.0, where 1.0 is normal volume.
-    /// Values are automatically clamped to this range when set.
-    /// </value>
-    /// <remarks>
-    /// This property controls the overall volume for all audio played through the mixer,
-    /// affecting both music and sound effects. Changes take effect immediately.
-    /// </remarks>
+    /// <inheritdoc/>
     public float MasterVolume
     {
         get => SDL3.Mixer.GetMasterGain(_mixer);
         set => SDL3.Mixer.SetMasterGain(_mixer, Math.Clamp(value, 0f, 10f));
     }
 
-    /// <summary>
-    /// Gets or sets the volume level for music playback.
-    /// </summary>
-    /// <value>
-    /// The music volume multiplier. Default is 1.0. Valid range is 0.0 to 10.0.
-    /// </value>
-    /// <remarks>
-    /// This volume is applied when a new music track starts playing.
-    /// Changes to this property do not affect currently playing music.
-    /// </remarks>
+    /// <inheritdoc/>
     public float MusicVolume { get; set; } = 1.0f;
 
-    /// <summary>
-    /// Gets or sets the volume level for sound effect playback.
-    /// </summary>
-    /// <value>
-    /// The sound volume multiplier. Valid range is 0.0 to 10.0, where 1.0 is normal volume.
-    /// Values are automatically clamped to this range when set.
-    /// </value>
-    /// <remarks>
-    /// This volume is multiplied with individual sound volumes when playing sound effects.
-    /// </remarks>
+    /// <inheritdoc/>
     public float SoundVolume
     {
         get => _soundVolume;
         set => _soundVolume = Math.Clamp(value, 0f, 10f);
     }
 
-    /// <summary>
-    /// Gets a value indicating whether music is currently playing.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if music is playing; otherwise, <c>false</c>.
-    /// </value>
     public bool IsMusicPlaying { get; private set; }
 
-    /// <summary>
-    /// Gets a value indicating whether music playback is currently paused.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if music is paused; otherwise, <c>false</c>.
-    /// </value>
     public bool IsMusicPaused { get; private set; }
 
-    /// <summary>
-    /// Handle to the currently playing music track.
-    /// </summary>
-    private nint _currentMusicTrack;
-
-    /// <summary>
-    /// Event raised when an audio track stops playing.
-    /// </summary>
-    /// <remarks>
-    /// This event is triggered from the SDL audio thread callback when a track completes.
-    /// Subscribers should be thread-safe as this may be called from a different thread.
-    /// </remarks>
+    /// <inheritdoc/>
     public event Action<nint>? OnTrackStopped;
 
-    /// <summary>
-    /// Dictionary mapping track handles to their associated callback data.
-    /// </summary>
-    private readonly Dictionary<nint, TrackCallbackData> _trackCallbacks = new();
-
-    /// <summary>
-    /// Unmanaged callback delegate for track stopped events.
-    /// </summary>
-    /// <param name="userdata">User data pointer containing the track handle.</param>
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void TrackStoppedCallback(nint userdata);
 
-    /// <summary>
-    /// Stores callback information for an audio track.
-    /// </summary>
     private struct TrackCallbackData
     {
-        /// <summary>
-        /// The callback delegate to invoke when the track stops.
-        /// </summary>
         public TrackStoppedCallback Callback;
-
-        /// <summary>
-        /// Handle to the associated audio track.
-        /// </summary>
         public nint Track;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SDL3AudioService"/> class.
-    /// </summary>
-    /// <param name="logger">Logger for audio service operations.</param>
-    /// <param name="loggerFactory">Factory for creating loggers for child objects.</param>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="logger"/> or <paramref name="loggerFactory"/> is null.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when SDL3_mixer initialization or mixer device creation fails.
-    /// </exception>
     public AudioService(ILogger<AudioService> logger, ILoggerFactory loggerFactory)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -181,12 +63,6 @@ internal class AudioService : IAudioService
         Initialize();
     }
 
-    /// <summary>
-    /// Initializes the SDL3_mixer audio system and creates the mixer device.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when SDL3_mixer initialization fails or mixer device creation fails.
-    /// </exception>
     private void Initialize()
     {
         _logger.LogInformation("Initializing SDL3_mixer audio system");
@@ -198,8 +74,8 @@ internal class AudioService : IAudioService
             throw new InvalidOperationException($"Failed to initialize SDL3_mixer: {error}");
         }
 
-        _mixer = SDL3.Mixer.CreateMixerDevice(SDL3.SDL.AudioDeviceDefaultPlayback, IntPtr.Zero);
-        if (_mixer == IntPtr.Zero)
+        _mixer = SDL3.Mixer.CreateMixerDevice(SDL3.SDL.AudioDeviceDefaultPlayback, nint.Zero);
+        if (_mixer == nint.Zero)
         {
             var error = SDL3.SDL.GetError();
             _logger.LogError("Failed to create mixer device: {Error}", error);
@@ -226,48 +102,31 @@ internal class AudioService : IAudioService
         }
     }
 
-    /// <summary>
-    /// Asynchronously loads a sound effect from the specified file path.
-    /// </summary>
-    /// <param name="path">The file path to the sound effect.</param>
-    /// <param name="cancellationToken">Token to cancel the loading operation.</param>
-    /// <returns>A task that represents the asynchronous load operation. The task result contains the loaded sound effect.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="path"/> does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when SDL fails to load the audio file.</exception>
+    /// <inheritdoc/>
     public async Task<ISoundEffect> LoadSoundAsync(string path, CancellationToken cancellationToken = default)
     {
         return await Task.Run(() => LoadSound(path), cancellationToken);
     }
 
-    /// <summary>
-    /// Synchronously loads a sound effect from the specified file path.
-    /// </summary>
-    /// <param name="path">The file path to the sound effect.</param>
-    /// <returns>The loaded sound effect.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="path"/> does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when SDL fails to load the audio file.</exception>
-    private SoundEffect LoadSound(string path)
+    private SDL3SoundEffect LoadSound(string path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Path cannot be null or empty", nameof(path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))
             throw new FileNotFoundException($"Sound file not found: {path}");
 
-        _logger.LogInformation("Loading sound: {Path}", path);
+        _logger.LogDebug("Loading sound: {Path}", path);
 
         var audio = SDL3.Mixer.LoadAudio(_mixer, path, true);
 
-        if (audio == IntPtr.Zero)
+        if (audio == nint.Zero)
         {
             var error = SDL3.SDL.GetError();
             _logger.LogError("Failed to load sound {Path}: {Error}", path, error);
             throw new InvalidOperationException($"Failed to load sound: {error}");
         }
 
-        var sound = new SoundEffect(path, audio, _loggerFactory.CreateLogger<SoundEffect>());
+        var sound = new SDL3SoundEffect(path, audio, _loggerFactory.CreateLogger<SDL3SoundEffect>());
         lock (_assetLock)
         {
             _loadedSounds.Add(sound);
@@ -277,42 +136,17 @@ internal class AudioService : IAudioService
         return sound;
     }
 
-    /// <summary>
-    /// Plays a sound effect with optional volume, looping, and stereo panning.
-    /// </summary>
-    /// <param name="sound">The sound effect to play.</param>
-    /// <param name="volume">Optional volume override (0.0 to 10.0). If null, uses default volume.</param>
-    /// <param name="loops">Number of times to loop. 0 for no loop, -1 for infinite loop.</param>
-    /// <param name="pan">Stereo panning (-1.0 for full left, 0.0 for center, 1.0 for full right).</param>
-    /// <remarks>
-    /// This method calls <see cref="PlaySoundWithTrack"/> internally but does not return the track handle.
-    /// </remarks>
+    /// <inheritdoc/>
     public void PlaySound(ISoundEffect sound, float? volume = null, int loops = 0, float pan = 0f)
     {
         PlaySoundWithTrack(sound, volume, loops, pan);
     }
 
-    /// <summary>
-    /// Plays a sound effect with optional volume, looping, and stereo panning, returning the track handle.
-    /// </summary>
-    /// <param name="sound">The sound effect to play.</param>
-    /// <param name="volume">Optional volume override (0.0 to 10.0). If null, uses default volume.</param>
-    /// <param name="loops">Number of times to loop. 0 for no loop, -1 for infinite loop.</param>
-    /// <param name="pan">Stereo panning (-1.0 for full left, 0.0 for center, 1.0 for full right).</param>
-    /// <returns>
-    /// Handle to the created audio track, or <see cref="nint.Zero"/> if playback failed.
-    /// This handle can be used to stop or update the track's spatial audio.
-    /// </returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="sound"/> is not an SDL3SoundEffect.</exception>
-    /// <remarks>
-    /// The final volume is calculated as: (volume ?? 1.0) * SoundVolume.
-    /// The pan value is automatically clamped to the range [-1.0, 1.0].
-    /// A callback is registered to handle track completion events.
-    /// </remarks>
+    /// <inheritdoc/>
     public nint PlaySoundWithTrack(ISoundEffect sound, float? volume = null, int loops = 0, float pan = 0f)
     {
-        if (sound is not SoundEffect sdlSound)
-            throw new ArgumentException("Sound must be SDL3SoundEffect", nameof(sound));
+        if (sound is not SDL3SoundEffect sdlSound)
+            throw new ArgumentException("Sound must be an SDL3SoundEffect", nameof(sound));
 
         if (!sdlSound.IsLoaded)
         {
@@ -324,7 +158,7 @@ internal class AudioService : IAudioService
         pan = Math.Clamp(pan, -1.0f, 1.0f);
 
         var track = SDL3.Mixer.CreateTrack(_mixer);
-        if (track == IntPtr.Zero)
+        if (track == nint.Zero)
         {
             _logger.LogWarning("Failed to create track for sound {Name}", sound.Name);
             return nint.Zero;
@@ -390,26 +224,18 @@ internal class AudioService : IAudioService
         return track;
     }
 
-    /// <summary>
-    /// Native callback invoked when an audio track stops playing.
-    /// </summary>
-    /// <param name="track">Handle to the track that stopped.</param>
-    /// <remarks>
-    /// This method is called from the SDL audio thread. It cleans up callback data
-    /// and raises the <see cref="OnTrackStopped"/> event.
-    /// </remarks>
     private void OnTrackStoppedNative(nint track)
     {
         bool removed;
         lock (_tracksLock)
         {
-            removed = _tracks.Remove(track);  // ← was missing; prevented stale handle cleanup
+            removed = _tracks.Remove(track);
             _trackCallbacks.Remove(track);
 
             if (removed && track == _currentMusicTrack)
             {
-                _currentMusicTrack = IntPtr.Zero;
-                IsMusicPlaying = false;   // ← was never reset on natural completion
+                _currentMusicTrack = nint.Zero;
+                IsMusicPlaying = false;
                 IsMusicPaused = false;
             }
         }
@@ -423,15 +249,7 @@ internal class AudioService : IAudioService
         }
     }
 
-    /// <summary>
-    /// Stops and destroys the specified audio track.
-    /// </summary>
-    /// <param name="track">Handle to the track to stop.</param>
-    /// <remarks>
-    /// This method immediately stops playback, destroys the track, removes it from tracking,
-    /// cleans up callbacks, and raises the <see cref="OnTrackStopped"/> event.
-    /// If the track is not found in the active tracks list, no action is taken.
-    /// </remarks>
+    /// <inheritdoc/>
     public void StopTrack(nint track)
     {
         bool removed;
@@ -442,7 +260,7 @@ internal class AudioService : IAudioService
 
             if (removed && track == _currentMusicTrack)
             {
-                _currentMusicTrack = IntPtr.Zero;
+                _currentMusicTrack = nint.Zero;
                 IsMusicPlaying = false;
                 IsMusicPaused = false;
             }
@@ -456,16 +274,7 @@ internal class AudioService : IAudioService
         }
     }
 
-    /// <summary>
-    /// Updates the volume and stereo panning for an active audio track.
-    /// </summary>
-    /// <param name="track">Handle to the track to update.</param>
-    /// <param name="volume">New volume level (0.0 to 10.0).</param>
-    /// <param name="pan">New stereo panning (-1.0 for full left, 0.0 for center, 1.0 for full right).</param>
-    /// <remarks>
-    /// If the track is not found in the active tracks list, no action is taken.
-    /// Panning is only applied if the absolute value is greater than 0.001.
-    /// </remarks>
+    /// <inheritdoc/>
     public void UpdateTrackSpatialAudio(nint track, float volume, float pan)
     {
         lock (_tracksLock)
@@ -494,13 +303,7 @@ internal class AudioService : IAudioService
         }
     }
 
-    /// <summary>
-    /// Stops all currently playing sound effects, but not music.
-    /// </summary>
-    /// <remarks>
-    /// This method iterates through all active tracks and stops those that are not
-    /// the current music track. Each stopped track is destroyed and removed from tracking.
-    /// </remarks>
+    /// <inheritdoc/>
     public void StopAllSounds()
     {
         List<nint> toStop;
@@ -523,17 +326,10 @@ internal class AudioService : IAudioService
         _logger.LogDebug("Stopped all sound effects");
     }
 
-    /// <summary>
-    /// Unloads a sound effect, freeing its resources.
-    /// </summary>
-    /// <param name="sound">The sound effect to unload.</param>
-    /// <remarks>
-    /// If the sound is an SDL3SoundEffect, it is removed from the loaded sounds list
-    /// and disposed. No action is taken if the sound is not an SDL3SoundEffect.
-    /// </remarks>
+    /// <inheritdoc/>
     public void UnloadSound(ISoundEffect sound)
     {
-        if (sound is SoundEffect sdlSound)
+        if (sound is SDL3SoundEffect sdlSound)
         {
             lock (_assetLock)
             {
@@ -544,50 +340,30 @@ internal class AudioService : IAudioService
         }
     }
 
-    /// <summary>
-    /// Asynchronously loads music from the specified file path.
-    /// </summary>
-    /// <param name="path">The file path to the music file.</param>
-    /// <param name="cancellationToken">Token to cancel the loading operation.</param>
-    /// <returns>A task that represents the asynchronous load operation. The task result contains the loaded music.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="path"/> does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when SDL fails to load the audio file.</exception>
+    /// <inheritdoc/>
     public async Task<IMusic> LoadMusicAsync(string path, CancellationToken cancellationToken = default)
     {
         return await Task.Run(() => LoadMusic(path), cancellationToken);
     }
 
-    /// <summary>
-    /// Synchronously loads music from the specified file path.
-    /// </summary>
-    /// <param name="path">The file path to the music file.</param>
-    /// <returns>The loaded music.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the file at <paramref name="path"/> does not exist.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when SDL fails to load the audio file.</exception>
-    /// <remarks>
-    /// Music is loaded without buffering (streaming mode) to conserve memory for large files.
-    /// </remarks>
-    private Music LoadMusic(string path)
+    private SDL3Music LoadMusic(string path)
     {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Path cannot be null or empty", nameof(path));
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))
             throw new FileNotFoundException($"Music file not found: {path}");
 
-        _logger.LogInformation("Loading music: {Path}", path);
+        _logger.LogDebug("Loading music: {Path}", path);
 
         var audio = SDL3.Mixer.LoadAudio(_mixer, path, false);
-        if (audio == IntPtr.Zero)
+        if (audio == nint.Zero)
         {
             var error = SDL3.SDL.GetError();
             _logger.LogError("Failed to load music {Path}: {Error}", path, error);
             throw new InvalidOperationException($"Failed to load music: {error}");
         }
 
-        var musicObj = new Music(path, audio, _loggerFactory.CreateLogger<Music>());
+        var musicObj = new SDL3Music(path, audio, _loggerFactory.CreateLogger<SDL3Music>());
         lock (_assetLock)
         {
             _loadedMusic.Add(musicObj);
@@ -597,22 +373,11 @@ internal class AudioService : IAudioService
         return musicObj;
     }
 
-    /// <summary>
-    /// Plays music with optional looping.
-    /// </summary>
-    /// <param name="music">The music to play.</param>
-    /// <param name="loops">Number of times to loop. 0 for no loop, -1 for infinite loop. Default is -1.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="music"/> is not an SDL3Music instance.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the music is not loaded.</exception>
-    /// <remarks>
-    /// If music is already playing, it will be stopped before starting the new track.
-    /// The music is played at the volume specified by <see cref="MusicVolume"/>.
-    /// Sets <see cref="IsMusicPlaying"/> to true and <see cref="IsMusicPaused"/> to false on success.
-    /// </remarks>
+    /// <inheritdoc/>
     public void PlayMusic(IMusic music, int loops = -1)
     {
-        if (music is not Music sdlMusic)
-            throw new ArgumentException("Music must be SDL3Music", nameof(music));
+        if (music is not SDL3Music sdlMusic)
+            throw new ArgumentException("Music must be an SDL3Music", nameof(music));
 
         if (!sdlMusic.IsLoaded)
             throw new InvalidOperationException("Music is not loaded");
@@ -622,24 +387,24 @@ internal class AudioService : IAudioService
         lock (_tracksLock)
         {
             oldTrack = _currentMusicTrack;
-            if (oldTrack != IntPtr.Zero)
+            if (oldTrack != nint.Zero)
             {
                 _tracks.Remove(oldTrack);
                 _trackCallbacks.Remove(oldTrack);
-                _currentMusicTrack = IntPtr.Zero;
+                _currentMusicTrack = nint.Zero;
                 IsMusicPlaying = false;
                 IsMusicPaused = false;
             }
         }
 
-        if (oldTrack != IntPtr.Zero)
+        if (oldTrack != nint.Zero)
         {
             SDL3.Mixer.StopTrack(oldTrack, 0);
             SDL3.Mixer.DestroyTrack(oldTrack);
         }
 
         var newTrack = SDL3.Mixer.CreateTrack(_mixer);
-        if (newTrack == IntPtr.Zero)
+        if (newTrack == nint.Zero)
         {
             _logger.LogWarning("Failed to create track for music {Name}", music.Name);
             return;
@@ -654,7 +419,6 @@ internal class AudioService : IAudioService
             return;
         }
 
-        // Register a stopped callback so IsMusicPlaying resets when the track ends naturally.
         var callback = new TrackStoppedCallback((userdata) => OnTrackStoppedNative(userdata));
         var callbackPtr = Marshal.GetFunctionPointerForDelegate(callback);
 
@@ -678,7 +442,7 @@ internal class AudioService : IAudioService
             {
                 _tracks.Remove(newTrack);
                 _trackCallbacks.Remove(newTrack);
-                _currentMusicTrack = IntPtr.Zero;
+                _currentMusicTrack = nint.Zero;
             }
             SDL3.Mixer.DestroyTrack(newTrack);
             SDL3.SDL.DestroyProperties(props);
@@ -700,80 +464,60 @@ internal class AudioService : IAudioService
         _logger.LogInformation("Playing music: {Name}", music.Name);
     }
 
-    /// <summary>
-    /// Pauses the currently playing music.
-    /// </summary>
-    /// <remarks>
-    /// If no music is currently playing, this method has no effect.
-    /// Sets <see cref="IsMusicPaused"/> to true.
-    /// Use <see cref="ResumeMusic"/> to continue playback.
-    /// </remarks>
+    /// <inheritdoc/>
     public void PauseMusic()
     {
         nint track;
         lock (_tracksLock)
         {
             track = _currentMusicTrack;
-            if (track != IntPtr.Zero)
+            if (track != nint.Zero)
                 IsMusicPaused = true;
         }
 
-        if (track != IntPtr.Zero)
+        if (track != nint.Zero)
         {
             SDL3.Mixer.PauseTrack(track);
             _logger.LogDebug("Music paused");
         }
     }
 
-    /// <summary>
-    /// Resumes paused music playback.
-    /// </summary>
-    /// <remarks>
-    /// If no music is currently paused, this method has no effect.
-    /// Sets <see cref="IsMusicPaused"/> to false.
-    /// </remarks>
+    /// <inheritdoc/>
     public void ResumeMusic()
     {
         nint track;
         lock (_tracksLock)
         {
             track = _currentMusicTrack;
-            if (track != IntPtr.Zero)
+            if (track != nint.Zero)
                 IsMusicPaused = false;
         }
 
-        if (track != IntPtr.Zero)
+        if (track != nint.Zero)
         {
             SDL3.Mixer.ResumeTrack(track);
             _logger.LogDebug("Music resumed");
         }
     }
 
-    /// <summary>
-    /// Stops the currently playing music.
-    /// </summary>
-    /// <remarks>
-    /// If no music is currently playing, this method has no effect.
-    /// The music track is stopped, destroyed, and removed from tracking.
-    /// Sets <see cref="IsMusicPlaying"/> to false and <see cref="IsMusicPaused"/> to false.
-    /// </remarks>
+    /// <inheritdoc/>
     public void StopMusic()
     {
         nint track;
         lock (_tracksLock)
         {
             track = _currentMusicTrack;
-            if (track != IntPtr.Zero)
+            if (track != nint.Zero)
             {
                 _tracks.Remove(track);
                 _trackCallbacks.Remove(track);
-                _currentMusicTrack = IntPtr.Zero;
+                _currentMusicTrack = nint.Zero;
                 IsMusicPlaying = false;
                 IsMusicPaused = false;
             }
         }
 
-        if (track != IntPtr.Zero)
+        if (track != nint.Zero)
         {
             SDL3.Mixer.StopTrack(track, 0);
             SDL3.Mixer.DestroyTrack(track);
@@ -781,17 +525,10 @@ internal class AudioService : IAudioService
         }
     }
 
-    /// <summary>
-    /// Unloads music, freeing its resources.
-    /// </summary>
-    /// <param name="music">The music to unload.</param>
-    /// <remarks>
-    /// If the music is an SDL3Music instance, it is removed from the loaded music list
-    /// and disposed. No action is taken if the music is not an SDL3Music instance.
-    /// </remarks>
+    /// <inheritdoc/>
     public void UnloadMusic(IMusic music)
     {
-        if (music is Music sdlMusic)
+        if (music is SDL3Music sdlMusic)
         {
             lock (_assetLock)
             {
@@ -802,21 +539,6 @@ internal class AudioService : IAudioService
         }
     }
 
-    /// <summary>
-    /// Releases all resources used by the <see cref="SDL3AudioService"/>.
-    /// </summary>
-    /// <remarks>
-    /// This method performs the following cleanup:
-    /// <list type="number">
-    /// <item>Stops all music and sound effects</item>
-    /// <item>Destroys all active audio tracks</item>
-    /// <item>Clears all callback registrations</item>
-    /// <item>Disposes all loaded sounds and music</item>
-    /// <item>Destroys the mixer device</item>
-    /// <item>Quits SDL3_mixer</item>
-    /// </list>
-    /// This method is idempotent and can be called multiple times safely.
-    /// </remarks>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
@@ -837,8 +559,8 @@ internal class AudioService : IAudioService
         foreach (var track in remainingTracks)
             SDL3.Mixer.DestroyTrack(track);
 
-        List<SoundEffect> sounds;
-        List<Music> music;
+        List<SDL3SoundEffect> sounds;
+        List<SDL3Music> music;
         lock (_assetLock)
         {
             sounds = [.._loadedSounds];
@@ -855,10 +577,10 @@ internal class AudioService : IAudioService
 
         try
         {
-            if (_mixer != IntPtr.Zero)
+            if (_mixer != nint.Zero)
             {
                 SDL3.Mixer.DestroyMixer(_mixer);
-                _mixer = IntPtr.Zero;
+                _mixer = nint.Zero;
             }
 
             SDL3.Mixer.Quit();
@@ -870,20 +592,4 @@ internal class AudioService : IAudioService
             _logger.LogDebug(ex, "Exception during SDL3_mixer teardown; SDL may have already exited");
         }
     }
-
-    /// <summary>
-    /// Protects <see cref="_tracks"/>, <see cref="_trackCallbacks"/>,
-    /// <see cref="_currentMusicTrack"/>, <see cref="IsMusicPlaying"/>, and
-    /// <see cref="IsMusicPaused"/>. <see cref="OnTrackStoppedNative"/> fires on the SDL audio
-    /// thread; all other callers run on the game thread.
-    /// </summary>
-    private readonly Lock _tracksLock = new();
-
-    /// <summary>
-    /// Protects <see cref="_loadedSounds"/> and <see cref="_loadedMusic"/>.
-    /// <see cref="LoadSoundAsync"/> and <see cref="LoadMusicAsync"/> write from the thread pool;
-    /// Unload and Dispose access the same lists from the game thread.
-    /// Kept separate from <see cref="_tracksLock"/> to avoid stalling callbacks during asset I/O.
-    /// </summary>
-    private readonly Lock _assetLock = new();
 }

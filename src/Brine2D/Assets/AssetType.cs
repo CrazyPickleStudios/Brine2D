@@ -2,10 +2,9 @@
 
 public enum AssetType
 {
+    None = 0,
     Texture,
-    Audio,
+    Sound,
     Music,
-    Font,
-    Shader,
-    Data
+    Font
 }

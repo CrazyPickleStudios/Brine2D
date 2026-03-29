@@ -260,7 +260,7 @@ public sealed class BBCodeParser : IMarkupParser
     private record struct StyleState
     {
         public Color Color;
-        public Font? Font;
+            public IFont? Font;
         public float FontSize;
         public TextStyle Style;
     }

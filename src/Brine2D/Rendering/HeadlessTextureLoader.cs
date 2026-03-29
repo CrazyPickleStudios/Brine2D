@@ -18,15 +18,15 @@ internal sealed class HeadlessTextureLoader : ITextureLoader
     public ITexture CreateTexture(int width, int height, TextureScaleMode scaleMode = TextureScaleMode.Linear)
         => new HeadlessTexture($"created:{width}x{height}", scaleMode);
 
-    public void UnloadTexture(ITexture texture) { }
+    public void UnloadTexture(ITexture texture) => texture?.Dispose();
 
     public void Dispose() { }
 
-    private sealed class HeadlessTexture(string source, TextureScaleMode scaleMode) : ITexture
+    private sealed class HeadlessTexture(string name, TextureScaleMode scaleMode) : ITexture
     {
         public int Width => 0;
         public int Height => 0;
-        public string Source { get; } = source;
+        public string Name { get; } = name;
         public bool IsLoaded => true;
         public TextureScaleMode ScaleMode { get; } = scaleMode;
         public void Dispose() { }

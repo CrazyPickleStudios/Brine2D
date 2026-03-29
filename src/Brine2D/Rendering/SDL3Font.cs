@@ -1,27 +1,27 @@
-using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
+using System.Threading;
 
 namespace Brine2D.Rendering;
 
 /// <summary>
 /// SDL_ttf implementation of a font.
 /// </summary>
-public class Font
+public class SDL3Font : IFont
 {
-    private readonly ILogger<Font> _logger;
+    private readonly ILogger<SDL3Font> _logger;
     private nint _fontHandle;
-    private bool _disposed;
+    private int _disposed;
 
     public string Name { get; }
     public int Size { get; }
-    public bool IsLoaded => _fontHandle != nint.Zero;
+    public bool IsLoaded => _fontHandle != nint.Zero && _disposed == 0;
 
     /// <summary>
     /// Internal SDL font handle.
     /// </summary>
     internal nint Handle => _fontHandle;
 
-    public Font(string name, int size, nint fontHandle, ILogger<Font> logger)
+    internal SDL3Font(string name, int size, nint fontHandle, ILogger<SDL3Font> logger)
     {
         Name = name ?? throw new ArgumentNullException(nameof(name));
         Size = size;
@@ -31,7 +31,7 @@ public class Font
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
         if (_fontHandle != nint.Zero)
         {
@@ -39,7 +39,5 @@ public class Font
             _fontHandle = nint.Zero;
             _logger.LogDebug("Font unloaded: {Name} ({Size}pt)", Name, Size);
         }
-
-        _disposed = true;
     }
 }

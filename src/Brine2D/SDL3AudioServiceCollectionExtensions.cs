@@ -17,6 +17,9 @@ public static class SDL3AudioServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton<IAudioService, AudioService>();
+        services.TryAddSingleton<ISoundLoader>(sp => sp.GetRequiredService<IAudioService>());
+        services.TryAddSingleton<IMusicLoader>(sp => sp.GetRequiredService<IAudioService>());
+        services.TryAddSingleton<IAudioPlayer>(sp => sp.GetRequiredService<IAudioService>());
 
         return services;
     }

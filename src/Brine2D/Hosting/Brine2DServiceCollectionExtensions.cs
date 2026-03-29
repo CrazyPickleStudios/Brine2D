@@ -30,6 +30,7 @@ public static class Brine2DServiceCollectionExtensions
 
         // TryAdd: no-ops when GameApplicationBuilder already registered these as concrete instances.
         services.TryAddSingleton<Brine2DOptions>();
+        services.TryAddSingleton<AssetOptions>(sp => sp.GetRequiredService<Brine2DOptions>().Assets);
         services.TryAddSingleton<WindowOptions>(sp => sp.GetRequiredService<Brine2DOptions>().Window);
         services.TryAddSingleton<RenderingOptions>(sp => sp.GetRequiredService<Brine2DOptions>().Rendering);
         services.TryAddSingleton<ECSOptions>(sp => sp.GetRequiredService<Brine2DOptions>().ECS);
@@ -50,7 +51,13 @@ public static class Brine2DServiceCollectionExtensions
         services.TryAddSingleton<IEventBus>(sp => sp.GetRequiredService<EventBus>());
 
         services.TryAddSingleton<IMainThreadDispatcher, MainThreadDispatcher>();
-        services.TryAddSingleton<IAssetLoader, AssetLoader>();
+
+        // AssetCache is a singleton (owns the cache and native resources).
+        // Each scene's DI scope gets an AssetLoader that tracks refs and
+        // releases them automatically when the scope is disposed.
+        services.TryAddSingleton<AssetCache>();
+        services.TryAddScoped<IAssetLoader, AssetLoader>();
+
         services.AddObjectPooling();
 
         services.TryAddEnumerable(

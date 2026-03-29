@@ -10,7 +10,7 @@ public readonly struct TextRun
     public TextRun() { }
     public string Text { get; init; } = string.Empty;
     public Color Color { get; init; } = Color.White;
-    public Font? Font { get; init; }
+    public IFont? Font { get; init; }
     public float FontSize { get; init; } = 16f;
     public TextStyle Style { get; init; } = TextStyle.Normal;
     

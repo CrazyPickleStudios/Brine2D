@@ -28,8 +28,7 @@ public class UILabel : IUIComponent
     /// <summary>
     /// Font to use for rendering. If null, uses renderer's default font.
     /// </summary>
-    public Font? Font { get; set; }
-
+    public IFont? Font { get; set; }
     public UILabel(string text, Vector2 position)
     {
         Text = text;

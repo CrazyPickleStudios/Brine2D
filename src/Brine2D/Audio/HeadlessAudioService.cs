@@ -82,32 +82,18 @@ internal sealed class HeadlessAudioService : IAudioService
 
     public void Dispose()
         => _logger?.LogDebug("Headless audio service disposed");
-}
 
-/// <summary>
-/// No-op sound effect for headless mode.
-/// </summary>
-internal sealed class HeadlessSoundEffect : ISoundEffect
-{
-    public nint Handle => nint.Zero;
-    public string Name { get; }
-    public bool IsLoaded => true;
+    private sealed class HeadlessSoundEffect(string name) : ISoundEffect
+    {
+        public string Name { get; } = name;
+        public bool IsLoaded => true;
+        public void Dispose() { }
+    }
 
-    public HeadlessSoundEffect(string name) => Name = name;
-
-    public void Dispose() { }
-}
-
-/// <summary>
-/// No-op music for headless mode.
-/// </summary>
-internal sealed class HeadlessMusic : IMusic
-{
-    public nint Handle => nint.Zero;
-    public string Name { get; }
-    public bool IsLoaded => true;
-
-    public HeadlessMusic(string name) => Name = name;
-
-    public void Dispose() { }
+    private sealed class HeadlessMusic(string name) : IMusic
+    {
+        public string Name { get; } = name;
+        public bool IsLoaded => true;
+        public void Dispose() { }
+    }
 }

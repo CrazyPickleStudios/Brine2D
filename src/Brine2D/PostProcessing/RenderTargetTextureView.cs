@@ -8,7 +8,7 @@ internal sealed class RenderTargetTextureView : ITexture
 {
     private readonly nint _handle;
     
-    public string Source { get; }
+    public string Name { get; }
     public int Width { get; }
     public int Height { get; }
     public bool IsLoaded => true;
@@ -16,9 +16,9 @@ internal sealed class RenderTargetTextureView : ITexture
     
     internal nint Handle => _handle;
     
-    internal RenderTargetTextureView(string source, nint handle, int width, int height, TextureScaleMode scaleMode)
+    internal RenderTargetTextureView(string name, nint handle, int width, int height, TextureScaleMode scaleMode)
     {
-        Source = source;
+        Name = name;
         _handle = handle;
         Width = width;
         Height = height;

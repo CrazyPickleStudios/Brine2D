@@ -26,7 +26,7 @@ public class FontAtlas : IDisposable
     /// <summary>
     /// Generates a font atlas for the given font with ASCII printable characters (32-126).
     /// </summary>
-    public bool Generate(Font font, ITextureContext textureContext, TextureScaleMode scaleMode = TextureScaleMode.Nearest)
+    public bool Generate(SDL3Font font, ITextureContext textureContext, TextureScaleMode scaleMode = TextureScaleMode.Nearest)
     {
         if (font == null || !font.IsLoaded)
         {

@@ -37,6 +37,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     private nint _window;
     private nint _device;
+    private GpuDeviceHandle? _gpuDeviceHandle;
     private nint _sampler;
     private nint _samplerNearest;
     private nint _whiteTexture;
@@ -333,6 +334,8 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
             _logger.LogError("Failed to create GPU device: {Error}", error);
             throw new InvalidOperationException($"Failed to create GPU device: {error}");
         }
+
+        _gpuDeviceHandle = new GpuDeviceHandle(_device);
 
         if (!SDL3.SDL.ClaimWindowForGPUDevice(_device, _window))
         {
@@ -1335,7 +1338,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
         }
     }
 
-    public void SetDefaultFont(Font? font)
+    public void SetDefaultFont(IFont? font)
     {
         _textRenderer.SetDefaultFont(font);
     }
@@ -1370,7 +1373,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         return new SDL3Texture(
             "surface_texture",
-            _device,
+            _gpuDeviceHandle!,
             gpuTexture,
             width,
             height,
@@ -1480,7 +1483,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         return new SDL3Texture(
             $"blank_{width}x{height}",
-            _device,
+            _gpuDeviceHandle!,
             gpuTexture,
             width,
             height,
@@ -1490,6 +1493,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
     public void ReleaseTexture(ITexture texture)
     {
+        if (_disposed == 1 || _device == nint.Zero) return;
         texture.Dispose();
     }
 
@@ -1565,6 +1569,7 @@ public class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITextureContext
 
         if (_device != nint.Zero)
         {
+            _gpuDeviceHandle?.Invalidate();
             SDL3.SDL.ReleaseWindowFromGPUDevice(_device, _window);
             SDL3.SDL.DestroyGPUDevice(_device);
             _device = nint.Zero;

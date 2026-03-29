@@ -320,8 +320,12 @@ public sealed class GameApplicationBuilder
         {
             Services.TryAddSingleton<IRenderer, HeadlessRenderer>();
             Services.TryAddSingleton<ITextureLoader, HeadlessTextureLoader>();
+            Services.TryAddSingleton<IFontLoader, HeadlessFontLoader>();
             Services.TryAddSingleton<IInputContext, HeadlessInputContext>();
             Services.TryAddSingleton<IAudioService, HeadlessAudioService>();
+            Services.TryAddSingleton<ISoundLoader>(sp => sp.GetRequiredService<IAudioService>());
+            Services.TryAddSingleton<IMusicLoader>(sp => sp.GetRequiredService<IAudioService>());
+            Services.TryAddSingleton<IAudioPlayer>(sp => sp.GetRequiredService<IAudioService>());
             Services.TryAddSingleton<IEventPump, HeadlessEventPump>();
         }
     }
@@ -509,7 +513,9 @@ public sealed class GameApplicationBuilder
         if (!HasService<ITextureLoader>()) errors.Add("ITextureLoader is not registered.");
         if (!HasService<IInputContext>())  errors.Add("IInputContext is not registered.");
         if (!HasService<IEventPump>())     errors.Add("IEventPump is not registered.");
-        if (!HasService<IAudioService>())  errors.Add("IAudioService is not registered.");
+        if (!HasService<ISoundLoader>())   errors.Add("ISoundLoader is not registered.");
+        if (!HasService<IMusicLoader>())   errors.Add("IMusicLoader is not registered.");
+        if (!HasService<IAudioPlayer>())   errors.Add("IAudioPlayer is not registered.");
 
         // Default scene system services
         if (!HasService<ICameraManager>()) errors.Add("ICameraManager is not registered.");

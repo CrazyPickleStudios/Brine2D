@@ -15,7 +15,7 @@ public abstract class SceneBase
     private ILogger? _logger;
     private IRenderer? _renderer;
     private IInputContext? _input;
-    private IAudioService? _audio;
+    private IAudioPlayer? _audio;
     private IGameContext? _game;
     private bool _isUnloading;
 
@@ -67,10 +67,10 @@ public abstract class SceneBase
     }
 
     /// <summary>
-    /// Audio service for this scene. Available from OnLoadAsync onwards.
+    /// Audio player for this scene. Available from OnLoadAsync onwards.
     /// Not available during <see cref="OnUnloadAsync"/> — use <see cref="OnExit"/> for audio cleanup.
     /// </summary>
-    protected internal IAudioService Audio
+    protected internal IAudioPlayer Audio
     {
         get
         {

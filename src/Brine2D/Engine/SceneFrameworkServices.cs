@@ -14,12 +14,12 @@ internal sealed class SceneFrameworkServices(
     ILoggerFactory loggerFactory,
     IRenderer renderer,
     IInputContext inputContext,
-    IAudioService audioService,
+    IAudioPlayer audioPlayer,
     IGameContext gameContext)
 {
     public ILoggerFactory LoggerFactory => loggerFactory;
     public IRenderer Renderer => renderer;
     public IInputContext InputContext => inputContext;
-    public IAudioService AudioService => audioService;
+    public IAudioPlayer AudioPlayer => audioPlayer;
     public IGameContext GameContext => gameContext;
 }

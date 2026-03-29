@@ -1,5 +1,6 @@
 using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
+using System.Threading;
 
 namespace Brine2D.Rendering;
 
@@ -9,29 +10,29 @@ namespace Brine2D.Rendering;
 public class SDL3Texture : ITexture
 {
     private readonly ILogger<SDL3Texture> _logger;
-    private readonly nint _device;
+    private readonly GpuDeviceHandle _deviceHandle;
     private nint _textureHandle;
-    private bool _disposed;
+    private int _disposed;
 
-    public string Source { get; }
+    public string Name { get; }
     public int Width { get; }
     public int Height { get; }
-    public bool IsLoaded => _textureHandle != nint.Zero && !_disposed;
+    public bool IsLoaded => _textureHandle != nint.Zero && _disposed == 0;
     public TextureScaleMode ScaleMode { get; set; }
 
     internal nint Handle => _textureHandle;
 
-    public SDL3Texture(
-        string source,
-        nint device,
+    internal SDL3Texture(
+        string name,
+        GpuDeviceHandle deviceHandle,
         nint textureHandle,
         int width,
         int height,
         TextureScaleMode scaleMode,
         ILogger<SDL3Texture> logger)
     {
-        Source = source ?? throw new ArgumentNullException(nameof(source));
-        _device = device;
+        Name = name ?? throw new ArgumentNullException(nameof(name));
+        _deviceHandle = deviceHandle ?? throw new ArgumentNullException(nameof(deviceHandle));
         _textureHandle = textureHandle;
         Width = width;
         Height = height;
@@ -41,15 +42,15 @@ public class SDL3Texture : ITexture
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
-        if (_textureHandle != nint.Zero && _device != nint.Zero)
+        var device = _deviceHandle.Handle;
+        if (_textureHandle != nint.Zero && device != nint.Zero)
         {
-            SDL3.SDL.ReleaseGPUTexture(_device, _textureHandle);
-            _logger.LogDebug("Released GPU texture: {Source}", Source);
-            _textureHandle = nint.Zero;
+            SDL3.SDL.ReleaseGPUTexture(device, _textureHandle);
+            _logger.LogDebug("Released GPU texture: {Name}", Name);
         }
 
-        _disposed = true;
+        _textureHandle = nint.Zero;
     }
 }

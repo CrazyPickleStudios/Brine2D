@@ -15,14 +15,14 @@ namespace Brine2D.Systems.Audio;
 /// </summary>
 public class AudioSystem : UpdateSystemBase
 {
-    private readonly IAudioService _audio;
+    private readonly IAudioPlayer _audio;
     private readonly ConcurrentQueue<AudioEvent> _audioEvents = new();
     private readonly Dictionary<Entity, nint> _entityTracks = new();
     private readonly Dictionary<Entity, bool> _previousEnabledState = new();
     private CachedEntityQuery<AudioSourceComponent>? _audioSourceQuery;
     private CachedEntityQuery<AudioListenerComponent>? _audioListenerQuery;
 
-    public AudioSystem(IAudioService audio)
+    public AudioSystem(IAudioPlayer audio)
     {
         _audio = audio;
         _audio.OnTrackStopped += OnTrackStopped;
