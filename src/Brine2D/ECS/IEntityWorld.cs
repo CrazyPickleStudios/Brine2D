@@ -177,7 +177,7 @@ public interface IEntityWorld : IDisposable
     void Update(GameTime gameTime);
 
     /// <summary>
-    /// Runs one fixed timestep for all fixed update systems and entity behaviors.
+    /// Runs one fixed timestep for all fixed update systems and behaviors.
     /// Called by the game loop's accumulator; not intended for direct use.
     /// </summary>
     void FixedUpdate(GameTime fixedTime);

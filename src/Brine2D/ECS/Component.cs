@@ -6,7 +6,7 @@ namespace Brine2D.ECS;
 
 /// <summary>
 /// Base class for all components - pure data containers.
-/// For logic, use EntityBehavior or Systems.
+/// For logic, use Behavior or Systems.
 /// </summary>
 public abstract class Component
 {

@@ -9,7 +9,7 @@ namespace Brine2D.ECS.Systems;
 /// <remarks>
 /// Systems are scene-scoped and automatically cleaned up when the scene unloads.
 /// Use systems for batch processing of many entities (physics, collision, etc.).
-/// For entity-specific logic, use EntityBehavior instead.
+/// For entity-specific logic, use Behavior instead.
 /// </remarks>
 public interface IUpdateSystem : ISystem
 {

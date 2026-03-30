@@ -83,7 +83,7 @@ public abstract class CachedEntityQueryBuilderBase<TSelf>
     /// Requires entities to have the specified behavior.
     /// The query is automatically invalidated when behaviors are added or removed.
     /// </summary>
-    public TSelf WithBehavior<TBehavior>() where TBehavior : EntityBehavior
+    public TSelf WithBehavior<TBehavior>() where TBehavior : Behavior
     {
         _withBehaviorTypes.Add(typeof(TBehavior));
         return (TSelf)this;
@@ -93,7 +93,7 @@ public abstract class CachedEntityQueryBuilderBase<TSelf>
     /// Excludes entities that have the specified behavior.
     /// The query is automatically invalidated when behaviors are added or removed.
     /// </summary>
-    public TSelf WithoutBehavior<TBehavior>() where TBehavior : EntityBehavior
+    public TSelf WithoutBehavior<TBehavior>() where TBehavior : Behavior
     {
         _withoutBehaviorTypes.Add(typeof(TBehavior));
         return (TSelf)this;

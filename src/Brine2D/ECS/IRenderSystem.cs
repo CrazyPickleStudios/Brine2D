@@ -9,7 +9,7 @@ namespace Brine2D.ECS.Systems;
 /// <remarks>
 /// Systems are scene-scoped and automatically cleaned up when the scene unloads.
 /// Use render systems for batch rendering of many entities (sprite batching, particle rendering, etc.).
-/// For entity-specific rendering, use EntityBehavior instead.
+/// For entity-specific rendering, use Behavior instead.
 /// </remarks>
 public interface IRenderSystem : ISystem
 {

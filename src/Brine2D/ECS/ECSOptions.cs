@@ -47,7 +47,7 @@ public class ECSOptions
 
     /// <summary>
     /// Fixed timestep in milliseconds for <see cref="Systems.IFixedUpdateSystem"/> and
-    /// <see cref="EntityBehavior.FixedUpdate"/>. Default (~16.667ms) gives 60 steps/s.
+    /// <see cref="Behavior.FixedUpdate"/>. Default (~16.667ms) gives 60 steps/s.
     /// </summary>
     [Range(1.0, 200.0, ErrorMessage = "FixedTimeStepMs must be between 1 and 200")]
     public double FixedTimeStepMs { get; set; } = 1000.0 / 60.0;

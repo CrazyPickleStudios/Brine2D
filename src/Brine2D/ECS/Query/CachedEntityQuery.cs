@@ -94,7 +94,7 @@ public abstract class CachedEntityQueryBase : ICachedQuery, IDisposable
     public bool HasTagFilters => _tags.Count > 0 || _withoutTags.Count > 0 || _withAnyTags.Count > 0;
 
     /// <summary>
-    /// Whether this query filters by entity behaviors.
+    /// Whether this query filters by behaviors.
     /// Used by <see cref="EntityWorld"/> to target behavior-change invalidation.
     /// </summary>
     public bool HasBehaviorFilters => _withBehaviorTypes.Count > 0 || _withoutBehaviorTypes.Count > 0;

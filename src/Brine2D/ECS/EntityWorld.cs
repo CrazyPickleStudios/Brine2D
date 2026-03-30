@@ -16,7 +16,7 @@ namespace Brine2D.ECS;
 internal class EntityWorld : IEntityWorld, IDisposable
 {
     private readonly DeferredList<Entity> _entities;
-    private readonly DeferredList<EntityBehavior> _behaviors = new();
+    private readonly DeferredList<Behavior> _behaviors = new();
     private readonly DeferredList<IUpdateSystem> _updateSystems = new();
     private readonly DeferredList<IFixedUpdateSystem> _fixedUpdateSystems = new();
     private readonly DeferredList<IRenderSystem> _renderSystems = new();
@@ -43,9 +43,9 @@ internal class EntityWorld : IEntityWorld, IDisposable
     private bool _fixedUpdateSystemsSorted = false;
     private bool _renderSystemsSorted = false;
 
-    private readonly List<EntityBehavior> _behaviorsByUpdateOrder = new();
-    private readonly List<EntityBehavior> _behaviorsByFixedUpdateOrder = new();
-    private readonly List<EntityBehavior> _behaviorsByRenderOrder = new();
+    private readonly List<Behavior> _behaviorsByUpdateOrder = new();
+    private readonly List<Behavior> _behaviorsByFixedUpdateOrder = new();
+    private readonly List<Behavior> _behaviorsByRenderOrder = new();
     private bool _behaviorUpdateOrderDirty = true;
     private bool _behaviorFixedUpdateOrderDirty = true;
     private bool _behaviorRenderOrderDirty = true;
@@ -931,7 +931,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
             q.Invalidate();
     }
 
-    internal void NotifyBehaviorAdded(Entity entity, EntityBehavior behavior)
+    internal void NotifyBehaviorAdded(Entity entity, Behavior behavior)
     {
         _behaviors.Add(behavior);
         _behaviorUpdateOrderDirty = true;
@@ -940,7 +940,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
         InvalidateCachedQueriesForBehaviors();
     }
 
-    internal void NotifyBehaviorRemoved(Entity entity, EntityBehavior behavior)
+    internal void NotifyBehaviorRemoved(Entity entity, Behavior behavior)
     {
         _behaviors.Remove(behavior);
         _behaviorUpdateOrderDirty = true;
@@ -1083,7 +1083,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
         return count;
     }
 
-    internal T CreateBehavior<T>() where T : EntityBehavior
+    internal T CreateBehavior<T>() where T : Behavior
         => _activator.CreateInstance<T>();
 
     internal void RemoveEntityFromAllPools(long entityId)

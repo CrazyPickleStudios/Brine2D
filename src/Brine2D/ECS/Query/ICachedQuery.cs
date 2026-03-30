@@ -29,7 +29,7 @@ internal interface ICachedQuery
     bool HasTagFilters { get; }
 
     /// <summary>
-    /// Whether this query filters by entity behaviors.
+    /// Whether this query filters by behaviors.
     /// Used by <see cref="EntityWorld"/> to target behavior-change invalidation.
     /// </summary>
     bool HasBehaviorFilters { get; }

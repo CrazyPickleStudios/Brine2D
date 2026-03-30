@@ -276,7 +276,7 @@ public class HealthComponent : Component
 
 **Behavior** = entity-specific logic, full DI support
 ~~~csharp
-public class PlayerMovementBehavior : EntityBehavior
+public class PlayerMovementBehavior : Behavior
 {
     private readonly IInputContext _input;
     private TransformComponent _transform = null!;

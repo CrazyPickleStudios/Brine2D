@@ -248,7 +248,7 @@ public class EntityWorldFixedUpdateTests : TestBase
         public void FixedUpdate(IEntityWorld world, GameTime fixedTime) { }
     }
 
-    private class FixedUpdateTestBehavior : EntityBehavior
+    private class FixedUpdateTestBehavior : Behavior
     {
         public List<string>? Log { get; set; }
 
@@ -258,7 +258,7 @@ public class EntityWorldFixedUpdateTests : TestBase
         }
     }
 
-    private class EarlyBehavior : EntityBehavior
+    private class EarlyBehavior : Behavior
     {
         public List<string>? Log { get; set; }
         public override int FixedUpdateOrder => 0;
@@ -269,7 +269,7 @@ public class EntityWorldFixedUpdateTests : TestBase
         }
     }
 
-    private class LateBehavior : EntityBehavior
+    private class LateBehavior : Behavior
     {
         public List<string>? Log { get; set; }
         public override int FixedUpdateOrder => 10;

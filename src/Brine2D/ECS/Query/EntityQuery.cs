@@ -67,14 +67,14 @@ public class EntityQuery
     }
 
     /// <summary>Requires entities to have the specified behavior.</summary>
-    public EntityQuery WithBehavior<T>() where T : EntityBehavior
+    public EntityQuery WithBehavior<T>() where T : Behavior
     {
         _withBehaviors.Add(typeof(T));
         return this;
     }
 
     /// <summary>Requires entities to NOT have the specified behavior.</summary>
-    public EntityQuery WithoutBehavior<T>() where T : EntityBehavior
+    public EntityQuery WithoutBehavior<T>() where T : Behavior
     {
         _withoutBehaviors.Add(typeof(T));
         return this;

@@ -4,7 +4,7 @@ using Brine2D.Rendering;
 namespace Brine2D.ECS;
 
 /// <summary>
-/// Base class for entity behaviors — logic that operates on a single entity.
+/// Base class for behaviors — logic that operates on a single entity.
 /// Each entity gets its own behavior instance with constructor injection support.
 /// </summary>
 /// <remarks>
@@ -24,7 +24,7 @@ namespace Brine2D.ECS;
 /// logic into a custom <see cref="IRenderSystem"/> with the appropriate <c>RenderOrder</c>.
 /// </para>
 /// <code>
-/// public class PlayerMovementBehavior : EntityBehavior
+/// public class PlayerMovementBehavior : Behavior
 /// {
 ///     private readonly IInputContext _input;
 ///     private readonly IAudioService _audio;
@@ -45,7 +45,7 @@ namespace Brine2D.ECS;
 /// }
 /// </code>
 /// </remarks>
-public abstract class EntityBehavior
+public abstract class Behavior
 {
     /// <summary>The entity this behavior is attached to.</summary>
     public Entity Entity { get; internal set; } = null!;

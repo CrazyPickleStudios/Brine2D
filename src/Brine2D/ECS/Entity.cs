@@ -20,8 +20,8 @@ public class Entity
     private Entity? _parent;
     private readonly List<Entity> _children = new();
     private ReadOnlyCollection<Entity>? _readOnlyChildren;
-    private readonly List<EntityBehavior> _behaviors = new();
-    private ReadOnlyCollection<EntityBehavior>? _readOnlyBehaviors;
+    private readonly List<Behavior> _behaviors = new();
+    private ReadOnlyCollection<Behavior>? _readOnlyBehaviors;
 
     private EntityWorld? _world;
     
@@ -182,7 +182,7 @@ public class Entity
         var behaviorCount = _behaviors.Count;
         if (behaviorCount > 0)
         {
-            var behaviorSnapshot = ArrayPool<EntityBehavior>.Shared.Rent(behaviorCount);
+            var behaviorSnapshot = ArrayPool<Behavior>.Shared.Rent(behaviorCount);
             try
             {
                 _behaviors.CopyTo(behaviorSnapshot, 0);
@@ -194,7 +194,7 @@ public class Entity
             }
             finally
             {
-                ArrayPool<EntityBehavior>.Shared.Return(behaviorSnapshot, clearArray: true);
+                ArrayPool<Behavior>.Shared.Return(behaviorSnapshot, clearArray: true);
             }
             _behaviors.Clear();
         }
@@ -605,7 +605,7 @@ public class Entity
     ///       .AddBehavior&lt;PlayerShootingBehavior&gt;();
     /// </code>
     /// </example>
-    public Entity AddBehavior<T>() where T : EntityBehavior
+    public Entity AddBehavior<T>() where T : Behavior
     {
         if (_world == null)
             throw new InvalidOperationException("Cannot add behavior - entity is not in a world");
@@ -633,7 +633,7 @@ public class Entity
     /// <summary>
     /// Checks if this entity has a behavior of the specified type.
     /// </summary>
-    public bool HasBehavior<T>() where T : EntityBehavior
+    public bool HasBehavior<T>() where T : Behavior
     {
         foreach (var b in _behaviors)
             if (b is T) return true;
@@ -654,7 +654,7 @@ public class Entity
     /// <summary>
     /// Gets a behavior of the specified type attached to this entity.
     /// </summary>
-    public T? GetBehavior<T>() where T : EntityBehavior
+    public T? GetBehavior<T>() where T : Behavior
     {
         foreach (var b in _behaviors)
             if (b is T match) return match;
@@ -664,7 +664,7 @@ public class Entity
     /// <summary>
     /// Removes a behavior from this entity.
     /// </summary>
-    public bool RemoveBehavior<T>() where T : EntityBehavior
+    public bool RemoveBehavior<T>() where T : Behavior
     {
         var behavior = GetBehavior<T>();
         if (behavior == null)
@@ -681,7 +681,7 @@ public class Entity
     /// <summary>
     /// Gets all behaviors attached to this entity.
     /// </summary>
-    public IReadOnlyList<EntityBehavior> GetAllBehaviors() => _readOnlyBehaviors ??= _behaviors.AsReadOnly();
+    public IReadOnlyList<Behavior> GetAllBehaviors() => _readOnlyBehaviors ??= _behaviors.AsReadOnly();
 
     #endregion
 
