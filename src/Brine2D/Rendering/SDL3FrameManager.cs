@@ -5,9 +5,9 @@ namespace Brine2D.Rendering;
 /// <summary>
 /// Manages frame lifecycle including command buffers, swapchain acquisition, and presentation.
 /// </summary>
-internal sealed class SDL3FrameManager
+internal sealed class SDL3FrameManager : IDisposable
 {
-    private const int MaxInFlightFrames = 2;
+    internal const int MaxInFlightFrames = 2;
 
     private readonly ILogger<SDL3FrameManager> _logger;
 
@@ -15,14 +15,20 @@ internal sealed class SDL3FrameManager
     private nint _window;
     private nint _commandBuffer;
     private nint _swapchainTexture;
+    private uint _swapchainWidth;
+    private uint _swapchainHeight;
     private readonly nint[] _inFlightFences = new nint[MaxInFlightFrames];
+    private readonly nint[] _singleFenceBuf = new nint[1];
     private int _fenceSlot;
+    private int _disposed;
 
     public nint CommandBuffer => _commandBuffer;
     public nint SwapchainTexture => _swapchainTexture;
+    public uint SwapchainWidth => _swapchainWidth;
+    public uint SwapchainHeight => _swapchainHeight;
     public bool HasActiveFrame => _commandBuffer != nint.Zero && _swapchainTexture != nint.Zero;
-    public bool IsFirstFlush { get; private set; } = true;
-    
+    public int CurrentFrameSlot => _fenceSlot;
+
     public SDL3FrameManager(ILogger<SDL3FrameManager> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -55,13 +61,18 @@ internal sealed class SDL3FrameManager
         if (_device == nint.Zero || _window == nint.Zero)
             return false;
 
-        IsFirstFlush = true;
+        if (_commandBuffer != nint.Zero)
+        {
+            _logger.LogWarning("BeginFrame called with an active command buffer; cancelling previous buffer");
+            SDL3.SDL.CancelGPUCommandBuffer(_commandBuffer);
+            _commandBuffer = nint.Zero;
+        }
 
         var oldFence = _inFlightFences[_fenceSlot];
         if (oldFence != nint.Zero)
         {
-            var fenceArray = new nint[] { oldFence };
-            SDL3.SDL.WaitForGPUFences(_device, true, fenceArray, (uint)fenceArray.Length);
+            _singleFenceBuf[0] = oldFence;
+            SDL3.SDL.WaitForGPUFences(_device, true, _singleFenceBuf, 1);
             SDL3.SDL.ReleaseGPUFence(_device, oldFence);
             _inFlightFences[_fenceSlot] = nint.Zero;
         }
@@ -71,22 +82,28 @@ internal sealed class SDL3FrameManager
         {
             _logger.LogWarning("Failed to acquire command buffer, skipping frame");
             _swapchainTexture = nint.Zero;
+            _swapchainWidth = 0;
+            _swapchainHeight = 0;
             return false;
         }
 
-        if (!SDL3.SDL.AcquireGPUSwapchainTexture(_commandBuffer, _window, out _swapchainTexture, out _, out _))
+        if (!SDL3.SDL.AcquireGPUSwapchainTexture(_commandBuffer, _window, out _swapchainTexture, out _swapchainWidth, out _swapchainHeight))
         {
             _logger.LogDebug("Failed to acquire swapchain texture (window may be minimized)");
-            SDL3.SDL.SubmitGPUCommandBuffer(_commandBuffer);
+            SDL3.SDL.CancelGPUCommandBuffer(_commandBuffer);
             _commandBuffer = nint.Zero;
             _swapchainTexture = nint.Zero;
+            _swapchainWidth = 0;
+            _swapchainHeight = 0;
             return false;
         }
 
         if (_swapchainTexture == nint.Zero)
         {
-            SDL3.SDL.SubmitGPUCommandBuffer(_commandBuffer);
+            SDL3.SDL.CancelGPUCommandBuffer(_commandBuffer);
             _commandBuffer = nint.Zero;
+            _swapchainWidth = 0;
+            _swapchainHeight = 0;
             return false;
         }
 
@@ -94,17 +111,10 @@ internal sealed class SDL3FrameManager
     }
     
     /// <summary>
-    /// Mark that the first flush has occurred (for clear vs load operations).
+    /// Blit a texture to the swapchain. Source dimensions come from the caller;
+    /// destination dimensions are the actual swapchain size acquired this frame.
     /// </summary>
-    public void MarkFirstFlushComplete()
-    {
-        IsFirstFlush = false;
-    }
-    
-    /// <summary>
-    /// Blit a texture to the swapchain.
-    /// </summary>
-    public void BlitToSwapchain(nint sourceTexture, int viewportWidth, int viewportHeight)
+    public void BlitToSwapchain(nint sourceTexture, int sourceWidth, int sourceHeight)
     {
         if (!HasActiveFrame)
         {
@@ -121,8 +131,8 @@ internal sealed class SDL3FrameManager
                 LayerOrDepthPlane = 0,
                 X = 0,
                 Y = 0,
-                W = (uint)viewportWidth,
-                H = (uint)viewportHeight
+                W = (uint)sourceWidth,
+                H = (uint)sourceHeight
             },
             Destination = new SDL3.SDL.GPUBlitRegion
             {
@@ -131,8 +141,8 @@ internal sealed class SDL3FrameManager
                 LayerOrDepthPlane = 0,
                 X = 0,
                 Y = 0,
-                W = (uint)viewportWidth,
-                H = (uint)viewportHeight
+                W = _swapchainWidth,
+                H = _swapchainHeight
             },
             LoadOp = SDL3.SDL.GPULoadOp.Load,
             ClearColor = new SDL3.SDL.FColor { R = 0, G = 0, B = 0, A = 1 },
@@ -154,14 +164,22 @@ internal sealed class SDL3FrameManager
         if (_commandBuffer == nint.Zero)
         {
             _swapchainTexture = nint.Zero;
+            _swapchainWidth = 0;
+            _swapchainHeight = 0;
             return;
         }
 
         var fence = SDL3.SDL.SubmitGPUCommandBufferAndAcquireFence(_commandBuffer);
         _commandBuffer = nint.Zero;
         _swapchainTexture = nint.Zero;
+        _swapchainWidth = 0;
+        _swapchainHeight = 0;
 
-        _inFlightFences[_fenceSlot] = fence;
+        if (fence != nint.Zero)
+            _inFlightFences[_fenceSlot] = fence;
+        else
+            _logger.LogError("SubmitGPUCommandBufferAndAcquireFence returned null: {Error}", SDL3.SDL.GetError());
+
         _fenceSlot = (_fenceSlot + 1) % MaxInFlightFrames;
     }
 
@@ -180,5 +198,21 @@ internal sealed class SDL3FrameManager
                 _inFlightFences[i] = nint.Zero;
             }
         }
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
+
+        if (_commandBuffer != nint.Zero)
+        {
+            SDL3.SDL.CancelGPUCommandBuffer(_commandBuffer);
+            _commandBuffer = nint.Zero;
+        }
+
+        ReleaseInFlightFences();
+        _device = nint.Zero;
+        _window = nint.Zero;
     }
 }

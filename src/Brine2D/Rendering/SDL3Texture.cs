@@ -7,20 +7,26 @@ namespace Brine2D.Rendering;
 /// <summary>
 /// SDL3 GPU API texture implementation.
 /// </summary>
-public class SDL3Texture : ITexture
+internal sealed class SDL3Texture : ITexture
 {
+    private const int StateUploading = 0;
+    private const int StateReady = 1;
+    private const int StateDisposed = 2;
+
     private readonly ILogger<SDL3Texture> _logger;
     private readonly GpuDeviceHandle _deviceHandle;
     private nint _textureHandle;
-    private int _disposed;
+    private volatile int _state = StateReady;
 
     public string Name { get; }
     public int Width { get; }
     public int Height { get; }
-    public bool IsLoaded => _textureHandle != nint.Zero && _disposed == 0;
-    public TextureScaleMode ScaleMode { get; set; }
+    public bool IsLoaded => _state == StateReady;
+    public bool IsDisposed => _state == StateDisposed;
+    public TextureScaleMode ScaleMode { get; init; }
+    public int SortKey { get; }
 
-    internal nint Handle => _textureHandle;
+    internal nint Handle => Volatile.Read(ref _textureHandle);
 
     internal SDL3Texture(
         string name,
@@ -37,20 +43,52 @@ public class SDL3Texture : ITexture
         Width = width;
         Height = height;
         ScaleMode = scaleMode;
+        SortKey = ITexture.NextSortKey();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    internal bool MarkUploadPending() =>
+        Interlocked.CompareExchange(ref _state, StateUploading, StateReady) == StateReady;
+
+    internal void MarkUploadComplete() =>
+        Interlocked.CompareExchange(ref _state, StateReady, StateUploading);
+
+    /// <summary>
+    /// Releases the GPU texture after a deferred upload completes for an already-disposed texture.
+    /// Called by <c>PollPendingUploads</c> / <c>DrainPendingUploads</c> once the fence has signaled.
+    /// </summary>
+    /// <param name="device">
+    /// Raw GPU device handle, passed directly to avoid reliance on <see cref="GpuDeviceHandle"/> invalidation order during disposal.
+    /// </param>
+    internal void ReleaseDeferredGPUTexture(nint device)
+    {
+        var texture = Interlocked.Exchange(ref _textureHandle, nint.Zero);
+        if (texture != nint.Zero && device != nint.Zero)
+        {
+            SDL3.SDL.ReleaseGPUTexture(device, texture);
+            _logger.LogDebug("Released deferred GPU texture: {Name}", Name);
+        }
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
+        var previousState = Interlocked.Exchange(ref _state, StateDisposed);
+        if (previousState == StateDisposed) return;
 
-        var device = _deviceHandle.Handle;
-        if (_textureHandle != nint.Zero && device != nint.Zero)
+        if (previousState == StateUploading)
         {
-            SDL3.SDL.ReleaseGPUTexture(device, _textureHandle);
-            _logger.LogDebug("Released GPU texture: {Name}", Name);
+            _logger.LogWarning(
+                "Disposing texture '{Name}' while an upload is still pending; GPU texture release deferred until fence signals",
+                Name);
+            return;
         }
 
-        _textureHandle = nint.Zero;
+        var device = _deviceHandle.Handle;
+        var texture = Interlocked.Exchange(ref _textureHandle, nint.Zero);
+        if (texture != nint.Zero && device != nint.Zero)
+        {
+            SDL3.SDL.ReleaseGPUTexture(device, texture);
+            _logger.LogDebug("Released GPU texture: {Name}", Name);
+        }
     }
 }

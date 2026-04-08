@@ -11,37 +11,51 @@ namespace Brine2D.Rendering.SDL.PostProcessing;
 public sealed class RenderTarget : IRenderTarget
 {
     private readonly ILogger<RenderTarget>? _logger;
-    private nint _device;
+    private readonly GpuDeviceHandle _deviceHandle;
     private nint _texture;
     private RenderTargetTextureView? _textureView;
-    private bool _disposed;
+    private int _disposed;
 
-    internal nint TextureHandle => _texture;
+    internal nint TextureHandle => Volatile.Read(ref _texture);
+
     public int Width { get; }
     public int Height { get; }
     public SDL3.SDL.GPUTextureFormat Format { get; }
-    
+
     /// <summary>
     /// The texture as ITexture for rendering operations.
     /// This is a lightweight view - the RenderTarget owns the actual GPU resource.
     /// </summary>
-    public ITexture Texture => _textureView ??= new RenderTargetTextureView(
-        $"RenderTarget_{Width}x{Height}",
-        _texture,
-        Width,
-        Height,
-        TextureScaleMode.Linear);
-
-    public RenderTarget(nint device, int width, int height, SDL3.SDL.GPUTextureFormat format, ILogger<RenderTarget>? logger = null)
+    public ITexture Texture
     {
-        if (device == nint.Zero)
-            throw new ArgumentException("Device handle cannot be zero", nameof(device));
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
+            var view = Volatile.Read(ref _textureView);
+            if (view != null)
+                return view;
+
+            var newView = new RenderTargetTextureView(
+                $"RenderTarget_{Width}x{Height}",
+                () => Volatile.Read(ref _texture),
+                Width,
+                Height,
+                TextureScaleMode.Linear);
+            return Interlocked.CompareExchange(ref _textureView, newView, null) ?? newView;
+        }
+    }
+
+    internal RenderTarget(GpuDeviceHandle deviceHandle, int width, int height, SDL3.SDL.GPUTextureFormat format, ILogger<RenderTarget>? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(deviceHandle);
+        if (deviceHandle.Handle == nint.Zero)
+            throw new ArgumentException("Device handle cannot be zero", nameof(deviceHandle));
         if (width <= 0)
             throw new ArgumentOutOfRangeException(nameof(width), "Width must be positive");
         if (height <= 0)
             throw new ArgumentOutOfRangeException(nameof(height), "Height must be positive");
 
-        _device = device;
+        _deviceHandle = deviceHandle;
         Width = width;
         Height = height;
         Format = format;
@@ -52,6 +66,7 @@ public sealed class RenderTarget : IRenderTarget
 
     private void CreateTexture()
     {
+        var device = _deviceHandle.Handle;
         var textureCreateInfo = new SDL3.SDL.GPUTextureCreateInfo
         {
             Type = SDL3.SDL.GPUTextureType.TextureType2D,
@@ -64,7 +79,7 @@ public sealed class RenderTarget : IRenderTarget
             SampleCount = SDL3.SDL.GPUSampleCount.SampleCount1
         };
 
-        _texture = SDL3.SDL.CreateGPUTexture(_device, ref textureCreateInfo);
+        _texture = SDL3.SDL.CreateGPUTexture(device, ref textureCreateInfo);
         if (_texture == nint.Zero)
         {
             var error = SDL3.SDL.GetError();
@@ -77,19 +92,17 @@ public sealed class RenderTarget : IRenderTarget
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
 
-        // Texture view doesn't own anything, no need to dispose
         _textureView = null;
 
-        if (_texture != nint.Zero && _device != nint.Zero)
+        var device = _deviceHandle.Handle;
+        var texture = Interlocked.Exchange(ref _texture, nint.Zero);
+        if (texture != nint.Zero && device != nint.Zero)
         {
-            SDL3.SDL.ReleaseGPUTexture(_device, _texture);
+            SDL3.SDL.ReleaseGPUTexture(device, texture);
             _logger?.LogDebug("Released render target texture: {Width}x{Height}", Width, Height);
-            _texture = nint.Zero;
         }
-
-        _device = nint.Zero;
-        _disposed = true;
     }
 }

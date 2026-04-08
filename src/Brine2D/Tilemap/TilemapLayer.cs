@@ -33,7 +33,7 @@ public class TilemapLayer
     /// <summary>
     /// Rendering order (lower renders first/behind).
     /// </summary>
-    public int ZOrder { get; set; }
+    public byte ZOrder { get; set; }
 
     /// <summary>
     /// Layer opacity (0.0 = invisible, 1.0 = fully visible).

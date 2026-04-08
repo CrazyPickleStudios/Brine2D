@@ -1,8 +1,5 @@
 using Brine2D.Core;
-using Brine2D.Tilemap;
 using System.Numerics;
-using Brine2D.Animation;
-using Brine2D.Core;
 
 namespace Brine2D.Rendering;
 
@@ -53,7 +50,7 @@ public class TilemapRenderer
             if (!layer.Visible) continue;
 
             // Use layer Z-order for proper depth sorting
-            int layerDepth = layer.ZOrder;
+            byte layerDepth = layer.ZOrder;
 
             for (int y = visibleRect.minY; y <= visibleRect.maxY; y++)
             {
@@ -86,7 +83,7 @@ public class TilemapRenderer
         }
 
         // Flush all batched tiles (renders them sorted and grouped by texture)
-        _batcher.Flush(renderer, camera);
+        _batcher.Flush(renderer);
     }
 
     /// <summary>

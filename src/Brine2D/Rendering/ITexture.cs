@@ -1,3 +1,4 @@
+using System.Threading;
 using Brine2D.Core;
 
 namespace Brine2D.Rendering;
@@ -37,4 +38,17 @@ public interface ITexture : IDisposable
     /// Convenience property for texture operations.
     /// </summary>
     Rectangle Bounds => new(0, 0, Width, Height);
+
+    /// <summary>
+    /// Gets a stable key used for sorting textures during batching.
+    /// Must be deterministic for the lifetime of the texture within a process.
+    /// </summary>
+    int SortKey { get; }
+
+    /// <summary>
+    /// Allocates the next globally unique sort key for texture batching.
+    /// All <see cref="ITexture"/> implementations must use this to avoid key collisions.
+    /// </summary>
+    protected static int NextSortKey() => Interlocked.Increment(ref _nextSortKey);
+    private static int _nextSortKey;
 }

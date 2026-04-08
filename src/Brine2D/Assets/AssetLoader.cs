@@ -222,6 +222,12 @@ internal sealed class AssetLoader : IAssetLoader, IDisposable
             foreach (var manifest in manifests)
             {
                 try { _cache.Unload(manifest); }
+                catch (ObjectDisposedException)
+                {
+                    _logger.LogDebug(
+                        "Skipped unloading manifest {Type} — asset cache already disposed (shutdown)",
+                        manifest.GetType().Name);
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed to unload manifest {Type} during scope cleanup",
@@ -237,6 +243,12 @@ internal sealed class AssetLoader : IAssetLoader, IDisposable
                 for (var i = 0; i < count; i++)
                 {
                     try { _cache.ReleaseDirectRef(key); }
+                    catch (ObjectDisposedException)
+                    {
+                        _logger.LogDebug(
+                            "Skipped releasing {Key} — asset cache already disposed (shutdown)", key);
+                        break;
+                    }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Failed to release {Key} during scope cleanup", key);

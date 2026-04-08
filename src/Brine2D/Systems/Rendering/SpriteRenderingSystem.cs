@@ -134,7 +134,7 @@ public class SpriteRenderingSystem : RenderSystemBase
         _lastRenderedCount = _lastTotalCount - culledCount;
 
         // Flush batch (sorts by layer/texture and renders)
-        _batcher.Flush(renderer, _camera);
+        _batcher.Flush(renderer);
     }
 
     /// <summary>

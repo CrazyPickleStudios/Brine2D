@@ -20,16 +20,12 @@ public static class PostProcessingServiceCollectionExtensions
         if (services == null)
             throw new ArgumentNullException(nameof(services));
 
-        // Configure options
         if (configure != null)
         {
             services.Configure(configure);
         }
 
-        // Register SDL3-specific pipeline as singleton
         services.TryAddSingleton<SDL3PostProcessPipeline>();
-
-        // Also register as base type for generic access
         services.TryAddSingleton<PostProcessPipeline>(sp => sp.GetRequiredService<SDL3PostProcessPipeline>());
 
         return services;
@@ -46,7 +42,6 @@ public static class PostProcessingServiceCollectionExtensions
             var logger = provider.GetService<ILogger<PassThroughEffect>>();
             var effect = new PassThroughEffect(width, height, logger);
             
-            // Auto-register with pipeline if available
             var pipeline = provider.GetService<SDL3PostProcessPipeline>();
             pipeline?.AddEffect(effect);
             
@@ -62,20 +57,18 @@ public static class PostProcessingServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddGrayscaleEffect(this IServiceCollection services, int width = 1280, int height = 720, float intensity = 1.0f)
     {
-        // Register the effect itself as a singleton
         services.TryAddSingleton<GrayscaleEffect>(provider =>
         {
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var logger = provider.GetService<ILogger<GrayscaleEffect>>();
             var renderer = provider.GetRequiredService<IRenderer>();
             
-            // Get the GPU device handle from renderer
             if (renderer is not SDL3Renderer gpuRenderer)
             {
                 throw new InvalidOperationException("Grayscale effect requires SDL3GPURenderer");
             }
 
-            return new GrayscaleEffect(gpuRenderer.Device, width, height, loggerFactory, logger)
+            return new GrayscaleEffect(gpuRenderer.GpuDevice!, width, height, loggerFactory, logger)
             {
                 Intensity = intensity
             };
@@ -101,7 +94,7 @@ public static class PostProcessingServiceCollectionExtensions
                 throw new InvalidOperationException("Blur effect requires SDL3GPURenderer");
             }
 
-            return new BlurEffect(gpuRenderer.Device, width, height, loggerFactory, logger)
+            return new BlurEffect(gpuRenderer.GpuDevice!, width, height, loggerFactory, logger)
             {
                 BlurRadius = blurRadius
             };

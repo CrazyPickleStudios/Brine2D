@@ -20,6 +20,7 @@ public class CameraFollowComponentTests : TestBase
         // Assert
         Assert.Equal("main", cameraFollow.CameraName);
         Assert.Equal(5f, cameraFollow.Smoothing);
+        Assert.Equal(5f, cameraFollow.ZoomSmoothing);
         Assert.Equal(Vector2.Zero, cameraFollow.Offset);
         Assert.True(cameraFollow.FollowX);
         Assert.True(cameraFollow.FollowY);
@@ -61,6 +62,62 @@ public class CameraFollowComponentTests : TestBase
         Assert.Equal("main", cameraFollow.CameraName);
     }
 
+    [Fact]
+    public void CameraName_SetNull_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => cameraFollow.CameraName = null!);
+    }
+
+    [Fact]
+    public void CameraName_SetEmpty_ThrowsArgumentException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => cameraFollow.CameraName = "");
+    }
+
+    [Fact]
+    public void CameraName_SetWhitespace_ThrowsArgumentException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => cameraFollow.CameraName = "   ");
+    }
+
+    [Fact]
+    public void CameraName_RejectsInvalidValue_RetainsPreviousName()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+        cameraFollow.CameraName = "minimap";
+
+        // Act
+        Assert.Throws<ArgumentException>(() => cameraFollow.CameraName = "");
+
+        // Assert
+        Assert.Equal("minimap", cameraFollow.CameraName);
+    }
+
     #endregion
 
     #region Smoothing
@@ -98,7 +155,7 @@ public class CameraFollowComponentTests : TestBase
     }
 
     [Fact]
-    public void Smoothing_HigherValue_MeansSlowerFollow()
+    public void Smoothing_HigherValue_MeansSnappierFollow()
     {
         // Arrange
         var world = CreateTestWorld();
@@ -111,6 +168,85 @@ public class CameraFollowComponentTests : TestBase
 
         // Assert - Just verify it's set
         Assert.Equal(20f, cameraFollow.Smoothing);
+    }
+
+    [Fact]
+    public void Smoothing_Negative_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.Smoothing = -1f);
+    }
+
+    [Fact]
+    public void Smoothing_RejectsNegative_RetainsPreviousValue()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+        cameraFollow.Smoothing = 10f;
+
+        // Act
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.Smoothing = -5f);
+
+        // Assert
+        Assert.Equal(10f, cameraFollow.Smoothing);
+    }
+
+    #endregion
+
+    #region Zoom Smoothing
+
+    [Fact]
+    public void ZoomSmoothing_SetAndGet_WorksCorrectly()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act
+        cameraFollow.ZoomSmoothing = 10f;
+
+        // Assert
+        Assert.Equal(10f, cameraFollow.ZoomSmoothing);
+    }
+
+    [Fact]
+    public void ZoomSmoothing_CanBeZero_ForInstantZoom()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act
+        cameraFollow.ZoomSmoothing = 0f;
+
+        // Assert
+        Assert.Equal(0f, cameraFollow.ZoomSmoothing);
+    }
+
+    [Fact]
+    public void ZoomSmoothing_Negative_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.ZoomSmoothing = -1f);
     }
 
     #endregion
@@ -268,6 +404,62 @@ public class CameraFollowComponentTests : TestBase
 
         // Assert
         Assert.Equal(Vector2.Zero, cameraFollow.Deadzone);
+    }
+
+    [Fact]
+    public void Deadzone_NegativeX_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.Deadzone = new Vector2(-1, 10));
+    }
+
+    [Fact]
+    public void Deadzone_NegativeY_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.Deadzone = new Vector2(10, -1));
+    }
+
+    [Fact]
+    public void Deadzone_BothNegative_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.Deadzone = new Vector2(-5, -5));
+    }
+
+    [Fact]
+    public void Deadzone_RejectsNegative_RetainsPreviousValue()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+        cameraFollow.Deadzone = new Vector2(50, 30);
+
+        // Act
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.Deadzone = new Vector2(-1, 10));
+
+        // Assert
+        Assert.Equal(new Vector2(50, 30), cameraFollow.Deadzone);
     }
 
     #endregion
@@ -456,6 +648,76 @@ public class CameraFollowComponentTests : TestBase
         Assert.Equal(new Vector2(80, 40), cameraFollow.Deadzone);
         Assert.True(cameraFollow.IsActive);
         Assert.Equal(5, cameraFollow.Priority);
+    }
+
+    #endregion
+
+    #region Target Zoom
+
+    [Fact]
+    public void TargetZoom_SetAndGet_WorksCorrectly()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        // Act
+        cameraFollow.TargetZoom = 2f;
+
+        // Assert
+        Assert.Equal(2f, cameraFollow.TargetZoom);
+    }
+
+    [Fact]
+    public void TargetZoom_Negative_ThrowsArgumentOutOfRangeException()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.TargetZoom = -1f);
+    }
+
+    [Fact]
+    public void TargetZoom_Zero_ThrowsArgumentOutOfRangeException()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.TargetZoom = 0f);
+    }
+
+    [Fact]
+    public void TargetZoom_Null_IsAllowed()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+        cameraFollow.TargetZoom = 2f;
+
+        cameraFollow.TargetZoom = null;
+
+        Assert.Null(cameraFollow.TargetZoom);
+    }
+
+    [Fact]
+    public void TargetZoom_RejectsInvalid_RetainsPreviousValue()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<CameraFollowComponent>();
+        var cameraFollow = entity.GetComponent<CameraFollowComponent>()!;
+        cameraFollow.TargetZoom = 3f;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => cameraFollow.TargetZoom = -1f);
+
+        Assert.Equal(3f, cameraFollow.TargetZoom);
     }
 
     #endregion

@@ -24,6 +24,7 @@ public static class SpriteBatcherAtlasExtensions
         /// <param name="origin">Origin point for rotation/scaling (0-1 range, default: center).</param>
         /// <param name="tint">Color tint to apply (default: white).</param>
         /// <param name="layer">Rendering layer (default: 0).</param>
+        /// <param name="flip">Sprite flip flags (default: none).</param>
         /// <remarks>
         ///     This is the fastest way to draw from an atlas. For best performance in tight loops,
         ///     cache the <see cref="AtlasRegion"/> reference and reuse it.
@@ -37,7 +38,8 @@ public static class SpriteBatcherAtlasExtensions
             float rotation = 0f,
             Vector2? origin = null,
             Color? tint = null,
-            int layer = 0
+            byte layer = 0,
+            SpriteFlip flip = SpriteFlip.None
         )
         {
             batcher.Draw(
@@ -48,7 +50,8 @@ public static class SpriteBatcherAtlasExtensions
                 rotation,
                 origin ?? new Vector2(0.5f, 0.5f),
                 tint ?? Color.White,
-                layer);
+                layer,
+                flip);
         }
 
         /// <summary>
@@ -63,6 +66,7 @@ public static class SpriteBatcherAtlasExtensions
         /// <param name="origin">Origin point for rotation/scaling (0-1 range, default: center).</param>
         /// <param name="tint">Color tint to apply (default: white).</param>
         /// <param name="layer">Rendering layer (default: 0).</param>
+        /// <param name="flip">Sprite flip flags (default: none).</param>
         /// <returns>True if the region was found and drawn; false otherwise.</returns>
         /// <remarks>
         ///     <para>
@@ -91,7 +95,8 @@ public static class SpriteBatcherAtlasExtensions
             float rotation = 0f,
             Vector2? origin = null,
             Color? tint = null,
-            int layer = 0
+            byte layer = 0,
+            SpriteFlip flip = SpriteFlip.None
         )
         {
             if (!atlas.TryGetRegion(regionName, out var region) || region == null)
@@ -99,7 +104,7 @@ public static class SpriteBatcherAtlasExtensions
                 return false;
             }
 
-            batcher.DrawAtlasRegion(region, position, scale, rotation, origin, tint, layer);
+            batcher.DrawAtlasRegion(region, position, scale, rotation, origin, tint, layer, flip);
             return true;
         }
 
@@ -115,6 +120,7 @@ public static class SpriteBatcherAtlasExtensions
         /// <param name="origin">Origin point for rotation/scaling (0-1 range, default: center).</param>
         /// <param name="tint">Color tint to apply (default: white).</param>
         /// <param name="layer">Rendering layer (default: 0).</param>
+        /// <param name="flip">Sprite flip flags (default: none).</param>
         /// <returns>True if the region was found and drawn; false otherwise.</returns>
         /// <remarks>
         ///     <para>
@@ -143,7 +149,8 @@ public static class SpriteBatcherAtlasExtensions
             float rotation = 0f,
             Vector2? origin = null,
             Color? tint = null,
-            int layer = 0
+            byte layer = 0,
+            SpriteFlip flip = SpriteFlip.None
         )
         {
             if (!atlasCollection.TryGetRegion(regionName, out var region) || region == null)
@@ -151,7 +158,7 @@ public static class SpriteBatcherAtlasExtensions
                 return false;
             }
 
-            batcher.DrawAtlasRegion(region, position, scale, rotation, origin, tint, layer);
+            batcher.DrawAtlasRegion(region, position, scale, rotation, origin, tint, layer, flip);
             return true;
         }
     }

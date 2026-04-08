@@ -131,7 +131,6 @@ internal sealed class SDL3TextRenderer : IDisposable
         if (_defaultFont is not SDL3Font sdlFont)
             return Vector2.Zero;
 
-        // Simple SDL measurement for plain text
         if (SDL3.TTF.GetStringSize(sdlFont.Handle, text, 0, out int w, out int h))
         {
             float scale = fontSize.HasValue ? (fontSize.Value / _defaultFont.Size) : 1.0f;
@@ -147,7 +146,7 @@ internal sealed class SDL3TextRenderer : IDisposable
             return Vector2.Zero;
 
         var runs = options.ParseMarkup
-            ? _markupParser.Parse(text, options)
+            ? (options.MarkupParser ?? _defaultMarkupParser).Parse(text, options)
             : new[] { new TextRun { Text = text, FontSize = options.FontSize } };
 
         return MeasureTextRuns(runs);
@@ -156,7 +155,7 @@ internal sealed class SDL3TextRenderer : IDisposable
     public Vector2 MeasureTextRuns(IReadOnlyList<TextRun> runs)
     {
         float totalWidth = 0;
-        float totalHeight = _defaultFontAtlas?.LineHeight ?? 16;
+        float totalHeight = 0;
 
         foreach (var run in runs)
         {
@@ -165,19 +164,22 @@ internal sealed class SDL3TextRenderer : IDisposable
             totalHeight = MathF.Max(totalHeight, size.Y);
         }
 
+        if (totalHeight == 0)
+            totalHeight = _defaultFontAtlas?.LineHeight ?? 16;
+
         return new Vector2(totalWidth, totalHeight);
     }
 
-    public Vector2 MeasureGlyphSpan(ReadOnlySpan<char> text)
+    public Vector2 MeasureGlyphSpan(ReadOnlySpan<char> text, float scale = 1.0f)
     {
         if (_defaultFontAtlas == null) return Vector2.Zero;
         float width = 0;
         foreach (char c in text)
         {
             if (_defaultFontAtlas.TryGetGlyph(c, out var glyph))
-                width += glyph.Advance;
+                width += glyph.Advance * scale;
         }
-        return new Vector2(width, _defaultFontAtlas.LineHeight);
+        return new Vector2(width, _defaultFontAtlas.LineHeight * scale);
     }
 
     public void Dispose()

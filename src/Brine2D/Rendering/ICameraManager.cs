@@ -15,10 +15,11 @@ public interface ICameraManager
     public const string MainCameraName = "main";
 
     /// <summary>
-    /// Gets or sets the primary/main camera.
-    /// This is the default camera used when no specific camera is specified.
+    /// Gets the primary/main camera (the camera registered under <see cref="MainCameraName"/>).
+    /// To set the main camera, use <see cref="RegisterCamera"/> with <see cref="MainCameraName"/>.
+    /// To clear it, use <see cref="RemoveCamera"/> with <see cref="MainCameraName"/>.
     /// </summary>
-    ICamera? MainCamera { get; set; }
+    ICamera? MainCamera { get; }
 
     /// <summary>
     /// Registers a named camera.

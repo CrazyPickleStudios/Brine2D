@@ -17,20 +17,26 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     private readonly PostProcessingOptions? _postProcessingOptions;
     private readonly SDL3PostProcessPipeline? _postProcessPipeline;
     
-    private nint _device;
+    private GpuDeviceHandle? _deviceHandle;
     private IRenderTarget? _currentRenderTarget;
     private readonly Stack<IRenderTarget?> _renderTargetStack = new();
     
     private RenderTarget? _mainRenderTarget;
     private RenderTarget? _pingPongTarget;
     
-    private bool _disposed;
-    
+    private int _disposed;
+
     public bool UsePostProcessing { get; }
     public IRenderTarget? CurrentRenderTarget => _currentRenderTarget;
     public RenderTarget? MainRenderTarget => _mainRenderTarget;
     public RenderTarget? PingPongTarget => _pingPongTarget;
-    
+    public int RenderTargetStackDepth => _renderTargetStack.Count;
+
+    public SDL3.SDL.GPUTextureFormat PostProcessFormat =>
+        _postProcessingOptions?.RenderTargetFormat ?? _defaultFormat;
+
+    private SDL3.SDL.GPUTextureFormat _defaultFormat;
+
     public SDL3RenderTargetManager(
         ILogger<SDL3RenderTargetManager> logger,
         ILoggerFactory loggerFactory,
@@ -45,11 +51,23 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         UsePostProcessing = _postProcessingOptions?.Enabled == true && _postProcessPipeline != null;
     }
     
-    public void Initialize(nint device)
+    public void Initialize(GpuDeviceHandle deviceHandle, SDL3.SDL.GPUTextureFormat defaultFormat)
     {
-        _device = device;
+        _deviceHandle = deviceHandle;
+        _defaultFormat = defaultFormat;
     }
-    
+
+    public void ResetFrameState()
+    {
+        if (_renderTargetStack.Count > 0)
+        {
+            _logger.LogWarning("Render target stack had {Count} unpopped entries at frame boundary", _renderTargetStack.Count);
+            _renderTargetStack.Clear();
+        }
+
+        _currentRenderTarget = null;
+    }
+
     public IRenderTarget CreateRenderTarget(int width, int height)
     {
         if (width <= 0 || height <= 0)
@@ -65,12 +83,11 @@ internal sealed class SDL3RenderTargetManager : IDisposable
                 width, height);
         }
         
-        var format = SDL3.SDL.GPUTextureFormat.R8G8B8A8Unorm;
         var renderTarget = new RenderTarget(
-            _device, 
+            _deviceHandle!, 
             width, 
             height, 
-            format,
+            _defaultFormat,
             _loggerFactory.CreateLogger<RenderTarget>());
         
         _logger.LogDebug("Created render target: {Width}x{Height}", width, height);
@@ -80,7 +97,7 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     public void SetRenderTarget(IRenderTarget? target)
     {
         _currentRenderTarget = target;
-        _logger.LogDebug("Render target set to: {Target}", 
+        _logger.LogTrace("Render target set to: {Target}", 
             target == null ? "Screen" : $"{target.Width}x{target.Height}");
     }
     
@@ -94,33 +111,48 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     {
         if (_renderTargetStack.Count == 0)
         {
-            _logger.LogWarning("PopRenderTarget called with empty stack");
-            return;
+            throw new InvalidOperationException("Cannot pop render target: stack is empty");
         }
         
         var previousTarget = _renderTargetStack.Pop();
         SetRenderTarget(previousTarget);
     }
-    
+
     public void CreatePostProcessingTargets(int width, int height)
     {
         if (!UsePostProcessing)
             return;
-        
-        var format = _postProcessingOptions?.RenderTargetFormat ?? SDL3.SDL.GPUTextureFormat.R8G8B8A8Unorm;
+
+        if (_deviceHandle == null)
+            throw new InvalidOperationException("Render target manager must be initialized before creating post-processing targets.");
+
+        var format = _postProcessingOptions?.RenderTargetFormat ?? _defaultFormat;
+
+        var newMain = new RenderTarget(_deviceHandle, width, height, format,
+            _loggerFactory.CreateLogger<RenderTarget>());
+
+        RenderTarget newPingPong;
+        try
+        {
+            newPingPong = new RenderTarget(_deviceHandle, width, height, format,
+                _loggerFactory.CreateLogger<RenderTarget>());
+        }
+        catch
+        {
+            newMain.Dispose();
+            throw;
+        }
 
         _mainRenderTarget?.Dispose();
-        _mainRenderTarget = new RenderTarget(_device, width, height, format,
-            _loggerFactory.CreateLogger<RenderTarget>());
+        _mainRenderTarget = newMain;
 
         _pingPongTarget?.Dispose();
-        _pingPongTarget = new RenderTarget(_device, width, height, format,
-            _loggerFactory.CreateLogger<RenderTarget>());
+        _pingPongTarget = newPingPong;
 
         _logger.LogInformation("Created render targets for post-processing: {Width}x{Height}",
             width, height);
     }
-    
+
     public bool ApplyPostProcessing(
         IRenderer renderer, 
         nint swapchainTexture,
@@ -129,7 +161,6 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         if (!UsePostProcessing || _mainRenderTarget == null || _pingPongTarget == null || _postProcessPipeline == null)
             return false;
         
-        // Execute pipeline - it returns true if any effects were applied
         return _postProcessPipeline.Execute(
             renderer,
             _mainRenderTarget.TextureHandle, 
@@ -140,16 +171,10 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     
     public void Dispose()
     {
-        if (_disposed) return;
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
         
         _mainRenderTarget?.Dispose();
         _pingPongTarget?.Dispose();
-        
-        if (_postProcessPipeline is IDisposable disposablePipeline)
-        {
-            disposablePipeline.Dispose();
-        }
-        
-        _disposed = true;
     }
 }

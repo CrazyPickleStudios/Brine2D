@@ -266,6 +266,7 @@ public class SpriteRenderingSystemTests : TestBase
         var mockTexture = Substitute.For<ITexture>();
         mockTexture.Width.Returns(32);
         mockTexture.Height.Returns(32);
+        mockTexture.IsLoaded.Returns(true);
 
         for (int i = 0; i < 5; i++)
         {

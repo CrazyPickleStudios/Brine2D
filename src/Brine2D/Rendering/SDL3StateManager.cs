@@ -1,5 +1,4 @@
 using Brine2D.Core;
-using Brine2D.Rendering;
 using Microsoft.Extensions.Logging;
 
 namespace Brine2D.Rendering;
@@ -12,37 +11,41 @@ internal sealed class SDL3StateManager
     private readonly ILogger<SDL3StateManager> _logger;
     private readonly Stack<Rectangle?> _scissorRectStack = new();
     
-    private BlendMode _currentBlendMode = BlendMode.Alpha;
+    private BlendMode _currentBlendMode = IRenderer.DefaultBlendMode;
     private Rectangle? _currentScissorRect;
-    private byte _currentRenderLayer = 128; // Default: middle layer
+    private byte _currentRenderLayer = IRenderer.DefaultRenderLayer;
     
     public ICamera? Camera { get; set; }
     public BlendMode CurrentBlendMode => _currentBlendMode;
-    public Rectangle? CurrentScissorRect => _currentScissorRect;
     public byte CurrentRenderLayer => _currentRenderLayer;
+    public Rectangle? CurrentScissorRect => _currentScissorRect;
+    public int ScissorRectStackDepth => _scissorRectStack.Count;
     
     public SDL3StateManager(ILogger<SDL3StateManager> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
-    
-    // ============================================================
-    // BLEND MODE
-    // ============================================================
+
+    public void ResetFrameState()
+    {
+        _currentBlendMode = IRenderer.DefaultBlendMode;
+        _currentRenderLayer = IRenderer.DefaultRenderLayer;
+        _currentScissorRect = null;
+
+        if (_scissorRectStack.Count > 0)
+        {
+            _logger.LogWarning("Scissor rect stack had {Count} unpopped entries at frame boundary", _scissorRectStack.Count);
+            _scissorRectStack.Clear();
+        }
+    }
     
     public void SetBlendMode(BlendMode blendMode)
     {
         _currentBlendMode = blendMode;
-        _logger.LogDebug("Blend mode set to: {BlendMode}", blendMode);
     }
-    
-    // ============================================================
-    // SCISSOR RECTANGLE
-    // ============================================================
     
     public void SetScissorRect(Rectangle? rect, int viewportWidth, int viewportHeight)
     {
-        // Validate rectangle if provided
         if (rect.HasValue)
         {
             var r = rect.Value;
@@ -52,49 +55,45 @@ internal sealed class SDL3StateManager
                     "Scissor rectangle dimensions cannot be negative", 
                     nameof(rect));
             }
-            
-            // Warn if extending beyond viewport
-            if (r.X < 0 || r.Y < 0 || 
-                r.X + r.Width > viewportWidth || 
-                r.Y + r.Height > viewportHeight)
+
+            float clampedX = Math.Max(r.X, 0);
+            float clampedY = Math.Max(r.Y, 0);
+            float clampedRight = Math.Min(r.X + r.Width, viewportWidth);
+            float clampedBottom = Math.Min(r.Y + r.Height, viewportHeight);
+            float clampedW = Math.Max(clampedRight - clampedX, 0);
+            float clampedH = Math.Max(clampedBottom - clampedY, 0);
+
+            if (clampedX != r.X || clampedY != r.Y || clampedW != r.Width || clampedH != r.Height)
             {
-                _logger.LogWarning(
-                    "Scissor rect ({X}, {Y}, {Width}, {Height}) extends beyond viewport ({ViewportWidth}x{ViewportHeight})",
-                    r.X, r.Y, r.Width, r.Height, viewportWidth, viewportHeight);
+                _logger.LogDebug(
+                    "Scissor rect ({X}, {Y}, {Width}, {Height}) clamped to viewport ({ViewportWidth}x{ViewportHeight}) → ({CX}, {CY}, {CW}, {CH})",
+                    r.X, r.Y, r.Width, r.Height, viewportWidth, viewportHeight,
+                    clampedX, clampedY, clampedW, clampedH);
             }
+
+            _currentScissorRect = new Rectangle(clampedX, clampedY, clampedW, clampedH);
+            return;
         }
         
-        _currentScissorRect = rect;
-        
-        _logger.LogDebug("Scissor rect set to: {Rect}", 
-            rect.HasValue ? $"{rect.Value.X}, {rect.Value.Y}, {rect.Value.Width}x{rect.Value.Height}" : "None");
+        _currentScissorRect = null;
     }
     
     public void PushScissorRect(Rectangle? rect, int viewportWidth, int viewportHeight)
     {
         _scissorRectStack.Push(_currentScissorRect);
-        SetScissorRect(rect, viewportWidth, viewportHeight);
-        
-        _logger.LogDebug("Scissor rect pushed (stack depth: {Depth})", _scissorRectStack.Count);
+        SetScissorRect(ScissorRectHelper.Intersect(_currentScissorRect, rect), viewportWidth, viewportHeight);
     }
     
-    public void PopScissorRect()
+    public void PopScissorRect(int viewportWidth, int viewportHeight)
     {
         if (_scissorRectStack.Count == 0)
         {
             throw new InvalidOperationException(
                 "Cannot pop scissor rect: stack is empty");
         }
-        
-        var previousRect = _scissorRectStack.Pop();
-        _currentScissorRect = previousRect;
-        
-        _logger.LogDebug("Scissor rect popped (stack depth: {Depth})", _scissorRectStack.Count);
+
+        SetScissorRect(_scissorRectStack.Pop(), viewportWidth, viewportHeight);
     }
-    
-    // ============================================================
-    // RENDER LAYER
-    // ============================================================
     
     public void SetRenderLayer(byte layer)
     {

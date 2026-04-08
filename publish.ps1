@@ -26,16 +26,13 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Publishing to NuGet.org..." -ForegroundColor Cyan
 
 $packages = @(
-    "Brine2D",
-    "Brine2D.SDL",
-    "Brine2D.Tilemap",
-    "Brine2D.UI"
+    "Brine2D"
 )
 
 $source = "https://api.nuget.org/v3/index.json"
 
 foreach ($package in $packages) {
-    $path = "src\$package\bin\Release\$package.0.9.0-beta.nupkg"
+    $path = "src\$package\bin\Release\$package.0.9.5-beta.nupkg"
     
     Write-Host "Checking: $path" -ForegroundColor Yellow
     

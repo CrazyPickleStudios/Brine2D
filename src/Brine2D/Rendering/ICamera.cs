@@ -100,41 +100,4 @@ public interface ICamera
     /// </code>
     /// </example>
     void ClampToBounds(Rectangle worldBounds);
-    
-    /// <summary>
-    /// Smoothly moves the camera towards a target position.
-    /// </summary>
-    /// <param name="targetPosition">Target world position.</param>
-    /// <param name="smoothing">Smoothing factor. Higher = snappier. 0 = instant snap.</param>
-    /// <param name="deltaTime">Time since last frame in seconds.</param>
-    /// <example>
-    /// <code>
-    /// // Smooth camera follow
-    /// protected override void OnUpdate(GameTime gameTime)
-    /// {
-    ///     camera.FollowSmooth(player.Position, smoothing: 0.1f, (float)gameTime.DeltaTime);
-    /// }
-    /// </code>
-    /// </example>
-    void FollowSmooth(Vector2 targetPosition, float smoothing, float deltaTime);
-
-    /// <summary>
-    /// Smoothly adjusts the camera zoom towards a target value.
-    /// </summary>
-    /// <param name="targetZoom">Target zoom level (1.0 = normal, 2.0 = 2x zoom in).</param>
-    /// <param name="smoothing">Smoothing factor. Higher = snappier. 0 = instant snap.</param>
-    /// <param name="deltaTime">Time since last frame in seconds.</param>
-    void ZoomSmooth(float targetZoom, float smoothing, float deltaTime);
-
-    /// <summary>
-    /// Triggers a camera shake that decays over the specified duration.
-    /// </summary>
-    /// <param name="intensity">Maximum pixel offset at peak intensity.</param>
-    /// <param name="duration">Duration in seconds before shake fully decays.</param>
-    void Shake(float intensity, float duration);
-
-    /// <summary>
-    /// Advances shake state. Called by CameraSystem each frame.
-    /// </summary>
-    void UpdateShake(float deltaTime);
 }

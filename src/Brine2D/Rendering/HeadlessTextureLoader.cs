@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace Brine2D.Rendering;
 
 /// <summary>
@@ -29,6 +31,7 @@ internal sealed class HeadlessTextureLoader : ITextureLoader
         public string Name { get; } = name;
         public bool IsLoaded => true;
         public TextureScaleMode ScaleMode { get; } = scaleMode;
+        public int SortKey { get; } = ITexture.NextSortKey();
         public void Dispose() { }
     }
 }

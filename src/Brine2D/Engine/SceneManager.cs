@@ -633,7 +633,6 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
                 catch
                 {
                     _cameraManager.RemoveCamera(ICameraManager.MainCameraName);
-                    _cameraManager.MainCamera = null;
                     throw;
                 }
             }, CancellationToken.None);
@@ -777,9 +776,6 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
     {
         var camera = scope.ServiceProvider.GetRequiredService<ICamera>();
         _cameraManager.RegisterCamera(ICameraManager.MainCameraName, camera);
-        if (camera is ITrackableCamera trackable)
-            trackable.TrackRegistration(_cameraManager, ICameraManager.MainCameraName);
-        _cameraManager.MainCamera = camera;
     }
 
     private void SetupSceneBase(SceneBase scene)

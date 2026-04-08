@@ -258,7 +258,7 @@ public class CameraSystemTests : TestBase
         system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
         // Assert
-        mockCamera.DidNotReceive().Position = Arg.Any<Vector2>();
+        mockCamera.DidNotReceiveWithAnyArgs().Position = default;
     }
 
     [Fact]
@@ -281,7 +281,7 @@ public class CameraSystemTests : TestBase
         system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
         // Assert
-        mockCamera.DidNotReceive().Position = Arg.Any<Vector2>();
+        mockCamera.DidNotReceiveWithAnyArgs().Position = default;
     }
 
     [Fact]
@@ -309,16 +309,120 @@ public class CameraSystemTests : TestBase
     }
 
     [Fact]
+    public void Update_WithTargetZoom_AppliesZoom()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockCameraManager = Substitute.For<ICameraManager>();
+        var mockCamera = Substitute.For<ICamera>();
+        mockCamera.Position.Returns(Vector2.Zero);
+        mockCameraManager.GetCamera("main").Returns(mockCamera);
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = Vector2.Zero)
+            .AddComponent<CameraFollowComponent>(c =>
+            {
+                c.TargetZoom = 2.5f;
+                c.ZoomSmoothing = 0;
+                c.Smoothing = 0;
+            });
+
+        world.Flush();
+
+        var system = new CameraSystem(mockCameraManager);
+
+        // Act
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
+
+        // Assert
+        mockCamera.Received(1).Zoom = 2.5f;
+    }
+
+    [Fact]
+    public void Update_WithoutTargetZoom_DoesNotChangeZoom()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockCameraManager = Substitute.For<ICameraManager>();
+        var mockCamera = Substitute.For<ICamera>();
+        mockCamera.Position.Returns(Vector2.Zero);
+        mockCameraManager.GetCamera("main").Returns(mockCamera);
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = Vector2.Zero)
+            .AddComponent<CameraFollowComponent>(c => c.Smoothing = 0);
+
+        world.Flush();
+
+        var system = new CameraSystem(mockCameraManager);
+
+        // Act
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
+
+        // Assert
+        mockCamera.DidNotReceiveWithAnyArgs().Zoom = default;
+    }
+
+    [Fact]
+    public void Update_WithWorldBounds_CallsClampToBounds()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockCameraManager = Substitute.For<ICameraManager>();
+        var mockCamera = Substitute.For<ICamera>();
+        mockCamera.Position.Returns(Vector2.Zero);
+        mockCameraManager.GetCamera("main").Returns(mockCamera);
+
+        var bounds = new Rectangle(0, 0, 1000, 1000);
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(500, 500))
+            .AddComponent<CameraFollowComponent>(c =>
+            {
+                c.WorldBounds = bounds;
+                c.Smoothing = 0;
+            });
+
+        world.Flush();
+
+        var system = new CameraSystem(mockCameraManager);
+
+        // Act
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
+
+        // Assert
+        mockCamera.Received(1).ClampToBounds(bounds);
+    }
+
+    [Fact]
+    public void Update_WithoutWorldBounds_DoesNotCallClampToBounds()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockCameraManager = Substitute.For<ICameraManager>();
+        var mockCamera = Substitute.For<ICamera>();
+        mockCamera.Position.Returns(Vector2.Zero);
+        mockCameraManager.GetCamera("main").Returns(mockCamera);
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = Vector2.Zero)
+            .AddComponent<CameraFollowComponent>(c => c.Smoothing = 0);
+
+        world.Flush();
+
+        var system = new CameraSystem(mockCameraManager);
+
+        // Act
+        system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
+
+        // Assert
+        mockCamera.DidNotReceive().ClampToBounds(Arg.Any<Rectangle>());
+    }
+
+    [Fact]
     public void UpdateOrder_IsCorrect()
     {
         var system = new CameraSystem(Substitute.For<ICameraManager>());
         Assert.Equal(500, system.UpdateOrder);
-    }
-
-    [Fact]
-    public void Name_IsCorrect()
-    {
-        var system = new CameraSystem(Substitute.For<ICameraManager>());
-        Assert.Equal("CameraSystem", system.Name);
     }
 }

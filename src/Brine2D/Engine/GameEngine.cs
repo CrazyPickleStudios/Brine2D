@@ -64,10 +64,9 @@ internal sealed class GameEngine
                 throw new EngineInitializationException(
                     "Failed to initialize SDL3 renderer. Common causes: " +
                     "\n- Graphics drivers are out of date" +
-                    "\n- Vulkan/DirectX runtime not available (for GPU backend)" +
+                    "\n- Vulkan/DirectX runtime not available" +
                     "\n- Display server not running (Linux/WSL)" +
                     "\n- Insufficient permissions" +
-                    "\n\nTry switching to legacy renderer in options.Rendering.Backend = GraphicsBackend.LegacyRenderer " +
                     "\n\nFor troubleshooting, see: https://wiki.libsdl.org/SDL3/README/main",
                     ex);
             }

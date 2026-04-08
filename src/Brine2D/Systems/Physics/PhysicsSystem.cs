@@ -12,7 +12,6 @@ namespace Brine2D.Systems.Physics;
 /// </summary>
 public class PhysicsSystem : UpdateSystemBase
 {
-    public string Name => "PhysicsSystem";
     public override int UpdateOrder => SystemUpdateOrder.Physics; // Explicit order
 
     private readonly CollisionSystem _collisionSystem;

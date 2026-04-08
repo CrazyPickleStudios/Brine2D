@@ -42,7 +42,7 @@ public class TmjLoader : ITilemapLoader
         }
 
         // Load layers
-        int zOrder = 0;
+        byte zOrder = 0;
         foreach (var tmjLayer in tmjMap.Layers.Where(l => l.Type == "tilelayer"))
         {
             var layer = LoadLayer(tmjLayer, zOrder++);
@@ -109,7 +109,7 @@ public class TmjLoader : ITilemapLoader
         return tileset;
     }
 
-    private TilemapLayer LoadLayer(TmjLayer tmjLayer, int zOrder)
+    private TilemapLayer LoadLayer(TmjLayer tmjLayer, byte zOrder)
     {
         var layer = new TilemapLayer(tmjLayer.Name, tmjLayer.Width, tmjLayer.Height)
         {

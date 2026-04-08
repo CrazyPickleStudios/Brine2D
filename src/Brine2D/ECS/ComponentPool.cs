@@ -26,7 +26,7 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
     }
 
     public Component? Get(long entityId)
-        => _components.TryGetValue(entityId, out var c) ? c : null;
+        => _components.GetValueOrDefault(entityId);
 
     public bool Contains(long entityId)
         => _components.ContainsKey(entityId);
@@ -35,7 +35,7 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
         => _components.Remove(entityId);
 
     public T? GetTyped(long entityId)
-        => _components.TryGetValue(entityId, out var c) ? c : null;
+        => _components.GetValueOrDefault(entityId);
 
     /// <summary>
     /// Creates a strongly-typed ArrayPool snapshot for iteration.

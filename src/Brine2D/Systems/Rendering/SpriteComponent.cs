@@ -57,5 +57,5 @@ public class SpriteComponent : Component
     /// Rendering layer/order (higher = drawn on top).
     /// Used by the batching system to sort sprites.
     /// </summary>
-    public int Layer { get; set; } = 0;
+    public byte Layer { get; set; } = 0;
 }

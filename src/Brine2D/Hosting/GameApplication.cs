@@ -218,6 +218,13 @@ public sealed class GameApplication : IAsyncDisposable
             }
             finally
             {
+                // Dispose SceneManager first: tears down the active scene and disposes its
+                // DI scope (releasing scoped AssetLoader refs) while the singleton AssetCache
+                // is still alive. Without this, the host's DI container may dispose AssetCache
+                // before SceneManager during reverse-creation-order teardown.
+                try { Services.GetRequiredService<SceneManager>().DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+                catch (Exception ex) { _logger.LogError(ex, "Error disposing scene manager on thread {ThreadId}", threadId); }
+
                 try { Services.GetRequiredService<GameEngine>().Shutdown(); }
                 catch (Exception ex) { _logger.LogError(ex, "Error shutting down game engine on thread {ThreadId}", threadId); }
 

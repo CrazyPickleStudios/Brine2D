@@ -13,7 +13,7 @@ public class PostProcessingOptions
 
     /// <summary>
     /// Texture format for render targets.
-    /// Default: R8G8B8A8Unorm (standard RGBA)
+    /// When <see langword="null"/>, the swapchain format detected at initialization is used.
     /// </summary>
-    public SDL3.SDL.GPUTextureFormat RenderTargetFormat { get; set; } = SDL3.SDL.GPUTextureFormat.R8G8B8A8Unorm;
+    public SDL3.SDL.GPUTextureFormat? RenderTargetFormat { get; set; }
 }

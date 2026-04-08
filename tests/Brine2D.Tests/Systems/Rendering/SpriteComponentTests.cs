@@ -260,7 +260,7 @@ public class SpriteComponentTests : TestBase
     }
 
     [Fact]
-    public void Layer_CanBeNegative()
+    public void Layer_CanBeMaxValue()
     {
         // Arrange
         var world = CreateTestWorld();
@@ -269,10 +269,10 @@ public class SpriteComponentTests : TestBase
         var sprite = entity.GetComponent<SpriteComponent>()!;
 
         // Act
-        sprite.Layer = -10;
+        sprite.Layer = byte.MaxValue;
 
         // Assert
-        Assert.Equal(-10, sprite.Layer);
+        Assert.Equal(byte.MaxValue, sprite.Layer);
     }
 
     #endregion
