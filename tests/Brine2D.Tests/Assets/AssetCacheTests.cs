@@ -241,6 +241,11 @@ public class AssetCacheTests : IAsyncDisposable
 
         await Assert.ThrowsAnyAsync<Exception>(() => loadTask);
 
+        // ExecuteLoadAsync is fire-and-forget — its orphan disposal runs after
+        // Task.Yield(). DisposeAsync drains pending loads via _drainTcs, ensuring
+        // SafeUnload has completed before we assert.
+        await _sut.DisposeAsync();
+
         _textureLoader.Received(1).UnloadTexture(orphan);
     }
 
