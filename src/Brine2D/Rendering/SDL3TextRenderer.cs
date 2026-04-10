@@ -11,14 +11,17 @@ namespace Brine2D.Rendering;
 /// </summary>
 internal sealed class SDL3TextRenderer : IDisposable
 {
+    private static readonly PlainTextParser _plainTextParser = new();
+
     private readonly ILogger<SDL3TextRenderer> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IFontLoader? _fontLoader;
-    private readonly MarkupParser _markupParser;
     private readonly IMarkupParser _defaultMarkupParser;
     
     private IFont? _defaultFont;
     private FontAtlas? _defaultFontAtlas;
+    private bool _ownsDefaultFont;
+    private bool _fontAtlasGenerationFailed;
     
     private bool _disposed;
     
@@ -34,7 +37,6 @@ internal sealed class SDL3TextRenderer : IDisposable
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _fontLoader = fontLoader;
         
-        _markupParser = new MarkupParser(_logger);
         _defaultMarkupParser = new BBCodeParser(_logger);
     }
     
@@ -70,7 +72,12 @@ internal sealed class SDL3TextRenderer : IDisposable
 
             var loadedFont = await _fontLoader.LoadFontAsync(tempPath, 16, cancellationToken);
 
+            DisposeOwnedFont();
+            _defaultFontAtlas?.Dispose();
+            _defaultFontAtlas = null;
+            _fontAtlasGenerationFailed = false;
             _defaultFont = loadedFont;
+            _ownsDefaultFont = true;
             _logger.LogInformation("Default font loaded from embedded resource at 16pt");
         }
         catch (Exception ex)
@@ -81,25 +88,37 @@ internal sealed class SDL3TextRenderer : IDisposable
     
     public void SetDefaultFont(IFont? font)
     {
+        DisposeOwnedFont();
+
         _defaultFont = font;
+        _ownsDefaultFont = false;
+        _fontAtlasGenerationFailed = false;
 
         _defaultFontAtlas?.Dispose();
         _defaultFontAtlas = null;
 
         if (_defaultFont != null)
         {
+            if (_defaultFont is not SDL3Font)
+            {
+                _logger.LogWarning(
+                    "Font {Font} is not an SDL3Font — atlas generation and text measurement will not function",
+                    _defaultFont.Name);
+            }
+
             _logger.LogInformation("Default font set to {Font}, atlas will be generated on first use", _defaultFont.Name);
         }
     }
     
     public void EnsureFontAtlasGenerated(ITextureContext textureContext)
     {
-        if (_defaultFont == null || _defaultFontAtlas != null)
+        if (_defaultFont == null || _defaultFontAtlas != null || _fontAtlasGenerationFailed)
             return;
 
         if (_defaultFont is not SDL3Font sdlFont)
         {
             _logger.LogWarning("Default font is not an SDL3Font, cannot generate atlas");
+            _fontAtlasGenerationFailed = true;
             return;
         }
 
@@ -111,6 +130,7 @@ internal sealed class SDL3TextRenderer : IDisposable
             _logger.LogError("Failed to generate font atlas");
             _defaultFontAtlas?.Dispose();
             _defaultFontAtlas = null;
+            _fontAtlasGenerationFailed = true;
         }
     }
     
@@ -118,28 +138,51 @@ internal sealed class SDL3TextRenderer : IDisposable
     {
         var parser = options.ParseMarkup 
             ? (options.MarkupParser ?? _defaultMarkupParser)
-            : new PlainTextParser();
+            : _plainTextParser;
 
         return parser.Parse(text, options);
     }
-    
-    public Vector2 MeasureText(string text, float? fontSize = null)
+
+    public Vector2 MeasureText(string text, float? fontSize = null, float lineSpacing = 1.2f)
     {
         if (string.IsNullOrEmpty(text) || _defaultFont == null)
             return Vector2.Zero;
 
+        float scale = fontSize.HasValue ? (fontSize.Value / _defaultFont.Size) : 1.0f;
+
+        if (_defaultFontAtlas != null)
+            return MeasureGlyphSpan(text.AsSpan(), scale, lineSpacing);
+
         if (_defaultFont is not SDL3Font sdlFont)
             return Vector2.Zero;
 
-        if (SDL3.TTF.GetStringSize(sdlFont.Handle, text, 0, out int w, out int h))
+        if (!text.Contains('\n'))
         {
-            float scale = fontSize.HasValue ? (fontSize.Value / _defaultFont.Size) : 1.0f;
-            return new Vector2(w * scale, h * scale);
+            if (SDL3.TTF.GetStringSize(sdlFont.Handle, text, 0, out int w, out int h))
+                return new Vector2(w * scale, h * scale * lineSpacing);
+
+            return Vector2.Zero;
         }
 
-        return Vector2.Zero;
+        var lines = text.Split('\n');
+        float maxWidth = 0;
+        float singleLineHeight = 0;
+
+        foreach (var line in lines)
+        {
+            if (line.Length > 0 && SDL3.TTF.GetStringSize(sdlFont.Handle, line, 0, out int w, out int h))
+            {
+                maxWidth = MathF.Max(maxWidth, w * scale);
+                singleLineHeight = MathF.Max(singleLineHeight, h * scale);
+            }
+        }
+
+        if (singleLineHeight == 0 && SDL3.TTF.GetStringSize(sdlFont.Handle, " ", 0, out _, out int fallbackH))
+            singleLineHeight = fallbackH * scale;
+
+        return new Vector2(maxWidth, singleLineHeight * lineSpacing * lines.Length);
     }
-    
+
     public Vector2 MeasureTextWithOptions(string text, TextRenderOptions options)
     {
         if (string.IsNullOrEmpty(text))
@@ -149,37 +192,116 @@ internal sealed class SDL3TextRenderer : IDisposable
             ? (options.MarkupParser ?? _defaultMarkupParser).Parse(text, options)
             : new[] { new TextRun { Text = text, FontSize = options.FontSize } };
 
-        return MeasureTextRuns(runs);
+        return MeasureTextRuns(runs, options.LineSpacing);
     }
     
-    public Vector2 MeasureTextRuns(IReadOnlyList<TextRun> runs)
+    public Vector2 MeasureTextRuns(IReadOnlyList<TextRun> runs, float lineSpacing = 1.2f)
     {
-        float totalWidth = 0;
-        float totalHeight = 0;
+        if (_defaultFontAtlas != null)
+            return MeasureTextRunsGlyph(runs, lineSpacing);
+
+        float cursorX = 0;
+        float maxWidth = 0;
+        float maxLineHeight = 0;
+        int lineCount = 1;
 
         foreach (var run in runs)
         {
-            var size = MeasureText(run.Text, run.FontSize);
-            totalWidth += size.X;
-            totalHeight = MathF.Max(totalHeight, size.Y);
+            if (string.IsNullOrEmpty(run.Text)) continue;
+
+            var segments = run.Text.Split('\n');
+            for (int i = 0; i < segments.Length; i++)
+            {
+                if (i > 0)
+                {
+                    maxWidth = MathF.Max(maxWidth, cursorX);
+                    cursorX = 0;
+                    lineCount++;
+                }
+
+                if (segments[i].Length > 0)
+                {
+                    var segSize = MeasureText(segments[i], run.FontSize, lineSpacing);
+                    cursorX += segSize.X;
+                    maxLineHeight = MathF.Max(maxLineHeight, segSize.Y);
+                }
+            }
         }
 
-        if (totalHeight == 0)
-            totalHeight = _defaultFontAtlas?.LineHeight ?? 16;
+        maxWidth = MathF.Max(maxWidth, cursorX);
+        if (maxLineHeight == 0)
+            maxLineHeight = 16;
 
-        return new Vector2(totalWidth, totalHeight);
+        return new Vector2(maxWidth, maxLineHeight * lineCount);
     }
 
-    public Vector2 MeasureGlyphSpan(ReadOnlySpan<char> text, float scale = 1.0f)
+    private Vector2 MeasureTextRunsGlyph(IReadOnlyList<TextRun> runs, float lineSpacing)
+    {
+        float cursorX = 0;
+        float maxWidth = 0;
+        float maxLineHeight = 0;
+        int lineCount = 1;
+
+        foreach (var run in runs)
+        {
+            if (string.IsNullOrEmpty(run.Text))
+                continue;
+
+            float scale = _defaultFont != null ? run.FontSize / _defaultFont.Size : 1.0f;
+
+            foreach (char c in run.Text)
+            {
+                if (c == '\n')
+                {
+                    maxWidth = MathF.Max(maxWidth, cursorX);
+                    cursorX = 0;
+                    lineCount++;
+                    continue;
+                }
+                if (_defaultFontAtlas!.TryGetGlyph(c, out var glyph))
+                    cursorX += glyph.Advance * scale;
+            }
+
+            maxLineHeight = MathF.Max(maxLineHeight, _defaultFontAtlas!.LineHeight * scale);
+        }
+
+        maxWidth = MathF.Max(maxWidth, cursorX);
+        if (maxLineHeight == 0)
+            maxLineHeight = _defaultFontAtlas?.LineHeight ?? 16;
+
+        return new Vector2(maxWidth, maxLineHeight * lineSpacing * lineCount);
+    }
+
+    public Vector2 MeasureGlyphSpan(ReadOnlySpan<char> text, float scale = 1.0f, float lineSpacing = 1.2f)
     {
         if (_defaultFontAtlas == null) return Vector2.Zero;
         float width = 0;
+        float maxWidth = 0;
+        int lineCount = 1;
         foreach (char c in text)
         {
+            if (c == '\n')
+            {
+                maxWidth = MathF.Max(maxWidth, width);
+                width = 0;
+                lineCount++;
+                continue;
+            }
             if (_defaultFontAtlas.TryGetGlyph(c, out var glyph))
                 width += glyph.Advance * scale;
         }
-        return new Vector2(width, _defaultFontAtlas.LineHeight * scale);
+        maxWidth = MathF.Max(maxWidth, width);
+        return new Vector2(maxWidth, _defaultFontAtlas.LineHeight * scale * lineSpacing * lineCount);
+    }
+
+    private void DisposeOwnedFont()
+    {
+        if (_ownsDefaultFont)
+        {
+            _defaultFont?.Dispose();
+        }
+        _defaultFont = null;
+        _ownsDefaultFont = false;
     }
 
     public void Dispose()
@@ -188,6 +310,8 @@ internal sealed class SDL3TextRenderer : IDisposable
         
         _defaultFontAtlas?.Dispose();
         _defaultFontAtlas = null;
+
+        DisposeOwnedFont();
         
         _disposed = true;
     }

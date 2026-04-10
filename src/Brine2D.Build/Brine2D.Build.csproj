@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!--
@@ -19,7 +19,7 @@
     <NoWarn>$(NoWarn);NU5128</NoWarn>
 
     <PackageId>Brine2D.Build</PackageId>
-    <Version>0.9.0-beta</Version>
+    <Version>0.9.5-beta</Version>
     <Authors>CrazyPickle Studios</Authors>
     <Description>
       MSBuild tooling for Brine2D. Automatically generates strongly-typed C# asset

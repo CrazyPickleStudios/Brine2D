@@ -67,6 +67,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
     private bool _windowClaimed;
     private bool _zeroHandleWarningLoggedThisFrame;
     private bool _customFontWarningLogged;
+    private bool _boldItalicWarningLogged;
 
     private int _viewportWidth;
     private int _viewportHeight;
@@ -111,6 +112,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
     public nint Window => _window;
     public nint Device => _device;
     internal GpuDeviceHandle? GpuDevice => _gpuDeviceHandle;
+    internal SDL3.SDL.GPUTextureFormat SwapchainFormat => _swapchainFormat;
     public bool IsInitialized { get; private set; }
 
     public ICamera? Camera
@@ -351,7 +353,9 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         bool effectsApplied = _renderTargetManager.ApplyPostProcessing(
             this,
             _frameManager.SwapchainTexture,
-            _frameManager.CommandBuffer);
+            _frameManager.CommandBuffer,
+            (int)_frameManager.SwapchainWidth,
+            (int)_frameManager.SwapchainHeight);
 
         if (!effectsApplied && _renderTargetManager.MainRenderTarget != null)
         {

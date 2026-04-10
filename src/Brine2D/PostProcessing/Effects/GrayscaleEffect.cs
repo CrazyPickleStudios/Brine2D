@@ -15,11 +15,12 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
     private readonly ILogger<GrayscaleEffect>? _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly GpuDeviceHandle _deviceHandle;
+    private readonly SDL3.SDL.GPUTextureFormat _colorTargetFormat;
     private int _width;
     private int _height;
     
-    private nint _vertexShader;
-    private nint _fragmentShader;
+    private SDL3Shader? _vertexShader;
+    private SDL3Shader? _fragmentShader;
     private nint _pipeline;
     private nint _sampler;
     private int _disposed;
@@ -29,14 +30,34 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
     public string Name => "Grayscale";
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Grayscale intensity (0.0 = original color, 1.0 = full grayscale).
+    /// Requires the grayscale fragment shader to declare a uniform buffer at slot 0.
+    /// </summary>
     public float Intensity { get; set; } = 1.0f;
 
-    internal GrayscaleEffect(GpuDeviceHandle deviceHandle, int width, int height, ILoggerFactory loggerFactory, ILogger<GrayscaleEffect>? logger = null)
+    [StructLayout(LayoutKind.Sequential, Size = 16)]
+    private struct GrayscaleParams
+    {
+        public float Intensity;   // 4 bytes
+        public float Padding1;    // 4 bytes
+        public float Padding2;    // 4 bytes
+        public float Padding3;    // 4 bytes (16 bytes total)
+    }
+
+    internal GrayscaleEffect(
+        GpuDeviceHandle deviceHandle,
+        int width,
+        int height,
+        SDL3.SDL.GPUTextureFormat colorTargetFormat,
+        ILoggerFactory loggerFactory,
+        ILogger<GrayscaleEffect>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(deviceHandle);
         _deviceHandle = deviceHandle;
         _width = width;
         _height = height;
+        _colorTargetFormat = colorTargetFormat;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
@@ -47,12 +68,44 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
 
         _logger?.LogInformation("Initializing Grayscale effect...");
 
-        CreateSampler();
-        CreateShaders();
-        CreatePipeline();
+        try
+        {
+            CreateSampler();
+            CreateShaders();
+            CreatePipeline();
 
-        _initialized = true;
-        _logger?.LogInformation("Grayscale effect ready");
+            _initialized = true;
+            _logger?.LogInformation("Grayscale effect ready");
+        }
+        catch
+        {
+            ReleasePartialResources();
+            throw;
+        }
+    }
+
+    private void ReleasePartialResources()
+    {
+        var device = _deviceHandle.Handle;
+        if (device == nint.Zero) return;
+
+        if (_pipeline != nint.Zero)
+        {
+            SDL3.SDL.ReleaseGPUGraphicsPipeline(device, _pipeline);
+            _pipeline = nint.Zero;
+        }
+
+        _fragmentShader?.Dispose();
+        _fragmentShader = null;
+
+        _vertexShader?.Dispose();
+        _vertexShader = null;
+
+        if (_sampler != nint.Zero)
+        {
+            SDL3.SDL.ReleaseGPUSampler(device, _sampler);
+            _sampler = nint.Zero;
+        }
     }
 
     private void CreateSampler()
@@ -82,40 +135,36 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
     private void CreateShaders()
     {
         var device = _deviceHandle.Handle;
-        var shaderLoader = new SDL3ShaderLoader(
-            _loggerFactory.CreateLogger<SDL3ShaderLoader>(),
-            _loggerFactory,
-            device);
 
         try
         {
             _logger?.LogInformation("Loading pre-compiled grayscale shaders...");
             
             var driverName = SDL3.SDL.GetGPUDeviceDriver(device);
-            var targetFormat = GetTargetFormatFromDriver(driverName);
-            var shaderFormat = GetShaderFormat(targetFormat);
+            var targetFormat = ShaderFormatHelper.GetTargetFromDriver(driverName);
+            var shaderFormat = ShaderFormatHelper.GetShaderFormat(targetFormat);
 
             byte[]? vertexBytecode = null;
             byte[]? fragmentBytecode = null;
 
             switch (targetFormat)
             {
-                case GraphicsShaderTarget.SPIRV:
+                case ShaderFormatHelper.GraphicsShaderTarget.SPIRV:
                     vertexBytecode = GrayscaleShaders.LoadVertexShaderSPIRV();
                     fragmentBytecode = GrayscaleShaders.LoadFragmentShaderSPIRV();
                     break;
 
-                case GraphicsShaderTarget.DXIL:
+                case ShaderFormatHelper.GraphicsShaderTarget.DXIL:
                     vertexBytecode = GrayscaleShaders.LoadVertexShaderDXIL();
                     fragmentBytecode = GrayscaleShaders.LoadFragmentShaderDXIL();
                     break;
 
-                case GraphicsShaderTarget.DXBC:
+                case ShaderFormatHelper.GraphicsShaderTarget.DXBC:
                     vertexBytecode = GrayscaleShaders.LoadVertexShaderDXBC();
                     fragmentBytecode = GrayscaleShaders.LoadFragmentShaderDXBC();
                     break;
 
-                case GraphicsShaderTarget.MSL:
+                case ShaderFormatHelper.GraphicsShaderTarget.MSL:
                     vertexBytecode = GrayscaleShaders.LoadVertexShaderMSL();
                     fragmentBytecode = GrayscaleShaders.LoadFragmentShaderMSL();
                     break;
@@ -128,13 +177,10 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
                     $"Shaders may not have been compiled at build time.");
             }
 
-            var vertexShaderObj = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
-            var fragmentShaderObj = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
+            _vertexShader = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
+            _fragmentShader = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
 
-            _vertexShader = (vertexShaderObj as SDL3Shader)?.Handle ?? nint.Zero;
-            _fragmentShader = (fragmentShaderObj as SDL3Shader)?.Handle ?? nint.Zero;
-
-            if (_vertexShader == nint.Zero || _fragmentShader == nint.Zero)
+            if (_vertexShader.Handle == nint.Zero || _fragmentShader.Handle == nint.Zero)
             {
                 throw new InvalidOperationException("Failed to create grayscale shaders from bytecode");
             }
@@ -149,48 +195,19 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
         }
     }
 
-    private GraphicsShaderTarget GetTargetFormatFromDriver(string driverName)
-    {
-        return driverName.ToLowerInvariant() switch
-        {
-            "vulkan" => GraphicsShaderTarget.SPIRV,
-            "direct3d12" or "d3d12" => GraphicsShaderTarget.DXIL,
-            "direct3d11" or "d3d11" => GraphicsShaderTarget.DXBC,
-            "metal" => GraphicsShaderTarget.MSL,
-            _ => GraphicsShaderTarget.SPIRV
-        };
-    }
-
-    private SDL3.SDL.GPUShaderFormat GetShaderFormat(GraphicsShaderTarget target)
-    {
-        return target switch
-        {
-            GraphicsShaderTarget.SPIRV => SDL3.SDL.GPUShaderFormat.SPIRV,
-            GraphicsShaderTarget.DXIL => SDL3.SDL.GPUShaderFormat.DXIL,
-            GraphicsShaderTarget.DXBC => SDL3.SDL.GPUShaderFormat.DXBC,
-            GraphicsShaderTarget.MSL => SDL3.SDL.GPUShaderFormat.MSL,
-            _ => SDL3.SDL.GPUShaderFormat.SPIRV
-        };
-    }
-
-    private IShader CreateShaderFromBytecode(ShaderStage stage, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format)
+    private SDL3Shader CreateShaderFromBytecode(ShaderStage stage, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format)
     {
         var shader = new SDL3Shader($"grayscale_{stage}", stage, _loggerFactory.CreateLogger<SDL3Shader>());
-        
-        if (!shader.Compile(_deviceHandle.Handle, bytecode, entryPoint, format))
+
+        uint numUniformBuffers = stage == ShaderStage.Fragment ? 1u : 0u;
+
+        if (!shader.Compile(_deviceHandle.Handle, bytecode, entryPoint, format, numUniformBuffers))
         {
+            shader.Dispose();
             throw new InvalidOperationException($"Failed to compile grayscale {stage} shader");
         }
         
         return shader;
-    }
-
-    private enum GraphicsShaderTarget
-    {
-        SPIRV,
-        DXIL,
-        DXBC,
-        MSL
     }
 
     private void CreatePipeline()
@@ -199,7 +216,7 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
         {
             new()
             {
-                Format = SDL3.SDL.GPUTextureFormat.B8G8R8A8Unorm,
+                Format = _colorTargetFormat,
                 BlendState = new SDL3.SDL.GPUColorTargetBlendState
                 {
                     EnableBlend = false,
@@ -217,8 +234,8 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
         {
             var pipelineCreateInfo = new SDL3.SDL.GPUGraphicsPipelineCreateInfo
             {
-                VertexShader = _vertexShader,
-                FragmentShader = _fragmentShader,
+                VertexShader = _vertexShader!.Handle,
+                FragmentShader = _fragmentShader!.Handle,
                 VertexInputState = new SDL3.SDL.GPUVertexInputState
                 {
                     VertexBufferDescriptions = IntPtr.Zero,
@@ -264,7 +281,7 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
                 throw new InvalidOperationException($"Failed to create graphics pipeline: {error}");
             }
 
-            _logger?.LogDebug("Grayscale pipeline created");
+            _logger?.LogDebug("Grayscale pipeline created (format: {Format})", _colorTargetFormat);
         }
         finally
         {
@@ -286,16 +303,24 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
             return;
         }
 
+        if (!Enabled) return;
+
         EnsureInitialized();
 
         try
         {
-            FullScreenQuad.RenderWithShader(
+            var grayscaleParams = new GrayscaleParams
+            {
+                Intensity = Intensity
+            };
+
+            FullScreenQuad.RenderWithShaderAndUniforms(
                 commandBuffer,
                 sourceTexture,
                 targetTexture,
                 _pipeline,
                 _sampler,
+                grayscaleParams,
                 _width,
                 _height,
                 _logger);
@@ -327,17 +352,11 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
             _pipeline = nint.Zero;
         }
 
-        if (_fragmentShader != nint.Zero)
-        {
-            SDL3.SDL.ReleaseGPUShader(device, _fragmentShader);
-            _fragmentShader = nint.Zero;
-        }
+        _fragmentShader?.Dispose();
+        _fragmentShader = null;
 
-        if (_vertexShader != nint.Zero)
-        {
-            SDL3.SDL.ReleaseGPUShader(device, _vertexShader);
-            _vertexShader = nint.Zero;
-        }
+        _vertexShader?.Dispose();
+        _vertexShader = null;
 
         _logger?.LogDebug("Grayscale effect disposed");
     }

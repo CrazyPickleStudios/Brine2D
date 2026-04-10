@@ -172,7 +172,6 @@ public class UIDemoScene : DemoSceneBase
         
         _healthBar = new UIProgressBar(new Vector2(30, buttonY + 25), new Vector2(220, 25))
         {
-            Label = "HP",
             FillColor = new Color(0, 200, 0),
             Value = 0.65f,
             Tooltip = new UITooltip("Player health: 65%")

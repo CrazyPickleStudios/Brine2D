@@ -29,6 +29,7 @@ public class SDL3TextureLoader : ITextureLoader
         TextureScaleMode scaleMode = TextureScaleMode.Linear,
         CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))
@@ -42,17 +43,29 @@ public class SDL3TextureLoader : ITextureLoader
             () => DecodeImageData(fileData, path),
             cancellationToken);
 
-        ITexture texture = null!;
-        _mainThreadDispatcher.RunOnMainThread(() =>
+        bool surfaceConsumed = false;
+        try
         {
-            texture = CreateTextureFromSurface(surfaceInfo, scaleMode, path);
-        }, waitForCompletion: true);
+            ITexture texture = null!;
+            _mainThreadDispatcher.RunOnMainThread(() =>
+            {
+                surfaceConsumed = true;
+                texture = CreateTextureFromSurface(surfaceInfo, scaleMode, path);
+            }, waitForCompletion: true);
 
-        return texture;
+            return texture;
+        }
+        catch
+        {
+            if (!surfaceConsumed)
+                SDL3.SDL.DestroySurface(surfaceInfo.Surface);
+            throw;
+        }
     }
 
     public ITexture LoadTexture(string path, TextureScaleMode scaleMode = TextureScaleMode.Linear)
     {
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))
@@ -78,12 +91,16 @@ public class SDL3TextureLoader : ITextureLoader
                 throw new InvalidOperationException($"Invalid surface dimensions: {width}x{height}");
             }
 
-            var texture = _textureContext.CreateTextureFromSurface(surface, width, height, scaleMode);
-
-            lock (_texturesLock)
+            ITexture texture = null!;
+            _mainThreadDispatcher.RunOnMainThread(() =>
             {
-                _loadedTextures.Add(texture);
-            }
+                texture = _textureContext.CreateTextureFromSurface(surface, width, height, scaleMode);
+
+                lock (_texturesLock)
+                {
+                    _loadedTextures.Add(texture);
+                }
+            }, waitForCompletion: true);
 
             _logger.LogDebug("Texture loaded: {Path} ({Width}x{Height})", path, width, height);
 
@@ -97,6 +114,8 @@ public class SDL3TextureLoader : ITextureLoader
 
     public ITexture CreateTexture(int width, int height, TextureScaleMode scaleMode = TextureScaleMode.Linear)
     {
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
+
         if (width <= 0 || height <= 0)
             throw new ArgumentException("Width and height must be positive");
 

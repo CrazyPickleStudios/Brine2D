@@ -14,12 +14,12 @@ public class SDL3Font : IFont
 
     public string Name { get; }
     public int Size { get; }
-    public bool IsLoaded => _fontHandle != nint.Zero && _disposed == 0;
+    public bool IsLoaded => Volatile.Read(ref _fontHandle) != nint.Zero && _disposed == 0;
 
     /// <summary>
     /// Internal SDL font handle.
     /// </summary>
-    internal nint Handle => _fontHandle;
+    internal nint Handle => Volatile.Read(ref _fontHandle);
 
     internal SDL3Font(string name, int size, nint fontHandle, ILogger<SDL3Font> logger)
     {
@@ -33,10 +33,10 @@ public class SDL3Font : IFont
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
 
-        if (_fontHandle != nint.Zero)
+        var handle = Interlocked.Exchange(ref _fontHandle, nint.Zero);
+        if (handle != nint.Zero)
         {
-            SDL3.TTF.CloseFont(_fontHandle);
-            _fontHandle = nint.Zero;
+            SDL3.TTF.CloseFont(handle);
             _logger.LogDebug("Font unloaded: {Name} ({Size}pt)", Name, Size);
         }
     }

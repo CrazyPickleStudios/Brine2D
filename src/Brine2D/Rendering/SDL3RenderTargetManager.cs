@@ -26,7 +26,7 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     
     private int _disposed;
 
-    public bool UsePostProcessing { get; }
+    public bool UsePostProcessing => _postProcessingOptions?.Enabled == true && _postProcessPipeline != null;
     public IRenderTarget? CurrentRenderTarget => _currentRenderTarget;
     public RenderTarget? MainRenderTarget => _mainRenderTarget;
     public RenderTarget? PingPongTarget => _pingPongTarget;
@@ -47,8 +47,6 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _postProcessingOptions = postProcessingOptions;
         _postProcessPipeline = postProcessPipeline;
-        
-        UsePostProcessing = _postProcessingOptions?.Enabled == true && _postProcessPipeline != null;
     }
     
     public void Initialize(GpuDeviceHandle deviceHandle, SDL3.SDL.GPUTextureFormat defaultFormat)
@@ -76,7 +74,10 @@ internal sealed class SDL3RenderTargetManager : IDisposable
                 width <= 0 ? nameof(width) : nameof(height),
                 "Render target dimensions must be positive");
         }
-        
+
+        if (_deviceHandle == null)
+            throw new InvalidOperationException("Render target manager must be initialized before creating render targets.");
+
         if (width > 16384 || height > 16384)
         {
             _logger.LogWarning("Large render target requested: {Width}x{Height} - may fail on some GPUs", 
@@ -84,7 +85,7 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         }
         
         var renderTarget = new RenderTarget(
-            _deviceHandle!, 
+            _deviceHandle, 
             width, 
             height, 
             _defaultFormat,
@@ -149,6 +150,8 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         _pingPongTarget?.Dispose();
         _pingPongTarget = newPingPong;
 
+        _postProcessPipeline?.SetEffectDimensions(width, height);
+
         _logger.LogInformation("Created render targets for post-processing: {Width}x{Height}",
             width, height);
     }
@@ -156,7 +159,9 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     public bool ApplyPostProcessing(
         IRenderer renderer, 
         nint swapchainTexture,
-        nint commandBuffer)
+        nint commandBuffer,
+        int swapchainWidth,
+        int swapchainHeight)
     {
         if (!UsePostProcessing || _mainRenderTarget == null || _pingPongTarget == null || _postProcessPipeline == null)
             return false;
@@ -166,7 +171,9 @@ internal sealed class SDL3RenderTargetManager : IDisposable
             _mainRenderTarget.TextureHandle, 
             swapchainTexture, 
             commandBuffer, 
-            _pingPongTarget);
+            _pingPongTarget,
+            swapchainWidth,
+            swapchainHeight);
     }
     
     public void Dispose()

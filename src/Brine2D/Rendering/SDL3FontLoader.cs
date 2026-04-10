@@ -44,8 +44,9 @@ public class SDL3FontLoader : IFontLoader
         return await Task.Run(() => LoadFont(path, size), cancellationToken);
     }
 
-    private SDL3Font LoadFont(string path, int size)
+    public IFont LoadFont(string path, int size)
     {
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         if (!File.Exists(path))

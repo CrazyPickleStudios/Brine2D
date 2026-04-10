@@ -9,6 +9,9 @@ internal sealed class HeadlessFontLoader : IFontLoader
     public Task<IFont> LoadFontAsync(string path, int size, CancellationToken cancellationToken = default)
         => Task.FromResult<IFont>(new HeadlessFont(path, size));
 
+    public IFont LoadFont(string path, int size)
+        => new HeadlessFont(path, size);
+
     public void UnloadFont(IFont font) => font?.Dispose();
 
     public void Dispose() { }

@@ -73,11 +73,13 @@ public readonly struct TextRenderOptions
     
     /// <summary>
     /// Outline thickness in pixels (0 = no outline).
+    /// Not yet implemented — reserved for future use.
     /// </summary>
     public float OutlineThickness { get; init; } = 0f;
     
     /// <summary>
-    /// Outline color (only used if OutlineThickness > 0).
+    /// Outline color (only used if OutlineThickness &gt; 0).
+    /// Not yet implemented — reserved for future use.
     /// </summary>
     public Color OutlineColor { get; init; } = Color.Black;
 }

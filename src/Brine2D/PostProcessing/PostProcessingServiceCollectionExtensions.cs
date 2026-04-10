@@ -22,8 +22,18 @@ public static class PostProcessingServiceCollectionExtensions
 
         if (configure != null)
         {
-            services.Configure(configure);
+            services.AddSingleton<Action<PostProcessingOptions>>(configure);
         }
+
+        services.TryAddSingleton(sp =>
+        {
+            var options = new PostProcessingOptions();
+            foreach (var action in sp.GetServices<Action<PostProcessingOptions>>())
+            {
+                action(options);
+            }
+            return options;
+        });
 
         services.TryAddSingleton<SDL3PostProcessPipeline>();
         services.TryAddSingleton<PostProcessPipeline>(sp => sp.GetRequiredService<SDL3PostProcessPipeline>());
@@ -40,12 +50,7 @@ public static class PostProcessingServiceCollectionExtensions
         services.AddSingleton<IPostProcessEffect>(provider =>
         {
             var logger = provider.GetService<ILogger<PassThroughEffect>>();
-            var effect = new PassThroughEffect(width, height, logger);
-            
-            var pipeline = provider.GetService<SDL3PostProcessPipeline>();
-            pipeline?.AddEffect(effect);
-            
-            return effect;
+            return new PassThroughEffect(width, height, logger);
         });
 
         return services;
@@ -57,7 +62,7 @@ public static class PostProcessingServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddGrayscaleEffect(this IServiceCollection services, int width = 1280, int height = 720, float intensity = 1.0f)
     {
-        services.TryAddSingleton<GrayscaleEffect>(provider =>
+        services.AddSingleton<IPostProcessEffect>(provider =>
         {
             var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
             var logger = provider.GetService<ILogger<GrayscaleEffect>>();
@@ -68,11 +73,13 @@ public static class PostProcessingServiceCollectionExtensions
                 throw new InvalidOperationException("Grayscale effect requires SDL3GPURenderer");
             }
 
-            return new GrayscaleEffect(gpuRenderer.GpuDevice!, width, height, loggerFactory, logger)
+            var format = ResolveColorTargetFormat(provider);
+
+            return new GrayscaleEffect(gpuRenderer.GpuDevice!, width, height, format, loggerFactory, logger)
             {
                 Intensity = intensity
             };
-    });
+        });
 
         return services;
     }
@@ -94,12 +101,27 @@ public static class PostProcessingServiceCollectionExtensions
                 throw new InvalidOperationException("Blur effect requires SDL3GPURenderer");
             }
 
-            return new BlurEffect(gpuRenderer.GpuDevice!, width, height, loggerFactory, logger)
+            var format = ResolveColorTargetFormat(provider);
+
+            return new BlurEffect(gpuRenderer.GpuDevice!, width, height, format, loggerFactory, logger)
             {
                 BlurRadius = blurRadius
             };
         });
 
         return services;
+    }
+
+    private static SDL3.SDL.GPUTextureFormat ResolveColorTargetFormat(IServiceProvider provider)
+    {
+        var options = provider.GetService<PostProcessingOptions>();
+        if (options?.RenderTargetFormat is { } explicitFormat)
+            return explicitFormat;
+
+        var renderer = provider.GetRequiredService<IRenderer>();
+        if (renderer is SDL3Renderer gpuRenderer)
+            return gpuRenderer.SwapchainFormat;
+
+        return SDL3.SDL.GPUTextureFormat.B8G8R8A8Unorm;
     }
 }

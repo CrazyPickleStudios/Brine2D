@@ -28,14 +28,19 @@ public class SDL3Shader : IShader
 
     /// <summary>
     /// Compiles the shader from bytecode.
+    /// When <paramref name="numUniformBuffers"/> is <see langword="null"/>, vertex shaders
+    /// default to 1 uniform buffer and fragment shaders default to 0.
+    /// Pass an explicit value (including 0) to override the default.
     /// </summary>
-    public bool Compile(nint device, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format = SDL3.SDL.GPUShaderFormat.SPIRV, uint numUniformBuffers = 0)
+    public bool Compile(nint device, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format = SDL3.SDL.GPUShaderFormat.SPIRV, uint? numUniformBuffers = null)
     {
         if (IsCompiled)
         {
             _logger.LogWarning("Shader {Name} is already compiled", Name);
             return true;
         }
+
+        var uniformBufferCount = numUniformBuffers ?? (Stage == ShaderStage.Vertex ? 1u : 0u);
 
         var createInfo = new SDL3.SDL.GPUShaderCreateInfo
         {
@@ -47,11 +52,10 @@ public class SDL3Shader : IShader
                 ? SDL3.SDL.GPUShaderStage.Vertex 
                 : SDL3.SDL.GPUShaderStage.Fragment,
             
-            // Use passed value instead of hardcoded logic
             NumSamplers = Stage == ShaderStage.Fragment ? 1u : 0u,
             NumStorageTextures = 0,
             NumStorageBuffers = 0,
-            NumUniformBuffers = numUniformBuffers > 0 ? numUniformBuffers : (Stage == ShaderStage.Vertex ? 1u : 0u)
+            NumUniformBuffers = uniformBufferCount
         };
 
         _device = device;
@@ -73,7 +77,6 @@ public class SDL3Shader : IShader
 
     public void SetUniform(string name, float value)
     {
-        // Uniforms in SDL3 GPU are set via uniform buffers, not individual calls
         _logger.LogDebug("SetUniform {Name} = {Value}", name, value);
     }
 

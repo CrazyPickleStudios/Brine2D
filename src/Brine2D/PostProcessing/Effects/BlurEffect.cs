@@ -15,11 +15,12 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
     private readonly ILogger<BlurEffect>? _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly GpuDeviceHandle _deviceHandle;
+    private readonly SDL3.SDL.GPUTextureFormat _colorTargetFormat;
     private int _width;
     private int _height;
 
-    private nint _vertexShader;
-    private nint _fragmentShader;
+    private SDL3Shader? _vertexShader;
+    private SDL3Shader? _fragmentShader;
     private nint _pipeline;
     private nint _sampler;
     private RenderTarget? _intermediateTarget;
@@ -44,12 +45,19 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
         public float Padding;      // 4 bytes (16 bytes total)
     }
 
-    internal BlurEffect(GpuDeviceHandle deviceHandle, int width, int height, ILoggerFactory loggerFactory, ILogger<BlurEffect>? logger = null)
+    internal BlurEffect(
+        GpuDeviceHandle deviceHandle,
+        int width,
+        int height,
+        SDL3.SDL.GPUTextureFormat colorTargetFormat,
+        ILoggerFactory loggerFactory,
+        ILogger<BlurEffect>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(deviceHandle);
         _deviceHandle = deviceHandle;
         _width = width;
         _height = height;
+        _colorTargetFormat = colorTargetFormat;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
@@ -60,13 +68,48 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
 
         _logger?.LogInformation("Initializing Blur effect with dynamic uniforms (space3)");
 
-        CreateSampler();
-        CreateShaders();
-        CreatePipeline();
-        CreateIntermediateTarget();
+        try
+        {
+            CreateSampler();
+            CreateShaders();
+            CreatePipeline();
+            CreateIntermediateTarget();
 
-        _initialized = true;
-        _logger?.LogInformation("Blur effect initialized successfully");
+            _initialized = true;
+            _logger?.LogInformation("Blur effect initialized successfully");
+        }
+        catch
+        {
+            ReleasePartialResources();
+            throw;
+        }
+    }
+
+    private void ReleasePartialResources()
+    {
+        var device = _deviceHandle.Handle;
+        if (device == nint.Zero) return;
+
+        _intermediateTarget?.Dispose();
+        _intermediateTarget = null;
+
+        if (_pipeline != nint.Zero)
+        {
+            SDL3.SDL.ReleaseGPUGraphicsPipeline(device, _pipeline);
+            _pipeline = nint.Zero;
+        }
+
+        _fragmentShader?.Dispose();
+        _fragmentShader = null;
+
+        _vertexShader?.Dispose();
+        _vertexShader = null;
+
+        if (_sampler != nint.Zero)
+        {
+            SDL3.SDL.ReleaseGPUSampler(device, _sampler);
+            _sampler = nint.Zero;
+        }
     }
 
     private void CreateSampler()
@@ -97,27 +140,27 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
 
             var device = _deviceHandle.Handle;
             var driverName = SDL3.SDL.GetGPUDeviceDriver(device);
-            var targetFormat = GetTargetFormatFromDriver(driverName);
-            var shaderFormat = GetShaderFormat(targetFormat);
+            var targetFormat = ShaderFormatHelper.GetTargetFromDriver(driverName);
+            var shaderFormat = ShaderFormatHelper.GetShaderFormat(targetFormat);
 
             byte[]? vertexBytecode = null;
             byte[]? fragmentBytecode = null;
 
             switch (targetFormat)
             {
-                case GraphicsShaderTarget.SPIRV:
+                case ShaderFormatHelper.GraphicsShaderTarget.SPIRV:
                     vertexBytecode = BlurShaders.LoadVertexShaderSPIRV();
                     fragmentBytecode = BlurShaders.LoadFragmentShaderSPIRV();
                     break;
-                case GraphicsShaderTarget.DXIL:
+                case ShaderFormatHelper.GraphicsShaderTarget.DXIL:
                     vertexBytecode = BlurShaders.LoadVertexShaderDXIL();
                     fragmentBytecode = BlurShaders.LoadFragmentShaderDXIL();
                     break;
-                case GraphicsShaderTarget.DXBC:
+                case ShaderFormatHelper.GraphicsShaderTarget.DXBC:
                     vertexBytecode = BlurShaders.LoadVertexShaderDXBC();
                     fragmentBytecode = BlurShaders.LoadFragmentShaderDXBC();
                     break;
-                case GraphicsShaderTarget.MSL:
+                case ShaderFormatHelper.GraphicsShaderTarget.MSL:
                     vertexBytecode = BlurShaders.LoadVertexShaderMSL();
                     fragmentBytecode = BlurShaders.LoadFragmentShaderMSL();
                     break;
@@ -128,13 +171,10 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
                 throw new InvalidOperationException($"Pre-compiled blur shaders not found for {targetFormat}");
             }
 
-            var vertexShaderObj = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
-            var fragmentShaderObj = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
+            _vertexShader = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
+            _fragmentShader = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
 
-            _vertexShader = (vertexShaderObj as SDL3Shader)?.Handle ?? nint.Zero;
-            _fragmentShader = (fragmentShaderObj as SDL3Shader)?.Handle ?? nint.Zero;
-
-            if (_vertexShader == nint.Zero || _fragmentShader == nint.Zero)
+            if (_vertexShader.Handle == nint.Zero || _fragmentShader.Handle == nint.Zero)
             {
                 throw new InvalidOperationException("Failed to create blur shaders");
             }
@@ -149,7 +189,7 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
         }
     }
 
-    private IShader CreateShaderFromBytecode(ShaderStage stage, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format)
+    private SDL3Shader CreateShaderFromBytecode(ShaderStage stage, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format)
     {
         var shader = new SDL3Shader($"blur_{stage}", stage, _loggerFactory.CreateLogger<SDL3Shader>());
         
@@ -157,6 +197,7 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
         
         if (!shader.Compile(_deviceHandle.Handle, bytecode, entryPoint, format, numUniformBuffers))
         {
+            shader.Dispose();
             throw new InvalidOperationException($"Failed to compile blur {stage} shader");
         }
         
@@ -169,7 +210,7 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
         {
             new()
             {
-                Format = SDL3.SDL.GPUTextureFormat.B8G8R8A8Unorm,
+                Format = _colorTargetFormat,
                 BlendState = new SDL3.SDL.GPUColorTargetBlendState
                 {
                     EnableBlend = false,
@@ -187,8 +228,8 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
         {
             var pipelineCreateInfo = new SDL3.SDL.GPUGraphicsPipelineCreateInfo
             {
-                VertexShader = _vertexShader,
-                FragmentShader = _fragmentShader,
+                VertexShader = _vertexShader!.Handle,
+                FragmentShader = _fragmentShader!.Handle,
                 VertexInputState = new SDL3.SDL.GPUVertexInputState
                 {
                     VertexBufferDescriptions = IntPtr.Zero,
@@ -244,40 +285,8 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
             _deviceHandle,
             _width,
             _height,
-            SDL3.SDL.GPUTextureFormat.B8G8R8A8Unorm,
+            _colorTargetFormat,
             _loggerFactory.CreateLogger<RenderTarget>());
-    }
-
-    private GraphicsShaderTarget GetTargetFormatFromDriver(string driverName)
-    {
-        return driverName.ToLowerInvariant() switch
-        {
-            "vulkan" => GraphicsShaderTarget.SPIRV,
-            "direct3d12" or "d3d12" => GraphicsShaderTarget.DXIL,
-            "direct3d11" or "d3d11" => GraphicsShaderTarget.DXBC,
-            "metal" => GraphicsShaderTarget.MSL,
-            _ => GraphicsShaderTarget.SPIRV
-        };
-    }
-
-    private SDL3.SDL.GPUShaderFormat GetShaderFormat(GraphicsShaderTarget target)
-    {
-        return target switch
-        {
-            GraphicsShaderTarget.SPIRV => SDL3.SDL.GPUShaderFormat.SPIRV,
-            GraphicsShaderTarget.DXIL => SDL3.SDL.GPUShaderFormat.DXIL,
-            GraphicsShaderTarget.DXBC => SDL3.SDL.GPUShaderFormat.DXBC,
-            GraphicsShaderTarget.MSL => SDL3.SDL.GPUShaderFormat.MSL,
-            _ => SDL3.SDL.GPUShaderFormat.SPIRV
-        };
-    }
-
-    private enum GraphicsShaderTarget
-    {
-        SPIRV,
-        DXIL,
-        DXBC,
-        MSL
     }
 
     public void SetDimensions(int width, int height)
@@ -287,13 +296,20 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
 
         if (_initialized)
         {
-            _intermediateTarget?.Dispose();
+            var old = _intermediateTarget;
             CreateIntermediateTarget();
+            old?.Dispose();
         }
     }
 
     public void Apply(IRenderer renderer, nint sourceTexture, nint targetTexture, nint commandBuffer)
     {
+        if (sourceTexture == nint.Zero || targetTexture == nint.Zero || commandBuffer == nint.Zero)
+        {
+            _logger?.LogWarning("Invalid handles passed to {EffectName} - skipping", Name);
+            return;
+        }
+
         if (!Enabled) return;
 
         EnsureInitialized();
@@ -363,16 +379,10 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
             _pipeline = nint.Zero;
         }
 
-        if (_fragmentShader != nint.Zero)
-        {
-            SDL3.SDL.ReleaseGPUShader(device, _fragmentShader);
-            _fragmentShader = nint.Zero;
-        }
+        _fragmentShader?.Dispose();
+        _fragmentShader = null;
 
-        if (_vertexShader != nint.Zero)
-        {
-            SDL3.SDL.ReleaseGPUShader(device, _vertexShader);
-            _vertexShader = nint.Zero;
-        }
+        _vertexShader?.Dispose();
+        _vertexShader = null;
     }
 }

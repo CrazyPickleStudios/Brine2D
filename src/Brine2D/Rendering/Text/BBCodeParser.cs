@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Brine2D.Core;
 using Microsoft.Extensions.Logging;
@@ -35,7 +36,6 @@ public sealed class BBCodeParser : IMarkupParser
         
         if (!options.ParseMarkup)
         {
-            // Treat as plain text
             return new[]
             {
                 new TextRun
@@ -51,7 +51,7 @@ public sealed class BBCodeParser : IMarkupParser
         }
         
         var runs = new List<TextRun>();
-        var styleStack = new Stack<StyleState>();
+        var styleStack = new Stack<StackEntry>();
         var currentState = new StyleState
         {
             Color = options.Color,
@@ -68,7 +68,6 @@ public sealed class BBCodeParser : IMarkupParser
         {
             if (markup[index] == '[')
             {
-                // Flush current text before processing tag
                 if (textBuilder.Length > 0)
                 {
                     runs.Add(CreateRun(textBuilder.ToString(), currentState, sourceIndex));
@@ -77,19 +76,17 @@ public sealed class BBCodeParser : IMarkupParser
                 
                 sourceIndex = index;
                 
-                // Try to parse tag
                 if (TryParseTag(markup, ref index, ref currentState, styleStack))
                 {
+                    sourceIndex = index;
                     continue;
                 }
             }
             
-            // Regular character or unparseable '['
             textBuilder.Append(markup[index]);
             index++;
         }
         
-        // Flush remaining text
         if (textBuilder.Length > 0)
         {
             runs.Add(CreateRun(textBuilder.ToString(), currentState, sourceIndex));
@@ -98,93 +95,98 @@ public sealed class BBCodeParser : IMarkupParser
         return runs;
     }
     
-    private bool TryParseTag(string markup, ref int index, ref StyleState state, Stack<StyleState> stack)
+    private bool TryParseTag(string markup, ref int index, ref StyleState state, Stack<StackEntry> stack)
     {
         int tagStart = index;
         int tagEnd = markup.IndexOf(']', tagStart);
         
         if (tagEnd == -1)
-        {
-            // No closing bracket - treat as literal '['
             return false;
-        }
         
         string tag = markup.Substring(tagStart + 1, tagEnd - tagStart - 1);
-        index = tagEnd + 1;
         
-        // Closing tags
         if (tag.StartsWith('/'))
         {
-            string tagName = tag.Substring(1).ToLowerInvariant();
+            string tagName = tag[1..].ToLowerInvariant();
             
-            if (stack.Count > 0 && ShouldPopStack(tagName))
+            if (!IsKnownTag(tagName))
+                return false;
+            
+            index = tagEnd + 1;
+            
+            var entries = stack.ToArray();
+            for (int i = 0; i < entries.Length; i++)
             {
-                state = stack.Pop();
-                return true;
+                if (entries[i].TagName == tagName)
+                {
+                    StyleState restored = state;
+                    for (int j = 0; j <= i; j++)
+                        restored = stack.Pop().PreviousState;
+                    state = restored;
+                    return true;
+                }
             }
             
             _logger?.LogWarning("Unmatched closing tag: [{Tag}]", tag);
             return true;
         }
         
-        // Opening tags
         if (TryApplyTag(tag, ref state, stack))
         {
+            index = tagEnd + 1;
             return true;
         }
         
-        _logger?.LogWarning("Unknown markup tag: [{Tag}]", tag);
-        return true;
+        return false;
     }
     
-    private bool TryApplyTag(string tag, ref StyleState state, Stack<StyleState> stack)
+    private static bool TryApplyTag(string tag, ref StyleState state, Stack<StackEntry> stack)
     {
         string tagLower = tag.ToLowerInvariant();
         
-        // Color tag: [color=#RRGGBB] or [color=#RRGGBBAA]
         if (tagLower.StartsWith("color="))
         {
-            string colorValue = tag.Substring(6);
+            string colorValue = tag[6..];
             if (TryParseColor(colorValue, out Color color))
             {
-                stack.Push(state);
+                stack.Push(new StackEntry("color", state));
                 state = state with { Color = color };
                 return true;
             }
+            return false;
         }
         
-        // Size tag: [size=24] (absolute font size in points)
         if (tagLower.StartsWith("size="))
         {
-            string sizeValue = tag.Substring(5);
-            if (float.TryParse(sizeValue, out float fontSize) && fontSize > 0)
+            string sizeValue = tag[5..];
+                if (float.TryParse(sizeValue, NumberStyles.Float, CultureInfo.InvariantCulture, out float fontSize) && fontSize > 0)
             {
-                stack.Push(state);
+                stack.Push(new StackEntry("size", state));
                 state = state with { FontSize = fontSize };
                 return true;
             }
+            return false;
         }
         
-        // Style tags
         switch (tagLower)
         {
             case "b":
-                stack.Push(state);
+                stack.Push(new StackEntry("b", state));
                 state = state with { Style = state.Style | TextStyle.Bold };
                 return true;
                 
             case "i":
-                stack.Push(state);
+                stack.Push(new StackEntry("i", state));
                 state = state with { Style = state.Style | TextStyle.Italic };
                 return true;
                 
             case "u":
-                stack.Push(state);
+                stack.Push(new StackEntry("u", state));
                 state = state with { Style = state.Style | TextStyle.Underline };
                 return true;
                 
             case "s":
-                stack.Push(state);
+                stack.Push(new StackEntry("s", state));
                 state = state with { Style = state.Style | TextStyle.Strikethrough };
                 return true;
         }
@@ -192,7 +194,7 @@ public sealed class BBCodeParser : IMarkupParser
         return false;
     }
     
-    private static bool ShouldPopStack(string tagName)
+    private static bool IsKnownTag(string tagName)
     {
         return tagName is "color" or "size" or "b" or "i" or "u" or "s";
     }
@@ -204,14 +206,12 @@ public sealed class BBCodeParser : IMarkupParser
         if (!value.StartsWith('#'))
             return false;
         
-        // Support #RGB, #RRGGBB, #RRGGBBAA
-        string hex = value.Substring(1);
+        string hex = value[1..];
         
         try
         {
             if (hex.Length == 3)
             {
-                // #RGB -> #RRGGBB
                 byte r = Convert.ToByte(new string(hex[0], 2), 16);
                 byte g = Convert.ToByte(new string(hex[1], 2), 16);
                 byte b = Convert.ToByte(new string(hex[2], 2), 16);
@@ -220,18 +220,18 @@ public sealed class BBCodeParser : IMarkupParser
             }
             else if (hex.Length == 6)
             {
-                byte r = Convert.ToByte(hex.Substring(0, 2), 16);
-                byte g = Convert.ToByte(hex.Substring(2, 2), 16);
-                byte b = Convert.ToByte(hex.Substring(4, 2), 16);
+                byte r = Convert.ToByte(hex[..2], 16);
+                byte g = Convert.ToByte(hex[2..4], 16);
+                byte b = Convert.ToByte(hex[4..6], 16);
                 color = new Color(r, g, b, 255);
                 return true;
             }
             else if (hex.Length == 8)
             {
-                byte r = Convert.ToByte(hex.Substring(0, 2), 16);
-                byte g = Convert.ToByte(hex.Substring(2, 2), 16);
-                byte b = Convert.ToByte(hex.Substring(4, 2), 16);
-                byte a = Convert.ToByte(hex.Substring(6, 2), 16);
+                byte r = Convert.ToByte(hex[..2], 16);
+                byte g = Convert.ToByte(hex[2..4], 16);
+                byte b = Convert.ToByte(hex[4..6], 16);
+                byte a = Convert.ToByte(hex[6..8], 16);
                 color = new Color(r, g, b, a);
                 return true;
             }
@@ -257,10 +257,12 @@ public sealed class BBCodeParser : IMarkupParser
         };
     }
     
+    private record struct StackEntry(string TagName, StyleState PreviousState);
+    
     private record struct StyleState
     {
         public Color Color;
-            public IFont? Font;
+        public IFont? Font;
         public float FontSize;
         public TextStyle Style;
     }

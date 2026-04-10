@@ -17,4 +17,9 @@ public interface ISDL3PostProcessEffect : IPostProcessEffect
     /// <param name="targetTexture">Target GPU texture handle</param>
     /// <param name="commandBuffer">Active GPU command buffer</param>
     void Apply(IRenderer renderer, nint sourceTexture, nint targetTexture, nint commandBuffer);
+
+    /// <summary>
+    /// Update the effect's internal render dimensions (e.g. on window resize).
+    /// </summary>
+    void SetDimensions(int width, int height);
 }

@@ -37,7 +37,14 @@ public abstract class PostProcessPipeline
     /// <summary>
     /// Remove a post-processing effect from the pipeline.
     /// </summary>
-    public virtual bool RemoveEffect(IPostProcessEffect effect) => _effects.Remove(effect);
+    public virtual bool RemoveEffect(IPostProcessEffect effect)
+    {
+        if (!_effects.Remove(effect))
+            return false;
+
+        _isSorted = false;
+        return true;
+    }
 
     /// <summary>
     /// Clear all effects from the pipeline.

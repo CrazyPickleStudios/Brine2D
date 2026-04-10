@@ -13,6 +13,14 @@ internal static class FullScreenQuad
     /// </summary>
     public static void Blit(nint commandBuffer, nint sourceTexture, nint targetTexture, int width, int height, ILogger? logger = null)
     {
+        Blit(commandBuffer, sourceTexture, targetTexture, width, height, width, height, logger);
+    }
+
+    /// <summary>
+    /// Blit a source texture to a target texture, allowing different source and destination dimensions.
+    /// </summary>
+    public static void Blit(nint commandBuffer, nint sourceTexture, nint targetTexture, int sourceWidth, int sourceHeight, int destWidth, int destHeight, ILogger? logger = null)
+    {
         logger?.LogDebug("FullScreenQuad.Blit: Starting blit");
 
         var blitInfo = new SDL3.SDL.GPUBlitInfo
@@ -24,8 +32,8 @@ internal static class FullScreenQuad
                 LayerOrDepthPlane = 0,
                 X = 0,
                 Y = 0,
-                W = (uint)width,
-                H = (uint)height
+                W = (uint)sourceWidth,
+                H = (uint)sourceHeight
             },
             Destination = new SDL3.SDL.GPUBlitRegion
             {
@@ -34,8 +42,8 @@ internal static class FullScreenQuad
                 LayerOrDepthPlane = 0,
                 X = 0,
                 Y = 0,
-                W = (uint)width,
-                H = (uint)height
+                W = (uint)destWidth,
+                H = (uint)destHeight
             },
             LoadOp = SDL3.SDL.GPULoadOp.DontCare,
             ClearColor = new SDL3.SDL.FColor { R = 0, G = 0, B = 0, A = 1 },
@@ -168,7 +176,6 @@ internal static class FullScreenQuad
 
         try
         {
-            // 1. Begin render pass FIRST
             var renderPass = SDL3.SDL.BeginGPURenderPass(
                 commandBuffer,
                 colorTargetHandle.AddrOfPinnedObject(),
@@ -182,23 +189,21 @@ internal static class FullScreenQuad
 
             try
             {
-                // 2. Bind pipeline
                 SDL3.SDL.BindGPUGraphicsPipeline(renderPass, pipeline);
 
-                // 3. Push fragment uniforms AFTER BeginGPURenderPass
+                // Uniforms must be pushed after BeginGPURenderPass
                 unsafe
                 {
                     var data = uniforms;
                     var dataPtr = (nint)(&data);
                     SDL3.SDL.PushGPUFragmentUniformData(
                         commandBuffer,
-                        0, // slot 0 (matches space3)
+                        0,
                         dataPtr,
                         (uint)Marshal.SizeOf<T>()
                     );
                 }
 
-                // 4. Bind texture
                 var textureBinding = new SDL3.SDL.GPUTextureSamplerBinding
                 {
                     Texture = sourceTexture,
@@ -206,7 +211,6 @@ internal static class FullScreenQuad
                 };
                 SDL3.SDL.BindGPUFragmentSamplers(renderPass, 0, new[] { textureBinding }, 1);
 
-                // 5. Set viewport and scissor
                 var viewport = new SDL3.SDL.GPUViewport
                 {
                     X = 0,
@@ -221,7 +225,6 @@ internal static class FullScreenQuad
                 var scissor = new SDL3.SDL.Rect { X = 0, Y = 0, W = width, H = height };
                 SDL3.SDL.SetGPUScissor(renderPass, ref scissor);
 
-                // 6. Draw
                 SDL3.SDL.DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
             }
             finally

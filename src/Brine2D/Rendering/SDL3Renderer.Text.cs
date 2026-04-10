@@ -11,8 +11,7 @@ internal sealed partial class SDL3Renderer
     {
         DrawText(text, x, y, new TextRenderOptions
         {
-            Color = color,
-            Font = _textRenderer.DefaultFont
+            Color = color
         });
     }
 
@@ -71,26 +70,24 @@ internal sealed partial class SDL3Renderer
         float defaultFontSize = _textRenderer.DefaultFont!.Size;
         float baseScale = options.FontSize / defaultFontSize;
 
-        var textSize = _textRenderer.MeasureTextRuns(runs);
+        float maxScale = baseScale;
+        for (int i = 0; i < runs.Count; i++)
+        {
+            if (!string.IsNullOrEmpty(runs[i].Text))
+                maxScale = MathF.Max(maxScale, runs[i].FontSize / defaultFontSize);
+        }
+
+        var textSize = _textRenderer.MeasureTextRuns(runs, options.LineSpacing);
 
         float startX = x;
         float startY = y;
 
         bool fitsWithoutWrapping = !options.MaxWidth.HasValue || textSize.X <= options.MaxWidth.Value;
-
-        if (options.MaxWidth.HasValue && fitsWithoutWrapping)
-        {
-            startX = options.HorizontalAlign switch
-            {
-                TextAlignment.Center => x + (options.MaxWidth.Value - textSize.X) / 2,
-                TextAlignment.Right => x + options.MaxWidth.Value - textSize.X,
-                _ => x
-            };
-        }
+        bool needsWrapping = options.MaxWidth.HasValue && !fitsWithoutWrapping;
 
         if (options.MaxHeight.HasValue)
         {
-            float totalHeight = fitsWithoutWrapping ? textSize.Y : lineHeight(baseScale, options) * EstimateWrappedLineCount(runs, x, options, defaultFontSize);
+            float totalHeight = fitsWithoutWrapping ? textSize.Y : lineHeight(maxScale, options) * EstimateWrappedLineCount(runs, x, options, defaultFontSize);
             startY = options.VerticalAlign switch
             {
                 VerticalAlignment.Middle => y + (options.MaxHeight.Value - Math.Min(totalHeight, options.MaxHeight.Value)) / 2,
@@ -101,28 +98,41 @@ internal sealed partial class SDL3Renderer
 
         float cursorX = startX;
         float cursorY = startY;
-        float lh = lineHeight(baseScale, options);
+        float lh = lineHeight(maxScale, options);
 
         var atlasTexture = _textRenderer.DefaultFontAtlas.Texture;
 
-        for (int i = 0; i < runs.Count; i++)
+        if (options.MaxWidth.HasValue && options.HorizontalAlign != TextAlignment.Left)
         {
-            var run = runs[i];
-            if (string.IsNullOrEmpty(run.Text))
-                continue;
-
-            if (run.Font != null && !_customFontWarningLogged)
+            RenderRunsWithAlignedWrapping(runs, x, cursorY, lh, options, atlasTexture, defaultFontSize, y);
+        }
+        else
+        {
+            for (int i = 0; i < runs.Count; i++)
             {
-                _logger.LogWarning("Custom font on TextRun is not yet supported; falling back to default font");
-                _customFontWarningLogged = true;
+                var run = runs[i];
+                if (string.IsNullOrEmpty(run.Text))
+                    continue;
+
+                if (run.Font != null && !_customFontWarningLogged)
+                {
+                    _logger.LogWarning("Custom font on TextRun is not yet supported; falling back to default font");
+                    _customFontWarningLogged = true;
+                }
+
+                if ((run.Style & (TextStyle.Bold | TextStyle.Italic)) != 0 && !_boldItalicWarningLogged)
+                {
+                    _logger.LogWarning("Bold/Italic text styles are not yet rendered; text will appear as normal weight");
+                    _boldItalicWarningLogged = true;
+                }
+
+                float runScale = run.FontSize / defaultFontSize;
+
+                if (needsWrapping)
+                    RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lh, options, atlasTexture, runScale, y);
+                else
+                    RenderRunDirect(run, ref cursorX, ref cursorY, startX, lh, options, atlasTexture, runScale, y);
             }
-
-            float runScale = run.FontSize / defaultFontSize;
-
-            if (options.MaxWidth.HasValue)
-                RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lh, options, atlasTexture, runScale, y);
-            else
-                RenderRunDirect(run, ref cursorX, ref cursorY, startX, lh, options, atlasTexture, runScale, y);
         }
 
         float lineHeight(float scale, TextRenderOptions opts) =>
@@ -141,9 +151,35 @@ internal sealed partial class SDL3Renderer
                 int ws = 0;
                 while (ws < span.Length)
                 {
+                    if (span[ws] == '\n')
+                    {
+                        cx = originX;
+                        lines++;
+                        ws++;
+                        continue;
+                    }
+
                     var rem = span[ws..];
                     int si = rem.IndexOf(' ');
-                    var word = si < 0 ? rem : rem[..(si + 1)];
+                    int ni = rem.IndexOf('\n');
+                    ReadOnlySpan<char> word;
+                    bool atEnd;
+                    if (si >= 0 && (ni < 0 || si < ni))
+                    {
+                        word = rem[..(si + 1)];
+                        atEnd = false;
+                    }
+                    else if (ni >= 0)
+                    {
+                        word = rem[..ni];
+                        atEnd = false;
+                    }
+                    else
+                    {
+                        word = rem;
+                        atEnd = true;
+                    }
+
                     var sz = _textRenderer.MeasureGlyphSpan(word, rs);
                     if (cx + sz.X > originX + opts.MaxWidth!.Value && cx > originX)
                     {
@@ -152,10 +188,146 @@ internal sealed partial class SDL3Renderer
                     }
                     cx += sz.X;
                     ws += word.Length;
-                    if (si < 0) break;
+                    if (atEnd) break;
                 }
             }
             return lines;
+        }
+    }
+
+    private void RenderRunsWithAlignedWrapping(
+        IReadOnlyList<TextRun> runs,
+        float startX,
+        float startY,
+        float lineHeight,
+        TextRenderOptions options,
+        ITexture atlasTexture,
+        float defaultFontSize,
+        float originY)
+    {
+        float maxWidth = options.MaxWidth!.Value;
+        bool hasMaxHeight = options.MaxHeight.HasValue && originY > float.NegativeInfinity;
+        float maxY = hasMaxHeight ? originY + options.MaxHeight.Value : float.PositiveInfinity;
+
+        var logicalLines = new List<List<(int RunIndex, int Start, int Length)>>();
+        var currentLine = new List<(int RunIndex, int Start, int Length)>();
+        float cx = startX;
+
+        for (int ri = 0; ri < runs.Count; ri++)
+        {
+            if (string.IsNullOrEmpty(runs[ri].Text))
+                continue;
+
+            float runScale = runs[ri].FontSize / defaultFontSize;
+            var text = runs[ri].Text.AsSpan();
+            int segStart = 0;
+            int pos = 0;
+
+            while (pos < text.Length)
+            {
+                if (text[pos] == '\n')
+                {
+                    if (pos > segStart)
+                        currentLine.Add((ri, segStart, pos - segStart));
+
+                    logicalLines.Add(currentLine);
+                    currentLine = new List<(int, int, int)>();
+                    pos++;
+                    segStart = pos;
+                    cx = startX;
+                    continue;
+                }
+
+                var remaining = text[pos..];
+                int spaceIdx = remaining.IndexOf(' ');
+                int nlIdx = remaining.IndexOf('\n');
+                ReadOnlySpan<char> word;
+                bool atEnd;
+                if (spaceIdx >= 0 && (nlIdx < 0 || spaceIdx < nlIdx))
+                {
+                    word = remaining[..(spaceIdx + 1)];
+                    atEnd = false;
+                }
+                else if (nlIdx >= 0)
+                {
+                    word = remaining[..nlIdx];
+                    atEnd = false;
+                }
+                else
+                {
+                    word = remaining;
+                    atEnd = true;
+                }
+
+                var wordSize = _textRenderer.MeasureGlyphSpan(word, runScale);
+                if (cx + wordSize.X > startX + maxWidth && cx > startX)
+                {
+                    if (pos > segStart)
+                        currentLine.Add((ri, segStart, pos - segStart));
+
+                    logicalLines.Add(currentLine);
+                    currentLine = new List<(int, int, int)>();
+                    segStart = pos;
+                    cx = startX;
+                }
+
+                cx += wordSize.X;
+                pos += word.Length;
+                if (atEnd) break;
+            }
+
+            if (pos > segStart)
+                currentLine.Add((ri, segStart, pos - segStart));
+        }
+
+        if (currentLine.Count > 0)
+            logicalLines.Add(currentLine);
+
+        float cursorY = startY;
+        foreach (var line in logicalLines)
+        {
+            if (hasMaxHeight && cursorY + lineHeight > maxY)
+                return;
+
+            float totalWidth = 0;
+            foreach (var (runIndex, charStart, charLength) in line)
+            {
+                float runScale = runs[runIndex].FontSize / defaultFontSize;
+                totalWidth += _textRenderer.MeasureGlyphSpan(
+                    runs[runIndex].Text.AsSpan().Slice(charStart, charLength), runScale).X;
+            }
+
+            float lineOffsetX = options.HorizontalAlign switch
+            {
+                TextAlignment.Center => startX + (maxWidth - totalWidth) / 2,
+                TextAlignment.Right => startX + maxWidth - totalWidth,
+                _ => startX
+            };
+
+            float cursorX = lineOffsetX;
+
+            foreach (var (runIndex, charStart, charLength) in line)
+            {
+                var run = runs[runIndex];
+                if (run.Font != null && !_customFontWarningLogged)
+                {
+                    _logger.LogWarning("Custom font on TextRun is not yet supported; falling back to default font");
+                    _customFontWarningLogged = true;
+                }
+
+                if ((run.Style & (TextStyle.Bold | TextStyle.Italic)) != 0 && !_boldItalicWarningLogged)
+                {
+                    _logger.LogWarning("Bold/Italic text styles are not yet rendered; text will appear as normal weight");
+                    _boldItalicWarningLogged = true;
+                }
+
+                float runScale = run.FontSize / defaultFontSize;
+                RenderRunDirect(
+                    run.Text.AsSpan().Slice(charStart, charLength), run.Color, run.Style,
+                    ref cursorX, ref cursorY, lineOffsetX, lineHeight, options, atlasTexture, runScale, originY);
+            }
+
+            cursorY += lineHeight;
         }
     }
 
@@ -175,21 +347,13 @@ internal sealed partial class SDL3Renderer
         float startX = x;
         float startY = y;
         float lineHeight = _textRenderer.DefaultFontAtlas.LineHeight * glyphScale * options.LineSpacing;
+        bool needsWrapping = false;
 
         if (options.MaxWidth.HasValue || options.MaxHeight.HasValue)
         {
-            var textSize = _textRenderer.MeasureText(text, options.FontSize);
+            var textSize = _textRenderer.MeasureText(text, options.FontSize, options.LineSpacing);
             bool fitsWithoutWrapping = !options.MaxWidth.HasValue || textSize.X <= options.MaxWidth.Value;
-
-            if (options.MaxWidth.HasValue && fitsWithoutWrapping)
-            {
-                startX = options.HorizontalAlign switch
-                {
-                    TextAlignment.Center => x + (options.MaxWidth.Value - textSize.X) / 2,
-                    TextAlignment.Right => x + options.MaxWidth.Value - textSize.X,
-                    _ => x
-                };
-            }
+            needsWrapping = options.MaxWidth.HasValue && !fitsWithoutWrapping;
 
             float effectiveHeight = fitsWithoutWrapping
                 ? textSize.Y
@@ -218,7 +382,7 @@ internal sealed partial class SDL3Renderer
         float cursorY = startY;
         var atlasTexture = _textRenderer.DefaultFontAtlas.Texture;
 
-        if (options.MaxWidth.HasValue)
+        if (needsWrapping || (options.MaxWidth.HasValue && options.HorizontalAlign != TextAlignment.Left))
             RenderRunWithWrapping(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture, glyphScale, y);
         else
             RenderRunDirect(run, ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture, glyphScale, y);
@@ -230,9 +394,35 @@ internal sealed partial class SDL3Renderer
             int ws = 0;
             while (ws < span.Length)
             {
+                if (span[ws] == '\n')
+                {
+                    cx = originX;
+                    lines++;
+                    ws++;
+                    continue;
+                }
+
                 var rem = span[ws..];
                 int si = rem.IndexOf(' ');
-                var word = si < 0 ? rem : rem[..(si + 1)];
+                int ni = rem.IndexOf('\n');
+                ReadOnlySpan<char> word;
+                bool atEnd;
+                if (si >= 0 && (ni < 0 || si < ni))
+                {
+                    word = rem[..(si + 1)];
+                    atEnd = false;
+                }
+                else if (ni >= 0)
+                {
+                    word = rem[..ni];
+                    atEnd = false;
+                }
+                else
+                {
+                    word = rem;
+                    atEnd = true;
+                }
+
                 var sz = _textRenderer.MeasureGlyphSpan(word, scale);
                 if (cx + sz.X > originX + opts.MaxWidth!.Value && cx > originX)
                 {
@@ -241,7 +431,7 @@ internal sealed partial class SDL3Renderer
                 }
                 cx += sz.X;
                 ws += word.Length;
-                if (si < 0) break;
+                if (atEnd) break;
             }
             return lines;
         }
@@ -286,12 +476,33 @@ internal sealed partial class SDL3Renderer
             float shadowStartX = cursorX;
             float shadowStartY = cursorY;
             float shadowLineStartX = startX + options.ShadowOffset.Value.X;
-            RenderGlyphs(text, cursorX + options.ShadowOffset.Value.X,
-                         cursorY + options.ShadowOffset.Value.Y,
-                         options.ShadowColor, atlasTexture,
-                         ref cursorX, ref cursorY, shadowLineStartX, lineHeight, false, glyphScale,
-                         maxY: options.MaxHeight.HasValue && originY > float.NegativeInfinity
-                             ? originY + options.MaxHeight.Value : null);
+            float shadowX = cursorX + options.ShadowOffset.Value.X;
+            float shadowY = cursorY + options.ShadowOffset.Value.Y;
+            float? shadowMaxY = options.MaxHeight.HasValue && originY > float.NegativeInfinity
+                ? originY + options.MaxHeight.Value : null;
+
+            if (needDecorations)
+            {
+                float lastShadowSegStartX = shadowX;
+                RenderGlyphs(text, shadowX, shadowY,
+                             options.ShadowColor, atlasTexture,
+                             ref cursorX, ref cursorY, shadowLineStartX, lineHeight, true, glyphScale,
+                             onLineBreak: (segStartX, segEndX, segY) =>
+                             {
+                                 DrawDecorations(style, segStartX, segEndX, segY, lineHeight, options.ShadowColor);
+                                 lastShadowSegStartX = shadowLineStartX;
+                             },
+                             maxY: shadowMaxY);
+                DrawDecorations(style, lastShadowSegStartX, cursorX, cursorY, lineHeight, options.ShadowColor);
+            }
+            else
+            {
+                RenderGlyphs(text, shadowX, shadowY,
+                             options.ShadowColor, atlasTexture,
+                             ref cursorX, ref cursorY, shadowLineStartX, lineHeight, false, glyphScale,
+                             maxY: shadowMaxY);
+            }
+
             cursorX = shadowStartX;
             cursorY = shadowStartY;
         }
@@ -364,9 +575,34 @@ internal sealed partial class SDL3Renderer
                 if (hasMaxHeight && cursorY + lineHeight > maxY)
                     return;
 
+                if (text[wordStart] == '\n')
+                {
+                    cursorX = startX;
+                    cursorY += lineHeight;
+                    wordStart++;
+                    continue;
+                }
+
                 var remaining = text[wordStart..];
                 int spaceIdx = remaining.IndexOf(' ');
-                var word = spaceIdx < 0 ? remaining : remaining[..(spaceIdx + 1)];
+                int nlIdx = remaining.IndexOf('\n');
+                ReadOnlySpan<char> word;
+                bool atEnd;
+                if (spaceIdx >= 0 && (nlIdx < 0 || spaceIdx < nlIdx))
+                {
+                    word = remaining[..(spaceIdx + 1)];
+                    atEnd = false;
+                }
+                else if (nlIdx >= 0)
+                {
+                    word = remaining[..nlIdx];
+                    atEnd = false;
+                }
+                else
+                {
+                    word = remaining;
+                    atEnd = true;
+                }
 
                 var wordSize = _textRenderer.MeasureGlyphSpan(word, glyphScale);
                 if (cursorX + wordSize.X > startX + maxWidth && cursorX > startX)
@@ -382,7 +618,7 @@ internal sealed partial class SDL3Renderer
                     ref cursorX, ref cursorY, startX, lineHeight, options, atlasTexture, glyphScale, originY);
 
                 wordStart += word.Length;
-                if (spaceIdx < 0) break;
+                if (atEnd) break;
             }
             return;
         }
@@ -394,9 +630,35 @@ internal sealed partial class SDL3Renderer
         int ws = 0;
         while (ws < text.Length)
         {
+            if (text[ws] == '\n')
+            {
+                lines.Add((lineStart, ws - lineStart));
+                ws++;
+                lineStart = ws;
+                cx = startX;
+                continue;
+            }
+
             var remaining = text[ws..];
             int spaceIdx = remaining.IndexOf(' ');
-            var word = spaceIdx < 0 ? remaining : remaining[..(spaceIdx + 1)];
+            int nlIdx = remaining.IndexOf('\n');
+            ReadOnlySpan<char> word;
+            bool atEnd;
+            if (spaceIdx >= 0 && (nlIdx < 0 || spaceIdx < nlIdx))
+            {
+                word = remaining[..(spaceIdx + 1)];
+                atEnd = false;
+            }
+            else if (nlIdx >= 0)
+            {
+                word = remaining[..nlIdx];
+                atEnd = false;
+            }
+            else
+            {
+                word = remaining;
+                atEnd = true;
+            }
 
             var wordSize = _textRenderer.MeasureGlyphSpan(word, glyphScale);
             if (cx + wordSize.X > startX + maxWidth && cx > startX)
@@ -408,7 +670,7 @@ internal sealed partial class SDL3Renderer
 
             cx += wordSize.X;
             ws += word.Length;
-            if (spaceIdx < 0) break;
+            if (atEnd) break;
         }
 
         if (ws > lineStart)
@@ -496,6 +758,9 @@ internal sealed partial class SDL3Renderer
             float scaledW = glyph.Width * glyphScale;
             float scaledH = glyph.Height * glyphScale;
 
+            // SDL_ttf 3 RenderGlyphBlended produces full font-height surfaces with
+            // glyphs already positioned at the correct baseline offset within the
+            // surface. Bearing offsets must NOT be applied here or they double-count.
             float u1 = glyph.AtlasX / (float)atlasTexture.Width;
             float v1 = glyph.AtlasY / (float)atlasTexture.Height;
             float u2 = (glyph.AtlasX + glyph.Width) / (float)atlasTexture.Width;

@@ -790,7 +790,7 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 ### Rendering
 - SDL3 GPU backend: Vulkan, Direct3D 12, Metal
 - Sprite batching with automatic frustum culling
-- Post-processing pipeline: Bloom, Blur, Grayscale, custom HLSL shaders
+- Post-processing pipeline: Blur, Grayscale, custom effects via `ISDL3PostProcessEffect`
 - Off-screen render targets
 - Scissor rectangles
 - Rich text with BBCode markup and shadow support
