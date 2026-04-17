@@ -1,5 +1,4 @@
 using Brine2D.Audio;
-using Brine2D.Audio;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
@@ -31,7 +30,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
     private ISoundEffect? _explosionSound;
     private ISoundEffect? _ambientSound;
 
-    private bool _soundsLoaded = false;
+    private bool _soundsLoaded;
 
     public SpatialAudioDemoScene(
         IInputContext input,
@@ -57,13 +56,8 @@ public class SpatialAudioDemoScene : DemoSceneBase
 
         Renderer.ClearColor = new Color(20, 20, 30);
 
-        // Try to load sounds
         await LoadSoundsAsync(cancellationToken);
-
-        // Create player (audio listener)
         CreatePlayer();
-
-        // Create sound sources
         CreateSoundSources();
     }
 
@@ -71,7 +65,6 @@ public class SpatialAudioDemoScene : DemoSceneBase
     {
         try
         {
-            // Try to load demo sounds (you'll need to add these to assets/sounds/)
             var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds");
             
             if (Directory.Exists(soundsPath))
@@ -120,7 +113,6 @@ public class SpatialAudioDemoScene : DemoSceneBase
         var transform = _player.GetComponent<TransformComponent>();
         transform.Position = new Vector2(640, 360);
 
-        // Add audio listener (this is the "ears")
         _player.AddComponent<AudioListenerComponent>();
         var listener = _player.GetComponent<AudioListenerComponent>();
         listener.GlobalSpatialVolume = 1.0f;
@@ -128,14 +120,13 @@ public class SpatialAudioDemoScene : DemoSceneBase
 
     private void CreateSoundSources()
     {
-        // Sound source 1 - Left side, looping coin
         _soundSource1 = World.CreateEntity("CoinSource");
         _soundSource1.AddComponent<TransformComponent>();
         var transform1 = _soundSource1.GetComponent<TransformComponent>();
         transform1.Position = new Vector2(200, 360);
 
-        _soundSource1.AddComponent<AudioSourceComponent>();
-        var audio1 = _soundSource1.GetComponent<AudioSourceComponent>();
+        _soundSource1.AddComponent<SoundEffectSourceComponent>();
+        var audio1 = _soundSource1.GetComponent<SoundEffectSourceComponent>();
         audio1.SoundEffect = _coinSound;
         audio1.EnableSpatialAudio = true;
         audio1.MinDistance = 50f;
@@ -143,43 +134,38 @@ public class SpatialAudioDemoScene : DemoSceneBase
         audio1.RolloffFactor = 1.0f;
         audio1.SpatialBlend = 1.0f;
         audio1.Volume = 0.5f;
-        audio1.Loop = true;
         audio1.LoopCount = -1;
         audio1.PlayOnEnable = true;
 
-        // Sound source 2 - Right side, explosion (triggered)
         _soundSource2 = World.CreateEntity("ExplosionSource");
         _soundSource2.AddComponent<TransformComponent>();
-
         var transform2 = _soundSource2.GetComponent<TransformComponent>();
         transform2.Position = new Vector2(1080, 360);
 
-        _soundSource2.AddComponent<AudioSourceComponent>();
-        var audio2 = _soundSource2.GetComponent<AudioSourceComponent>();
+        _soundSource2.AddComponent<SoundEffectSourceComponent>();
+        var audio2 = _soundSource2.GetComponent<SoundEffectSourceComponent>();
         audio2.SoundEffect = _explosionSound;
         audio2.EnableSpatialAudio = true;
         audio2.MinDistance = 100f;
         audio2.MaxDistance = 600f;
-        audio2.RolloffFactor = 2.0f; // Quadratic falloff
+        audio2.RolloffFactor = 2.0f;
         audio2.SpatialBlend = 1.0f;
         audio2.Volume = 0.8f;
 
-        // Sound source 3 - Center top, ambient loop
         _soundSource3 = World.CreateEntity("AmbientSource");
         _soundSource3.AddComponent<TransformComponent>();
         var transform3 = _soundSource3.GetComponent<TransformComponent>();
         transform3.Position = new Vector2(640, 100);
 
-        _soundSource3.AddComponent<AudioSourceComponent>();
-        var audio3 = _soundSource3.GetComponent<AudioSourceComponent>();
+        _soundSource3.AddComponent<SoundEffectSourceComponent>();
+        var audio3 = _soundSource3.GetComponent<SoundEffectSourceComponent>();
         audio3.SoundEffect = _ambientSound;
         audio3.EnableSpatialAudio = true;
         audio3.MinDistance = 80f;
         audio3.MaxDistance = 400f;
         audio3.RolloffFactor = 1.5f;
-        audio3.SpatialBlend = 0.7f; // Less stereo effect
+        audio3.SpatialBlend = 0.7f;
         audio3.Volume = 0.3f;
-        audio3.Loop = true;
         audio3.LoopCount = -1;
         audio3.PlayOnEnable = true;
     }
@@ -189,7 +175,6 @@ public class SpatialAudioDemoScene : DemoSceneBase
         HandlePerformanceHotkeys();
         if (CheckReturnToMenu()) return;
 
-        // Move player with WASD
         if (_player != null)
         {
             var transform = _player.GetComponent<TransformComponent>();
@@ -204,18 +189,15 @@ public class SpatialAudioDemoScene : DemoSceneBase
                 if (_input.IsKeyDown(Key.D)) movement.X += moveSpeed;
 
                 transform.Position += movement;
-
-                // Clamp to screen bounds
                 transform.Position = new Vector2(
                     Math.Clamp(transform.Position.X, 50, 1230),
                     Math.Clamp(transform.Position.Y, 50, 670));
             }
         }
 
-        // Toggle sound sources
         if (_input.IsKeyPressed(Key.D1) && _soundSource1 != null)
         {
-            var audio = _soundSource1.GetComponent<AudioSourceComponent>();
+            var audio = _soundSource1.GetComponent<SoundEffectSourceComponent>();
             if (audio != null)
             {
                 audio.IsEnabled = !audio.IsEnabled;
@@ -225,7 +207,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
 
         if (_input.IsKeyPressed(Key.D2) && _soundSource2 != null)
         {
-            var audio = _soundSource2.GetComponent<AudioSourceComponent>();
+            var audio = _soundSource2.GetComponent<SoundEffectSourceComponent>();
             if (audio != null)
             {
                 audio.TriggerPlay = true;
@@ -235,7 +217,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
 
         if (_input.IsKeyPressed(Key.D3) && _soundSource3 != null)
         {
-            var audio = _soundSource3.GetComponent<AudioSourceComponent>();
+            var audio = _soundSource3.GetComponent<SoundEffectSourceComponent>();
             if (audio != null)
             {
                 audio.IsEnabled = !audio.IsEnabled;
@@ -246,7 +228,6 @@ public class SpatialAudioDemoScene : DemoSceneBase
 
     protected override void OnRender(GameTime gameTime)
     {
-        // Draw instructions
         var y = 10f;
         var lineHeight = 20f;
 
@@ -279,7 +260,6 @@ public class SpatialAudioDemoScene : DemoSceneBase
             y += lineHeight;
         }
 
-        // Draw player (listener)
         if (_player != null)
         {
             var transform = _player.GetComponent<TransformComponent>();
@@ -290,12 +270,10 @@ public class SpatialAudioDemoScene : DemoSceneBase
             }
         }
 
-        // Draw sound sources
         DrawSoundSource(_soundSource1, "Coin", Color.Cyan);
         DrawSoundSource(_soundSource2, "Explosion", Color.Red);
         DrawSoundSource(_soundSource3, "Ambient", Color.Purple);
 
-        // Draw connection lines showing distance
         if (_player != null)
         {
             var playerPos = _player.GetComponent<TransformComponent>()?.Position;
@@ -315,31 +293,26 @@ public class SpatialAudioDemoScene : DemoSceneBase
         if (source == null) return;
 
         var transform = source.GetComponent<TransformComponent>();
-        var audio = source.GetComponent<AudioSourceComponent>();
+        var audio = source.GetComponent<SoundEffectSourceComponent>();
         
         if (transform == null || audio == null) return;
 
         var pos = transform.Position;
         var isActive = audio.IsEnabled;
 
-        // Draw min/max distance circles
         Renderer.DrawCircleOutline(pos.X, pos.Y, audio.MinDistance, new Color(color.R, color.G, color.B, 50), 1);
         Renderer.DrawCircleOutline(pos.X, pos.Y, audio.MaxDistance, new Color(color.R, color.G, color.B, 30), 1);
 
-        // Draw source
         var sourceColor = isActive ? color : new Color((byte)(color.R / 2), (byte)(color.G / 2), (byte)(color.B / 2));
         Renderer.DrawCircleFilled(pos.X, pos.Y, 10, sourceColor);
-        
-        // Label
         Renderer.DrawText(label, pos.X - 20, pos.Y - 25, sourceColor);
         
         string status = audio.LoopCount == -1 
-            ? (isActive ? "ON" : "OFF")        // Looping sounds
-            : (audio.IsPlaying ? "FIRING" : "READY");  // One-shot sounds
+            ? (isActive ? "ON" : "OFF")
+            : (audio.IsPlaying ? "FIRING" : "READY");
     
         Renderer.DrawText(status, pos.X - 20, pos.Y + 15, sourceColor);
 
-        // Show spatial volume
         if (_player != null && isActive)
         {
             var playerPos = _player.GetComponent<TransformComponent>()?.Position;
@@ -357,7 +330,7 @@ public class SpatialAudioDemoScene : DemoSceneBase
         if (source == null) return;
 
         var transform = source.GetComponent<TransformComponent>();
-        var audio = source.GetComponent<AudioSourceComponent>();
+        var audio = source.GetComponent<SoundEffectSourceComponent>();
         
         if (transform == null || audio == null || !audio.IsEnabled) return;
 

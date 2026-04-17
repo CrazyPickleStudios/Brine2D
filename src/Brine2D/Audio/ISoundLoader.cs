@@ -14,5 +14,10 @@ public interface ISoundLoader : IDisposable
     /// Implementations must be idempotent — calling this twice with the same instance
     /// must not throw or cause a double-free of native resources.
     /// </summary>
+    /// <remarks>
+    /// Must be called from the game thread. Implementations stop and destroy any
+    /// active tracks referencing the asset before freeing it. Calling this
+    /// concurrently with playback methods that reference the same asset is not safe.
+    /// </remarks>
     void UnloadSound(ISoundEffect sound);
 }

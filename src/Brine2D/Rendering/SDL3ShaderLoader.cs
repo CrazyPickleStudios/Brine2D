@@ -91,7 +91,6 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         _logger.LogDebug("Shader source length: {Length} bytes", source.Code.Length);
         _logger.LogDebug("Entry point: {EntryPoint}", source.EntryPoint);
 
-        // Decode and log the actual shader source for debugging
         var shaderSourceText = System.Text.Encoding.UTF8.GetString(source.Code);
         _logger.LogDebug("=== SHADER SOURCE ===");
         foreach (var line in shaderSourceText.Split('\n'))
@@ -100,21 +99,22 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         }
         _logger.LogDebug("=== END SHADER SOURCE ===");
 
-        // Create HLSL info structure
-        var hlslInfo = new SDL3.ShaderCross.HLSLInfo
-        {
-            Source = shaderSourceText,
-            Entrypoint = source.EntryPoint,
-            IncludeDir = null,
-            Defines = IntPtr.Zero,
-            ShaderStage = MapToShaderCrossStage(source.Stage),
-            Props = 0
-        };
-
-        _logger.LogDebug("HLSLInfo created with ShaderStage: {Stage}", hlslInfo.ShaderStage);
-
+        var sourcePtr = Marshal.StringToCoTaskMemUTF8(shaderSourceText);
+        var entrypointPtr = Marshal.StringToCoTaskMemUTF8(source.EntryPoint);
         try
         {
+            var hlslInfo = new SDL3.ShaderCross.HLSLInfo
+            {
+                Source = sourcePtr,
+                Entrypoint = entrypointPtr,
+                IncludeDir = IntPtr.Zero,
+                Defines = IntPtr.Zero,
+                ShaderStage = MapToShaderCrossStage(source.Stage),
+                Props = 0
+            };
+
+            _logger.LogDebug("HLSLInfo created with ShaderStage: {Stage}", hlslInfo.ShaderStage);
+
             nint resultPtr;
             nuint size;
 
@@ -161,14 +161,19 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
             _logger.LogError(ex, "Exception during HLSL shader compilation to {Target}", target);
             return false;
         }
+        finally
+        {
+            Marshal.FreeCoTaskMem(sourcePtr);
+            Marshal.FreeCoTaskMem(entrypointPtr);
+        }
     }
 
     private bool CompileSPIRVFromHLSL(ref SDL3.ShaderCross.HLSLInfo hlslInfo, out nint result, out nuint size)
     {
         _logger.LogDebug("Calling SDL_ShaderCross_CompileSPIRVFromHLSL");
         _logger.LogDebug("  ShaderStage: {Stage}", hlslInfo.ShaderStage);
-        _logger.LogDebug("  Entrypoint: {Entry}", hlslInfo.Entrypoint);
-        _logger.LogDebug("  Source length: {Length}", hlslInfo.Source?.Length ?? 0);
+        _logger.LogDebug("  Entrypoint: 0x{Entry:X}", hlslInfo.Entrypoint);
+        _logger.LogDebug("  Source: 0x{Source:X}", hlslInfo.Source);
         
         result = SDL3.ShaderCross.CompileSPIRVFromHLSL(ref hlslInfo, out size);
         var success = result != IntPtr.Zero;
@@ -222,56 +227,63 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
     {
         _logger.LogDebug("Compiling HLSL -> SPIRV -> MSL");
 
-        var hlslInfo = new SDL3.ShaderCross.HLSLInfo
-        {
-            Source = System.Text.Encoding.UTF8.GetString(source.Code),
-            Entrypoint = source.EntryPoint,
-            IncludeDir = null,
-            Defines = IntPtr.Zero,
-            ShaderStage = MapToShaderCrossStage(source.Stage),
-            Props = 0
-        };
-
-        // First compile to SPIRV
-        var spirvPtr = SDL3.ShaderCross.CompileSPIRVFromHLSL(ref hlslInfo, out var spirvSize);
-        if (spirvPtr == IntPtr.Zero)
-        {
-            _logger.LogError("Failed to compile HLSL to SPIRV (intermediate step for MSL)");
-            result = IntPtr.Zero;
-            size = 0;
-            return false;
-        }
-
+        var sourcePtr = Marshal.StringToCoTaskMemUTF8(System.Text.Encoding.UTF8.GetString(source.Code));
+        var entrypointPtr = Marshal.StringToCoTaskMemUTF8(source.EntryPoint);
         try
         {
-            // Create SPIRV info structure
-            var spirvInfo = new SDL3.ShaderCross.SPIRVInfo
+            var hlslInfo = new SDL3.ShaderCross.HLSLInfo
             {
-                ByteCode = spirvPtr,
-                ByteCodeSize = spirvSize,
-                Entrypoint = hlslInfo.Entrypoint,
+                Source = sourcePtr,
+                Entrypoint = entrypointPtr,
+                IncludeDir = IntPtr.Zero,
+                Defines = IntPtr.Zero,
                 ShaderStage = MapToShaderCrossStage(source.Stage),
                 Props = 0
             };
 
-            // Transpile SPIRV to MSL (returns string)
-            result = SDL3.ShaderCross.TranspileMSLFromSPIRV(ref spirvInfo);
-            if (result != IntPtr.Zero)
+            // First compile to SPIRV
+            var spirvPtr = SDL3.ShaderCross.CompileSPIRVFromHLSL(ref hlslInfo, out var spirvSize);
+            if (spirvPtr == IntPtr.Zero)
             {
-                // MSL is returned as a UTF-8 string, get its length
-                var mslString = Marshal.PtrToStringUTF8(result);
-                size = mslString != null ? (nuint)System.Text.Encoding.UTF8.GetByteCount(mslString) : 0;
-                _logger.LogDebug("MSL transpilation succeeded, size: {Size}", size);
-                return true;
+                _logger.LogError("Failed to compile HLSL to SPIRV (intermediate step for MSL)");
+                result = IntPtr.Zero;
+                size = 0;
+                return false;
             }
 
-            _logger.LogError("Failed to transpile SPIRV to MSL");
-            size = 0;
-            return false;
+            try
+            {
+                var spirvInfo = new SDL3.ShaderCross.SPIRVInfo
+                {
+                    ByteCode = spirvPtr,
+                    ByteCodeSize = spirvSize,
+                    Entrypoint = entrypointPtr,
+                    ShaderStage = MapToShaderCrossStage(source.Stage),
+                    Props = 0
+                };
+
+                result = SDL3.ShaderCross.TranspileMSLFromSPIRV(ref spirvInfo);
+                if (result != IntPtr.Zero)
+                {
+                    var mslString = Marshal.PtrToStringUTF8(result);
+                    size = mslString != null ? (nuint)System.Text.Encoding.UTF8.GetByteCount(mslString) : 0;
+                    _logger.LogDebug("MSL transpilation succeeded, size: {Size}", size);
+                    return true;
+                }
+
+                _logger.LogError("Failed to transpile SPIRV to MSL");
+                size = 0;
+                return false;
+            }
+            finally
+            {
+                SDL3.SDL.Free(spirvPtr);
+            }
         }
         finally
         {
-            SDL3.SDL.Free(spirvPtr);
+            Marshal.FreeCoTaskMem(sourcePtr);
+            Marshal.FreeCoTaskMem(entrypointPtr);
         }
     }
 
@@ -279,15 +291,15 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
     {
         bytecode = null;
 
-        // Pin the SPIRV bytecode
         var handle = GCHandle.Alloc(source.Code, GCHandleType.Pinned);
+        var entrypointPtr = Marshal.StringToCoTaskMemUTF8(source.EntryPoint);
         try
         {
             var spirvInfo = new SDL3.ShaderCross.SPIRVInfo
             {
                 ByteCode = handle.AddrOfPinnedObject(),
                 ByteCodeSize = (nuint)source.Code.Length,
-                Entrypoint = source.EntryPoint,
+                Entrypoint = entrypointPtr,
                 ShaderStage = MapToShaderCrossStage(source.Stage),
                 Props = 0
             };
@@ -317,6 +329,7 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         finally
         {
             handle.Free();
+            Marshal.FreeCoTaskMem(entrypointPtr);
         }
     }
 

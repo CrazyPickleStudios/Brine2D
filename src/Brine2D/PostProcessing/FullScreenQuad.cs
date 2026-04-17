@@ -49,7 +49,7 @@ internal static class FullScreenQuad
             ClearColor = new SDL3.SDL.FColor { R = 0, G = 0, B = 0, A = 1 },
             FlipMode = SDL3.SDL.FlipMode.None,
             Filter = SDL3.SDL.GPUFilter.Linear,
-            Cycle = 0
+            Cycle = false
         };
 
         SDL3.SDL.BlitGPUTexture(commandBuffer, ref blitInfo);

@@ -32,7 +32,8 @@ public class SDL3Shader : IShader
     /// default to 1 uniform buffer and fragment shaders default to 0.
     /// Pass an explicit value (including 0) to override the default.
     /// </summary>
-    public bool Compile(nint device, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format = SDL3.SDL.GPUShaderFormat.SPIRV, uint? numUniformBuffers = null)
+    public bool Compile(nint device, byte[] bytecode, string entryPoint,
+        SDL3.SDL.GPUShaderFormat format = SDL3.SDL.GPUShaderFormat.SPIRV, uint? numUniformBuffers = null)
     {
         if (IsCompiled)
         {
@@ -48,10 +49,10 @@ public class SDL3Shader : IShader
             CodeSize = (nuint)bytecode.Length,
             Entrypoint = entryPoint,
             Format = format,
-            Stage = Stage == ShaderStage.Vertex 
-                ? SDL3.SDL.GPUShaderStage.Vertex 
+            Stage = Stage == ShaderStage.Vertex
+                ? SDL3.SDL.GPUShaderStage.Vertex
                 : SDL3.SDL.GPUShaderStage.Fragment,
-            
+
             NumSamplers = Stage == ShaderStage.Fragment ? 1u : 0u,
             NumStorageTextures = 0,
             NumStorageBuffers = 0,

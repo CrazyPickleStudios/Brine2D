@@ -8,7 +8,9 @@ namespace Brine2D.Audio;
 public class AudioOptions
 {
     /// <summary>
-    /// Gets or sets the maximum number of audio tracks (channels) available.
+    /// Gets or sets the maximum number of concurrent sound-effect tracks.
+    /// Up to two additional tracks are reserved internally for music playback
+    /// (one active + one crossfade), so these do not count against this limit.
     /// Must be between 1 and 32. Defaults to 8.
     /// </summary>
     [Range(1, 32, ErrorMessage = "MaxTracks must be between 1 and 32.")]

@@ -798,9 +798,11 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 
 ### Audio
 - Spatial 2D audio via SDL3_mixer
-- Music streaming
-- Sound effect pooling
-- Per-channel volume control
+- Music streaming with crossfade support
+- Sound effect pooling with priority-based track eviction
+- Per-track volume, pan, and pitch control
+- Bus-based audio grouping (pause/stop entire buses)
+- Master, music, and sound volume channels
 
 ### Input
 - Keyboard, mouse, gamepad

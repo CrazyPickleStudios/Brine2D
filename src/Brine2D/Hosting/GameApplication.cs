@@ -1,4 +1,5 @@
-﻿using Brine2D.Engine;
+﻿using Brine2D.Audio;
+using Brine2D.Engine;
 using Brine2D.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -224,6 +225,10 @@ public sealed class GameApplication : IAsyncDisposable
                 // before SceneManager during reverse-creation-order teardown.
                 try { Services.GetRequiredService<SceneManager>().DisposeAsync().AsTask().GetAwaiter().GetResult(); }
                 catch (Exception ex) { _logger.LogError(ex, "Error disposing scene manager on thread {ThreadId}", threadId); }
+
+                // Dispose audio before the renderer tears down SDL.
+                try { Services.GetRequiredService<IAudioService>().Dispose(); }
+                catch (Exception ex) { _logger.LogError(ex, "Error disposing audio service on thread {ThreadId}", threadId); }
 
                 try { Services.GetRequiredService<GameEngine>().Shutdown(); }
                 catch (Exception ex) { _logger.LogError(ex, "Error shutting down game engine on thread {ThreadId}", threadId); }
