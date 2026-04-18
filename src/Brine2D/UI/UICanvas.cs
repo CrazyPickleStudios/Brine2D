@@ -98,9 +98,17 @@ public class UICanvas : IInputLayer
 
     /// <summary>
     /// Process keyboard input for UI. Returns true if input was consumed.
+    /// When <paramref name="consumed"/> is true, unfocuses any active text input.
     /// </summary>
-    public bool ProcessKeyboardInput(IInputContext input)
+    public bool ProcessKeyboardInput(IInputContext input, bool consumed)
     {
+        if (consumed)
+        {
+            if (_focusedTextInput != null && _focusedTextInput.IsFocused)
+                _focusedTextInput.SetFocused(false, input);
+            return false;
+        }
+
         if (_focusedTextInput != null && _focusedTextInput.IsFocused)
         {
             HandleTextInputKeyboard();
@@ -112,9 +120,16 @@ public class UICanvas : IInputLayer
 
     /// <summary>
     /// Process mouse input for UI. Returns true if input was consumed.
+    /// When <paramref name="consumed"/> is true, clears hover/press state.
     /// </summary>
-    public bool ProcessMouseInput(IInputContext input)
+    public bool ProcessMouseInput(IInputContext input, bool consumed)
     {
+        if (consumed)
+        {
+            ClearInteractionState();
+            return false;
+        }
+
         HandleButtonInput();
         HandleSliderInput();
         HandleTextInputMouse();
@@ -138,6 +153,29 @@ public class UICanvas : IInputLayer
             _activeDialog != null;
 
         return isInteractingWithUI;
+    }
+
+    private void ClearInteractionState()
+    {
+        if (_hoveredButton != null)
+        {
+            _hoveredButton.SetHovered(false);
+            _hoveredButton = null;
+        }
+
+        if (_pressedButton != null)
+        {
+            _pressedButton.SetPressed(false);
+            _pressedButton = null;
+        }
+
+        _activeSlider = null;
+        _hoveredCheckbox = null;
+        _activeDropdown = null;
+        _hoveredRadioButton = null;
+        _hoveredTabContainer = null;
+        _activeScrollView = null;
+        _activeDialog = null;
     }
 
     private void HandleButtonInput()

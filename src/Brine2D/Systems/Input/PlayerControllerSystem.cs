@@ -16,6 +16,11 @@ public class PlayerControllerSystem : UpdateSystemBase
     private readonly IInputContext _input;
     private CachedEntityQuery<PlayerControllerComponent>? _playerQuery;
 
+    /// <summary>
+    /// Default key bindings used when <see cref="PlayerControllerComponent.ActionMap"/> is null.
+    /// </summary>
+    private static readonly InputActionMap DefaultActionMap = CreateDefaultActionMap();
+
     public PlayerControllerSystem(IInputContext input)
     {
         _input = input;
@@ -32,14 +37,15 @@ public class PlayerControllerSystem : UpdateSystemBase
             if (!controller.IsEnabled)
                 continue;
 
-            // Get input direction based on input mode
             var inputDirection = GetInputDirection(controller);
             controller.InputDirection = inputDirection;
 
-            // Apply to velocity component if it exists
-            if (velocity != null && inputDirection != Vector2.Zero)
+            if (velocity != null)
             {
-                velocity.SetDirection(inputDirection, controller.MoveSpeed);
+                if (inputDirection != Vector2.Zero)
+                    velocity.SetDirection(inputDirection, controller.MoveSpeed);
+                else
+                    velocity.Velocity = Vector2.Zero;
             }
         }
     }
@@ -47,41 +53,38 @@ public class PlayerControllerSystem : UpdateSystemBase
     private Vector2 GetInputDirection(PlayerControllerComponent controller)
     {
         var direction = Vector2.Zero;
+        var map = controller.ActionMap ?? DefaultActionMap;
 
-        // Keyboard input
-        if (controller.InputMode == InputMode.Keyboard || 
+        if (controller.InputMode == InputMode.Keyboard ||
             controller.InputMode == InputMode.KeyboardAndGamepad)
         {
-            if (_input.IsKeyDown(Key.W) || _input.IsKeyDown(Key.Up))
-                direction.Y -= 1;
-            if (_input.IsKeyDown(Key.S) || _input.IsKeyDown(Key.Down))
-                direction.Y += 1;
-            if (_input.IsKeyDown(Key.A) || _input.IsKeyDown(Key.Left))
-                direction.X -= 1;
-            if (_input.IsKeyDown(Key.D) || _input.IsKeyDown(Key.Right))
-                direction.X += 1;
+            float x = map.ReadValue("MoveRight", _input) - map.ReadValue("MoveLeft", _input);
+            float y = map.ReadValue("MoveDown", _input) - map.ReadValue("MoveUp", _input);
+            direction = new Vector2(x, y);
         }
 
-        // Gamepad input (overrides keyboard if both are enabled)
-        if ((controller.InputMode == InputMode.Gamepad || 
+        if ((controller.InputMode == InputMode.Gamepad ||
              controller.InputMode == InputMode.KeyboardAndGamepad) &&
             _input.IsGamepadConnected(controller.GamepadIndex))
         {
             var leftStick = _input.GetGamepadLeftStick(controller.GamepadIndex);
-            
-            // If gamepad has significant input, use it (overrides keyboard)
-            if (leftStick.LengthSquared() > 0.01f)
-            {
+            if (leftStick != Vector2.Zero)
                 direction = leftStick;
-            }
         }
 
-        // Normalize diagonal movement if enabled
-        if (controller.NormalizeDiagonals && direction != Vector2.Zero)
-        {
+        if (direction != Vector2.Zero)
             direction = Vector2.Normalize(direction);
-        }
 
         return direction;
+    }
+
+    private static InputActionMap CreateDefaultActionMap()
+    {
+        var map = new InputActionMap("PlayerController");
+        map.AddAction(new InputAction("MoveUp", new KeyBinding(Key.W), new KeyBinding(Key.Up)));
+        map.AddAction(new InputAction("MoveDown", new KeyBinding(Key.S), new KeyBinding(Key.Down)));
+        map.AddAction(new InputAction("MoveLeft", new KeyBinding(Key.A), new KeyBinding(Key.Left)));
+        map.AddAction(new InputAction("MoveRight", new KeyBinding(Key.D), new KeyBinding(Key.Right)));
+        return map;
     }
 }

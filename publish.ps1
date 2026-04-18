@@ -32,7 +32,7 @@ $packages = @(
 $source = "https://api.nuget.org/v3/index.json"
 
 foreach ($package in $packages) {
-    $path = "src\$package\bin\Release\$package.0.9.5-beta.nupkg"
+    $path = "src\$package\bin\Release\$package.0.9.6-beta.nupkg"
     
     Write-Host "Checking: $path" -ForegroundColor Yellow
     

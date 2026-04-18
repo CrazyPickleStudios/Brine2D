@@ -13,52 +13,87 @@ namespace Brine2D.Input;
 /// Publishes high-level, framework-agnostic events for user code.
 /// </summary>
 /// <remarks>
-/// The SDL3-touching members (<see cref="EnumerateGamepads"/>, <see cref="PollMousePosition"/>,
-/// <see cref="GetGamepadAxis"/>, <see cref="StartTextInput"/>, <see cref="StopTextInput"/>,
-/// gamepad connect/disconnect handlers, and <see cref="Dispose"/>) are excluded from coverage
-/// as they require a live SDL3 context. All remaining state-machine logic and
-/// <see cref="ClearFrameState"/> are covered by unit tests via <c>InternalsVisibleTo</c>.
+/// Thread-safe: all mutable state is guarded by <see cref="_stateLock"/>.
+/// The lock is never held while publishing events to avoid deadlocks when
+/// user handlers query input state re-entrantly.
 /// </remarks>
 internal sealed class InputContext : IInputContext, IDisposable
 {
+    private static readonly GamepadAxis[] AllAxes =
+    [
+        GamepadAxis.LeftX, GamepadAxis.LeftY,
+        GamepadAxis.RightX, GamepadAxis.RightY,
+        GamepadAxis.LeftTrigger, GamepadAxis.RightTrigger,
+    ];
+
     private readonly ILogger<InputContext> _logger;
     private readonly IEventBus _publicEventBus;
     private readonly IEventBus _internalEventBus;
     private readonly ISDL3WindowProvider? _windowProvider;
 
+    private readonly Lock _stateLock = new();
     private readonly List<IDisposable> _subscriptions = [];
 
-    // ── Keyboard state ───────────────────────────────────────────────────────
     private readonly HashSet<Key> _keysDown           = new();
     private readonly HashSet<Key> _keysPressed        = new();
     private readonly HashSet<Key> _keysReleased       = new();
 
-    // ── Mouse state ──────────────────────────────────────────────────────────
     private Vector2 _mousePosition;
     private Vector2 _mouseDelta;
     private float   _scrollWheelDelta;
+    private float   _scrollWheelDeltaX;
     private readonly HashSet<MouseButton> _mouseButtonsDown     = new();
     private readonly HashSet<MouseButton> _mouseButtonsPressed  = new();
     private readonly HashSet<MouseButton> _mouseButtonsReleased = new();
 
-    // ── Gamepad state ────────────────────────────────────────────────────────
     private readonly Dictionary<uint, nint>               _gamepads              = new();
+    private readonly List<uint?>                           _gamepadSlots          = [];
     private readonly Dictionary<uint, HashSet<GamepadButton>> _gamepadButtonsDown     = new();
     private readonly Dictionary<uint, HashSet<GamepadButton>> _gamepadButtonsPressed  = new();
     private readonly Dictionary<uint, HashSet<GamepadButton>> _gamepadButtonsReleased = new();
 
-    // ── Text input state ─────────────────────────────────────────────────────
+    private readonly Dictionary<(uint DeviceId, GamepadAxis Axis), bool> _previousAxisActive = new();
+    private readonly Dictionary<(uint DeviceId, GamepadAxis Axis), bool> _currentAxisActive = new();
+
     private bool            _textInputActive;
     private readonly StringBuilder _textInputBuffer        = new();
     private bool            _backspacePressedThisFrame;
     private bool            _returnPressedThisFrame;
     private bool            _deletePressedThisFrame;
 
-    // ── IInputContext properties ─────────────────────────────────────────────
-    public Vector2 MousePosition    => _mousePosition;
-    public Vector2 MouseDelta       => _mouseDelta;
-    public float   ScrollWheelDelta => _scrollWheelDelta;
-    public bool    IsTextInputActive => _textInputActive;
+    private float _gamepadDeadzone = 0.15f;
+    
+    public Vector2 MousePosition { get { lock (_stateLock) return _mousePosition; } }
+    public Vector2 MouseDelta { get { lock (_stateLock) return _mouseDelta; } }
+    public float ScrollWheelDelta { get { lock (_stateLock) return _scrollWheelDelta; } }
+    public float ScrollWheelDeltaX { get { lock (_stateLock) return _scrollWheelDeltaX; } }
+    public bool IsTextInputActive { get { lock (_stateLock) return _textInputActive; } }
+
+    public float GamepadDeadzone
+    {
+        get { lock (_stateLock) return _gamepadDeadzone; }
+        set { lock (_stateLock) _gamepadDeadzone = Math.Clamp(value, 0f, 1f); }
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 cursor subsystem.")]
+    public bool IsCursorVisible
+    {
+        get => SDL3.SDL.CursorVisible();
+        set
+        {
+            if (value)
+                SDL3.SDL.ShowCursor();
+            else
+                SDL3.SDL.HideCursor();
+        }
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 mouse subsystem.")]
+    public bool IsRelativeMouseMode
+    {
+        get => SDL3.SDL.GetWindowRelativeMouseMode(_windowProvider?.Window ?? IntPtr.Zero);
+        set => SDL3.SDL.SetWindowRelativeMouseMode(_windowProvider?.Window ?? IntPtr.Zero, value);
+    }
 
     public InputContext(
         ILogger<InputContext> logger,
@@ -73,49 +108,94 @@ internal sealed class InputContext : IInputContext, IDisposable
 
         SubscribeToInternalEvents();
         EnumerateGamepads();
+        InitializeMousePosition();
     }
-
-    // ── Lifecycle ────────────────────────────────────────────────────────────
 
     void IInputContext.Update()
     {
-        ClearFrameState();
-        PollMousePosition();
+        SnapshotAxisState();
+        ClearPerFrameBuffers();
     }
 
     /// <summary>
-    /// Clears all per-frame input state. Pure — no SDL3 calls.
-    /// Called by <see cref="IInputContext.Update"/> and directly by unit tests.
+    /// Promotes the previous frame's current axis state to the previous buffer, then
+    /// captures a fresh snapshot of live axis values into the current buffer.
+    /// Called at frame start so that <see cref="IsGamepadAxisPressed"/> and
+    /// <see cref="IsGamepadAxisReleased"/> can compare last frame's state against
+    /// this frame's live values.
     /// </summary>
-    internal void ClearFrameState()
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad axis polling.")]
+    private void SnapshotAxisState()
     {
-        _keysPressed.Clear();
-        _keysReleased.Clear();
-        _mouseButtonsPressed.Clear();
-        _mouseButtonsReleased.Clear();
-        _mouseDelta           = Vector2.Zero;
-        _scrollWheelDelta     = 0f;
-        _textInputBuffer.Clear();
-        _backspacePressedThisFrame = false;
-        _returnPressedThisFrame    = false;
-        _deletePressedThisFrame    = false;
+        lock (_stateLock)
+        {
+            var deadzone = _gamepadDeadzone;
 
-        foreach (var set in _gamepadButtonsPressed.Values)
-            set.Clear();
-        foreach (var set in _gamepadButtonsReleased.Values)
-            set.Clear();
+            _previousAxisActive.Clear();
+            foreach (var kvp in _currentAxisActive)
+                _previousAxisActive[kvp.Key] = kvp.Value;
+            _currentAxisActive.Clear();
+
+            for (int g = 0; g < _gamepadSlots.Count; g++)
+            {
+                var slot = _gamepadSlots[g];
+                if (slot == null)
+                    continue;
+
+                var deviceId = slot.Value;
+                if (!_gamepads.TryGetValue(deviceId, out var gamepad))
+                    continue;
+
+                for (int a = 0; a < AllAxes.Length; a++)
+                {
+                    var axis = AllAxes[a];
+                    var raw = SDL3.SDL.GetGamepadAxis(gamepad, InputMapping.ToSDLAxis(axis));
+                    var value = Math.Clamp(raw / 32767f, -1f, 1f);
+                    var isActive = axis is GamepadAxis.LeftTrigger or GamepadAxis.RightTrigger
+                        ? value > deadzone
+                        : MathF.Abs(value) > deadzone;
+
+                    _currentAxisActive[(deviceId, axis)] = isActive;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clears all per-frame input state.
+    /// Called directly by unit tests to simulate a new frame boundary.
+    /// </summary>
+    internal void ClearFrameState() => ClearPerFrameBuffers();
+
+    private void ClearPerFrameBuffers()
+    {
+        lock (_stateLock)
+        {
+            _keysPressed.Clear();
+            _keysReleased.Clear();
+            _mouseButtonsPressed.Clear();
+            _mouseButtonsReleased.Clear();
+            _mouseDelta = Vector2.Zero;
+            _scrollWheelDelta = 0f;
+            _scrollWheelDeltaX = 0f;
+            _textInputBuffer.Clear();
+            _backspacePressedThisFrame = false;
+            _returnPressedThisFrame = false;
+            _deletePressedThisFrame = false;
+
+            foreach (var set in _gamepadButtonsPressed.Values)
+                set.Clear();
+            foreach (var set in _gamepadButtonsReleased.Values)
+                set.Clear();
+        }
     }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 mouse device.")]
-    private void PollMousePosition()
+    private void InitializeMousePosition()
     {
         SDL3.SDL.GetMouseState(out float mx, out float my);
-        var newMousePos = new Vector2(mx, my);
-        _mouseDelta    = newMousePos - _mousePosition;
-        _mousePosition = newMousePos;
+        _mousePosition = new Vector2(mx, my);
     }
-
-    // ── Internal event subscriptions ─────────────────────────────────────────
 
     private void SubscribeToInternalEvents()
     {
@@ -148,10 +228,14 @@ internal sealed class InputContext : IInputContext, IDisposable
 
                 if (gamepad != IntPtr.Zero)
                 {
-                    _gamepads[deviceId]              = gamepad;
-                    _gamepadButtonsDown[deviceId]     = new HashSet<GamepadButton>();
-                    _gamepadButtonsPressed[deviceId]  = new HashSet<GamepadButton>();
-                    _gamepadButtonsReleased[deviceId] = new HashSet<GamepadButton>();
+                    lock (_stateLock)
+                    {
+                        _gamepads[deviceId] = gamepad;
+                        _gamepadSlots.Add(deviceId);
+                        _gamepadButtonsDown[deviceId]     = new HashSet<GamepadButton>();
+                        _gamepadButtonsPressed[deviceId]  = new HashSet<GamepadButton>();
+                        _gamepadButtonsReleased[deviceId] = new HashSet<GamepadButton>();
+                    }
 
                     _logger.LogInformation("Gamepad {DeviceId} opened: {Name}",
                         deviceId, SDL3.SDL.GetGamepadName(gamepad));
@@ -168,27 +252,26 @@ internal sealed class InputContext : IInputContext, IDisposable
         }
     }
 
-    // ── Internal event handlers ───────────────────────────────────────────────
-
     private void OnKeyDown(SDL3KeyDownEvent evt)
     {
         var key = InputMapping.ToKey(evt.KeyEvent.Key);
         if (key == Key.Unknown) return;
 
-        _keysDown.Add(key);
+        bool isRepeat = evt.KeyEvent.Repeat;
 
-        if (!evt.KeyEvent.Repeat)
+        lock (_stateLock)
         {
-            _keysPressed.Add(key);
-            _publicEventBus.Publish(new KeyPressedEvent(key, IsRepeat: false));
+            _keysDown.Add(key);
+
+            if (!isRepeat)
+                _keysPressed.Add(key);
+
+            if (key == Key.Backspace) _backspacePressedThisFrame = true;
+            if (key == Key.Enter)     _returnPressedThisFrame    = true;
+            if (key == Key.Delete)    _deletePressedThisFrame    = true;
         }
 
-        if (_textInputActive)
-        {
-            if (key == Key.Backspace && !_backspacePressedThisFrame) _backspacePressedThisFrame = true;
-            if (key == Key.Enter     && !_returnPressedThisFrame)    _returnPressedThisFrame    = true;
-            if (key == Key.Delete    && !_deletePressedThisFrame)    _deletePressedThisFrame    = true;
-        }
+        _publicEventBus.Publish(new KeyPressedEvent(key, IsRepeat: isRepeat));
     }
 
     private void OnKeyUp(SDL3KeyUpEvent evt)
@@ -196,8 +279,11 @@ internal sealed class InputContext : IInputContext, IDisposable
         var key = InputMapping.ToKey(evt.KeyEvent.Key);
         if (key == Key.Unknown) return;
 
-        _keysDown.Remove(key);
-        _keysReleased.Add(key);
+        lock (_stateLock)
+        {
+            _keysDown.Remove(key);
+            _keysReleased.Add(key);
+        }
 
         _publicEventBus.Publish(new KeyReleasedEvent(key));
     }
@@ -207,10 +293,15 @@ internal sealed class InputContext : IInputContext, IDisposable
         var button = InputMapping.ToMouseButton(evt.ButtonEvent.Button);
         if (button == MouseButton.Unknown) return;
 
-        _mouseButtonsDown.Add(button);
-        _mouseButtonsPressed.Add(button);
+        Vector2 position;
+        lock (_stateLock)
+        {
+            _mouseButtonsDown.Add(button);
+            _mouseButtonsPressed.Add(button);
+            position = _mousePosition;
+        }
 
-        _publicEventBus.Publish(new MouseButtonPressedEvent(button, _mousePosition));
+        _publicEventBus.Publish(new MouseButtonPressedEvent(button, position));
     }
 
     private void OnMouseButtonUp(SDL3MouseButtonUpEvent evt)
@@ -218,31 +309,59 @@ internal sealed class InputContext : IInputContext, IDisposable
         var button = InputMapping.ToMouseButton(evt.ButtonEvent.Button);
         if (button == MouseButton.Unknown) return;
 
-        _mouseButtonsDown.Remove(button);
-        _mouseButtonsReleased.Add(button);
+        Vector2 position;
+        lock (_stateLock)
+        {
+            _mouseButtonsDown.Remove(button);
+            _mouseButtonsReleased.Add(button);
+            position = _mousePosition;
+        }
 
-        _publicEventBus.Publish(new MouseButtonReleasedEvent(button, _mousePosition));
+        _publicEventBus.Publish(new MouseButtonReleasedEvent(button, position));
     }
 
     private void OnMouseWheel(SDL3MouseWheelEvent evt)
     {
-        _scrollWheelDelta = evt.WheelEvent.Y;
+        lock (_stateLock)
+        {
+            _scrollWheelDelta  += evt.WheelEvent.Y;
+            _scrollWheelDeltaX += evt.WheelEvent.X;
+        }
+
         _publicEventBus.Publish(new MouseScrolledEvent(evt.WheelEvent.X, evt.WheelEvent.Y));
     }
 
     private void OnMouseMotion(SDL3MouseMotionEvent evt)
     {
-        var delta = new Vector2(evt.MotionEvent.XRel, evt.MotionEvent.YRel);
-        _publicEventBus.Publish(new MouseMovedEvent(_mousePosition, delta));
+        Vector2 position;
+        Vector2 delta = new(evt.MotionEvent.XRel, evt.MotionEvent.YRel);
+
+        lock (_stateLock)
+        {
+            _mousePosition = new Vector2(evt.MotionEvent.X, evt.MotionEvent.Y);
+            _mouseDelta   += delta;
+            position       = _mousePosition;
+        }
+
+        _publicEventBus.Publish(new MouseMovedEvent(position, delta));
     }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 text input and PointerToString.")]
     private void OnTextInput(SDL3TextInputEvent evt)
     {
-        if (_textInputActive && !string.IsNullOrEmpty(SDL3.SDL.PointerToString(evt.TextEvent.Text)))
+        var text = SDL3.SDL.PointerToString(evt.TextEvent.Text);
+
+        if (!string.IsNullOrEmpty(text))
         {
-            _textInputBuffer.Append(evt.TextEvent.Text);
-            _logger.LogTrace("Text input: {Text}", evt.TextEvent.Text);
+            lock (_stateLock)
+            {
+                if (_textInputActive)
+                {
+                    _textInputBuffer.Append(text);
+                }
+            }
+
+            _logger.LogTrace("Text input: {Text}", text);
         }
     }
 
@@ -251,16 +370,23 @@ internal sealed class InputContext : IInputContext, IDisposable
         var deviceId = evt.ButtonEvent.Which;
         var button   = InputMapping.ToGamepadButton((SDL3.SDL.GamepadButton)evt.ButtonEvent.Button);
 
-        if (!_gamepadButtonsDown.ContainsKey(deviceId))
+        if (button == GamepadButton.Unknown) return;
+
+        int gamepadIndex;
+        lock (_stateLock)
         {
-            _logger.LogWarning("Received button event for unknown gamepad device {DeviceId}", deviceId);
-            return;
+            if (!_gamepadButtonsDown.ContainsKey(deviceId))
+            {
+                _logger.LogWarning("Received button event for unknown gamepad device {DeviceId}", deviceId);
+                return;
+            }
+
+            _gamepadButtonsDown[deviceId].Add(button);
+            _gamepadButtonsPressed[deviceId].Add(button);
+            gamepadIndex = IndexOfDevice(deviceId);
         }
 
-        _gamepadButtonsDown[deviceId].Add(button);
-        _gamepadButtonsPressed[deviceId].Add(button);
-
-        _publicEventBus.Publish(new GamepadButtonPressedEvent(button, (int)deviceId));
+        _publicEventBus.Publish(new GamepadButtonPressedEvent(button, gamepadIndex));
         _logger.LogTrace("Gamepad {DeviceId} button {Button} pressed", deviceId, button);
     }
 
@@ -269,12 +395,19 @@ internal sealed class InputContext : IInputContext, IDisposable
         var deviceId = evt.ButtonEvent.Which;
         var button   = InputMapping.ToGamepadButton((SDL3.SDL.GamepadButton)evt.ButtonEvent.Button);
 
-        if (!_gamepadButtonsDown.ContainsKey(deviceId)) return;
+        if (button == GamepadButton.Unknown) return;
 
-        _gamepadButtonsDown[deviceId].Remove(button);
-        _gamepadButtonsReleased[deviceId].Add(button);
+        int gamepadIndex;
+        lock (_stateLock)
+        {
+            if (!_gamepadButtonsDown.ContainsKey(deviceId)) return;
 
-        _publicEventBus.Publish(new GamepadButtonReleasedEvent(button, (int)deviceId));
+            _gamepadButtonsDown[deviceId].Remove(button);
+            _gamepadButtonsReleased[deviceId].Add(button);
+            gamepadIndex = IndexOfDevice(deviceId);
+        }
+
+        _publicEventBus.Publish(new GamepadButtonReleasedEvent(button, gamepadIndex));
     }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad subsystem.")]
@@ -285,14 +418,19 @@ internal sealed class InputContext : IInputContext, IDisposable
 
         if (gamepad != IntPtr.Zero)
         {
-            _gamepads[deviceId]              = gamepad;
-            _gamepadButtonsDown[deviceId]     = new HashSet<GamepadButton>();
-            _gamepadButtonsPressed[deviceId]  = new HashSet<GamepadButton>();
-            _gamepadButtonsReleased[deviceId] = new HashSet<GamepadButton>();
+            int gamepadIndex;
+            lock (_stateLock)
+            {
+                _gamepads[deviceId] = gamepad;
+                gamepadIndex = AllocateSlot(deviceId);
+                _gamepadButtonsDown[deviceId]     = new HashSet<GamepadButton>();
+                _gamepadButtonsPressed[deviceId]  = new HashSet<GamepadButton>();
+                _gamepadButtonsReleased[deviceId] = new HashSet<GamepadButton>();
+            }
 
             var name = SDL3.SDL.GetGamepadName(gamepad);
-            _logger.LogInformation("Gamepad {DeviceId} connected: {Name}", deviceId, name);
-            _publicEventBus.Publish(new GamepadConnectedEvent((int)deviceId, name ?? "Unknown"));
+            _logger.LogInformation("Gamepad {DeviceId} connected at slot {Index}: {Name}", deviceId, gamepadIndex, name);
+            _publicEventBus.Publish(new GamepadConnectedEvent(gamepadIndex, name ?? "Unknown"));
         }
     }
 
@@ -301,103 +439,322 @@ internal sealed class InputContext : IInputContext, IDisposable
     {
         var deviceId = evt.DeviceEvent.Which;
 
-        if (_gamepads.TryGetValue(deviceId, out var gamepad))
+        nint gamepad;
+        int gamepadIndex;
+        lock (_stateLock)
         {
-            SDL3.SDL.CloseGamepad(gamepad);
+            if (!_gamepads.TryGetValue(deviceId, out gamepad))
+                return;
+
+            gamepadIndex = IndexOfDevice(deviceId);
+            if (gamepadIndex >= 0)
+                _gamepadSlots[gamepadIndex] = null;
+
             _gamepads.Remove(deviceId);
             _gamepadButtonsDown.Remove(deviceId);
             _gamepadButtonsPressed.Remove(deviceId);
             _gamepadButtonsReleased.Remove(deviceId);
 
-            _logger.LogInformation("Gamepad {DeviceId} disconnected", deviceId);
-            _publicEventBus.Publish(new GamepadDisconnectedEvent((int)deviceId));
+            foreach (var axis in AllAxes)
+            {
+                _previousAxisActive.Remove((deviceId, axis));
+                _currentAxisActive.Remove((deviceId, axis));
+            }
         }
+
+        SDL3.SDL.CloseGamepad(gamepad);
+        _logger.LogInformation("Gamepad {DeviceId} disconnected from slot {Index}", deviceId, gamepadIndex);
+        _publicEventBus.Publish(new GamepadDisconnectedEvent(gamepadIndex));
     }
 
-    // ── Query methods ─────────────────────────────────────────────────────────
+    public bool IsKeyDown(Key key)     { lock (_stateLock) return _keysDown.Contains(key); }
+    public bool IsKeyPressed(Key key)  { lock (_stateLock) return _keysPressed.Contains(key); }
+    public bool IsKeyReleased(Key key) { lock (_stateLock) return _keysReleased.Contains(key); }
+    public bool IsAnyKeyPressed()      { lock (_stateLock) return _keysPressed.Count > 0; }
 
-    public bool IsKeyDown(Key key)     => _keysDown.Contains(key);
-    public bool IsKeyPressed(Key key)  => _keysPressed.Contains(key);
-    public bool IsKeyReleased(Key key) => _keysReleased.Contains(key);
+    public bool IsMouseButtonDown(MouseButton button)     { lock (_stateLock) return _mouseButtonsDown.Contains(button); }
+    public bool IsMouseButtonPressed(MouseButton button)  { lock (_stateLock) return _mouseButtonsPressed.Contains(button); }
+    public bool IsMouseButtonReleased(MouseButton button) { lock (_stateLock) return _mouseButtonsReleased.Contains(button); }
+    public bool IsAnyMouseButtonPressed()                 { lock (_stateLock) return _mouseButtonsPressed.Count > 0; }
 
-    public bool IsMouseButtonDown(MouseButton button)     => _mouseButtonsDown.Contains(button);
-    public bool IsMouseButtonPressed(MouseButton button)  => _mouseButtonsPressed.Contains(button);
-    public bool IsMouseButtonReleased(MouseButton button) => _mouseButtonsReleased.Contains(button);
-
-    public bool IsGamepadConnected(int gamepadIndex = 0) => _gamepads.Count > gamepadIndex;
+    public bool IsGamepadConnected(int gamepadIndex = 0)
+    {
+        lock (_stateLock)
+            return gamepadIndex >= 0
+                && gamepadIndex < _gamepadSlots.Count
+                && _gamepadSlots[gamepadIndex] != null;
+    }
 
     public bool IsGamepadButtonDown(GamepadButton button, int gamepadIndex = 0)
     {
-        var deviceId = GetDeviceIdByIndex(gamepadIndex);
-        return deviceId != null
-            && _gamepadButtonsDown.TryGetValue(deviceId.Value, out var buttons)
-            && buttons.Contains(button);
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            return deviceId != null
+                && _gamepadButtonsDown.TryGetValue(deviceId.Value, out var buttons)
+                && buttons.Contains(button);
+        }
     }
 
     public bool IsGamepadButtonPressed(GamepadButton button, int gamepadIndex = 0)
     {
-        var deviceId = GetDeviceIdByIndex(gamepadIndex);
-        return deviceId != null
-            && _gamepadButtonsPressed.TryGetValue(deviceId.Value, out var buttons)
-            && buttons.Contains(button);
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            return deviceId != null
+                && _gamepadButtonsPressed.TryGetValue(deviceId.Value, out var buttons)
+                && buttons.Contains(button);
+        }
     }
 
     public bool IsGamepadButtonReleased(GamepadButton button, int gamepadIndex = 0)
     {
-        var deviceId = GetDeviceIdByIndex(gamepadIndex);
-        return deviceId != null
-            && _gamepadButtonsReleased.TryGetValue(deviceId.Value, out var buttons)
-            && buttons.Contains(button);
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            return deviceId != null
+                && _gamepadButtonsReleased.TryGetValue(deviceId.Value, out var buttons)
+                && buttons.Contains(button);
+        }
+    }
+
+    public bool IsAnyGamepadButtonPressed(int gamepadIndex = 0)
+    {
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            return deviceId != null
+                && _gamepadButtonsPressed.TryGetValue(deviceId.Value, out var buttons)
+                && buttons.Count > 0;
+        }
+    }
+
+    public int ConnectedGamepadCount
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                int count = 0;
+                for (int i = 0; i < _gamepadSlots.Count; i++)
+                {
+                    if (_gamepadSlots[i] != null)
+                        count++;
+                }
+                return count;
+            }
+        }
+    }
+
+    public bool IsAnyGamepadButtonPressedOnAny(out int gamepadIndex)
+    {
+        lock (_stateLock)
+        {
+            for (int i = 0; i < _gamepadSlots.Count; i++)
+            {
+                var slot = _gamepadSlots[i];
+                if (slot == null)
+                    continue;
+
+                if (_gamepadButtonsPressed.TryGetValue(slot.Value, out var buttons) && buttons.Count > 0)
+                {
+                    gamepadIndex = i;
+                    return true;
+                }
+            }
+        }
+
+        gamepadIndex = -1;
+        return false;
     }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad axis polling.")]
     public float GetGamepadAxis(GamepadAxis axis, int gamepadIndex = 0)
     {
-        var deviceId = GetDeviceIdByIndex(gamepadIndex);
-        if (deviceId == null) return 0f;
-        if (!_gamepads.TryGetValue(deviceId.Value, out var gamepad)) return 0f;
+        nint gamepad;
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            if (deviceId == null) return 0f;
+            if (!_gamepads.TryGetValue(deviceId.Value, out gamepad)) return 0f;
+        }
 
         var value = SDL3.SDL.GetGamepadAxis(gamepad, InputMapping.ToSDLAxis(axis));
-        return value / 32767f;
+        return Math.Clamp(value / 32767f, -1f, 1f);
     }
 
-    public Vector2 GetGamepadLeftStick(int gamepadIndex = 0) => new(
-        GetGamepadAxis(GamepadAxis.LeftX, gamepadIndex),
-        GetGamepadAxis(GamepadAxis.LeftY, gamepadIndex));
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad axis polling.")]
+    public bool IsGamepadAxisPressed(GamepadAxis axis, int gamepadIndex = 0)
+    {
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            if (deviceId == null) return false;
 
-    public Vector2 GetGamepadRightStick(int gamepadIndex = 0) => new(
-        GetGamepadAxis(GamepadAxis.RightX, gamepadIndex),
-        GetGamepadAxis(GamepadAxis.RightY, gamepadIndex));
+            var isActive = _currentAxisActive.TryGetValue((deviceId.Value, axis), out var cur) && cur;
+            var wasPreviouslyActive = _previousAxisActive.TryGetValue((deviceId.Value, axis), out var prev) && prev;
+            return isActive && !wasPreviouslyActive;
+        }
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad axis polling.")]
+    public bool IsGamepadAxisReleased(GamepadAxis axis, int gamepadIndex = 0)
+    {
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            if (deviceId == null) return false;
+
+            var isActive = _currentAxisActive.TryGetValue((deviceId.Value, axis), out var cur) && cur;
+            var wasPreviouslyActive = _previousAxisActive.TryGetValue((deviceId.Value, axis), out var prev) && prev;
+            return !isActive && wasPreviouslyActive;
+        }
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad axis polling.")]
+    public float GetGamepadTrigger(GamepadAxis trigger, int gamepadIndex = 0)
+    {
+        if (trigger is not (GamepadAxis.LeftTrigger or GamepadAxis.RightTrigger))
+            throw new ArgumentException("Only LeftTrigger and RightTrigger are valid.", nameof(trigger));
+
+        return Math.Clamp(GetGamepadAxis(trigger, gamepadIndex), 0f, 1f);
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad axis polling.")]
+    public bool IsGamepadTriggerPressed(GamepadAxis trigger, int gamepadIndex = 0)
+    {
+        if (trigger is not (GamepadAxis.LeftTrigger or GamepadAxis.RightTrigger))
+            throw new ArgumentException("Only LeftTrigger and RightTrigger are valid.", nameof(trigger));
+
+        return IsGamepadAxisPressed(trigger, gamepadIndex);
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad axis polling.")]
+    public bool IsGamepadTriggerReleased(GamepadAxis trigger, int gamepadIndex = 0)
+    {
+        if (trigger is not (GamepadAxis.LeftTrigger or GamepadAxis.RightTrigger))
+            throw new ArgumentException("Only LeftTrigger and RightTrigger are valid.", nameof(trigger));
+
+        return IsGamepadAxisReleased(trigger, gamepadIndex);
+    }
+
+    public Vector2 GetGamepadLeftStick(int gamepadIndex = 0) =>
+        ApplyRadialDeadzone(new Vector2(
+            GetGamepadAxis(GamepadAxis.LeftX, gamepadIndex),
+            GetGamepadAxis(GamepadAxis.LeftY, gamepadIndex)));
+
+    public Vector2 GetGamepadRightStick(int gamepadIndex = 0) =>
+        ApplyRadialDeadzone(new Vector2(
+            GetGamepadAxis(GamepadAxis.RightX, gamepadIndex),
+            GetGamepadAxis(GamepadAxis.RightY, gamepadIndex)));
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad rumble subsystem.")]
+    public bool RumbleGamepad(float lowFrequency, float highFrequency, TimeSpan duration, int gamepadIndex = 0)
+    {
+        nint gamepad;
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            if (deviceId == null) return false;
+            if (!_gamepads.TryGetValue(deviceId.Value, out gamepad)) return false;
+        }
+
+        var lowU16 = (ushort)(Math.Clamp(lowFrequency, 0f, 1f) * 0xFFFF);
+        var highU16 = (ushort)(Math.Clamp(highFrequency, 0f, 1f) * 0xFFFF);
+        var durationMs = (uint)Math.Clamp(duration.TotalMilliseconds, 0, uint.MaxValue);
+        return SDL3.SDL.RumbleGamepad(gamepad, lowU16, highU16, durationMs);
+    }
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad rumble subsystem.")]
+    public bool RumbleGamepadTriggers(float leftTrigger, float rightTrigger, TimeSpan duration, int gamepadIndex = 0)
+    {
+        nint gamepad;
+        lock (_stateLock)
+        {
+            var deviceId = GetDeviceIdByIndex(gamepadIndex);
+            if (deviceId == null) return false;
+            if (!_gamepads.TryGetValue(deviceId.Value, out gamepad)) return false;
+        }
+
+        var leftU16 = (ushort)(Math.Clamp(leftTrigger, 0f, 1f) * 0xFFFF);
+        var rightU16 = (ushort)(Math.Clamp(rightTrigger, 0f, 1f) * 0xFFFF);
+        var durationMs = (uint)Math.Clamp(duration.TotalMilliseconds, 0, uint.MaxValue);
+        return SDL3.SDL.RumbleGamepadTriggers(gamepad, leftU16, rightU16, durationMs);
+    }
+
+    private Vector2 ApplyRadialDeadzone(Vector2 stick)
+    {
+        float deadzone;
+        lock (_stateLock) deadzone = _gamepadDeadzone;
+
+        var magnitude = stick.Length();
+        if (magnitude < deadzone)
+            return Vector2.Zero;
+
+        var direction = stick / magnitude;
+        var rescaled = (magnitude - deadzone) / (1f - deadzone);
+        return direction * Math.Min(rescaled, 1f);
+    }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 text input subsystem.")]
     public void StartTextInput()
     {
-        if (_textInputActive) return;
+        lock (_stateLock)
+        {
+            if (_textInputActive) return;
+            _textInputActive = true;
+        }
+
         SDL3.SDL.StartTextInput(_windowProvider?.Window ?? IntPtr.Zero);
-        _textInputActive = true;
         _logger.LogDebug("Text input started");
     }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 text input subsystem.")]
     public void StopTextInput()
     {
-        if (!_textInputActive) return;
+        lock (_stateLock)
+        {
+            if (!_textInputActive) return;
+            _textInputActive = false;
+        }
+
         SDL3.SDL.StopTextInput(_windowProvider?.Window ?? IntPtr.Zero);
-        _textInputActive = false;
         _logger.LogDebug("Text input stopped");
     }
 
-    public string GetTextInput()       => _textInputBuffer.ToString();
-    public bool IsBackspacePressed()   => _backspacePressedThisFrame;
-    public bool IsReturnPressed()      => _returnPressedThisFrame;
-    public bool IsDeletePressed()      => _deletePressedThisFrame;
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    public string GetTextInput()     { lock (_stateLock) return _textInputBuffer.ToString(); }
+    public bool IsBackspacePressed() { lock (_stateLock) return _backspacePressedThisFrame; }
+    public bool IsReturnPressed()    { lock (_stateLock) return _returnPressedThisFrame; }
+    public bool IsDeletePressed()    { lock (_stateLock) return _deletePressedThisFrame; }
 
     private uint? GetDeviceIdByIndex(int index)
     {
-        if (index < 0 || index >= _gamepads.Count) return null;
-        return _gamepads.Keys.ElementAtOrDefault(index);
+        if (index < 0 || index >= _gamepadSlots.Count) return null;
+        return _gamepadSlots[index];
+    }
+
+    private int IndexOfDevice(uint deviceId)
+    {
+        for (int i = 0; i < _gamepadSlots.Count; i++)
+        {
+            if (_gamepadSlots[i] == deviceId)
+                return i;
+        }
+        return -1;
+    }
+
+    private int AllocateSlot(uint deviceId)
+    {
+        for (int i = 0; i < _gamepadSlots.Count; i++)
+        {
+            if (_gamepadSlots[i] == null)
+            {
+                _gamepadSlots[i] = deviceId;
+                return i;
+            }
+        }
+        _gamepadSlots.Add(deviceId);
+        return _gamepadSlots.Count - 1;
     }
 
     [ExcludeFromCodeCoverage(Justification = "Requires SDL3 gamepad subsystem.")]
@@ -410,5 +767,11 @@ internal sealed class InputContext : IInputContext, IDisposable
         foreach (var gamepad in _gamepads.Values)
             SDL3.SDL.CloseGamepad(gamepad);
         _gamepads.Clear();
+        _gamepadSlots.Clear();
+        _gamepadButtonsDown.Clear();
+        _gamepadButtonsPressed.Clear();
+        _gamepadButtonsReleased.Clear();
+        _previousAxisActive.Clear();
+        _currentAxisActive.Clear();
     }
 }

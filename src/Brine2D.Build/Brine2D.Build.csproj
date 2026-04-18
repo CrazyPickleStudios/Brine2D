@@ -19,7 +19,7 @@
     <NoWarn>$(NoWarn);NU5128</NoWarn>
 
     <PackageId>Brine2D.Build</PackageId>
-    <Version>0.9.5-beta</Version>
+    <Version>0.9.6-beta</Version>
     <Authors>CrazyPickle Studios</Authors>
     <Description>
       MSBuild tooling for Brine2D. Automatically generates strongly-typed C# asset

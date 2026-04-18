@@ -805,9 +805,13 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 - Master, music, and sound volume channels
 
 ### Input
-- Keyboard, mouse, gamepad
-- Input layer manager for context-sensitive bindings
-- Action mapping
+- Keyboard, mouse, multi-gamepad with automatic slot management
+- Input layer manager: priority-based consumption with cleanup pass for lower layers
+- Action maps: named, toggleable action groups with runtime rebinding
+- 10+ binding types: key, key-axis, composite (Ctrl+S), mouse button, scroll, mouse delta, gamepad button, axis, trigger, stick (radial deadzone)
+- Built-in `PlayerControllerSystem`: WASD + gamepad movement, diagonal normalization, custom action maps
+- Gamepad features: radial and per-axis deadzones, rumble (standard + trigger), multi-gamepad lobby support
+- Text input mode with full Unicode/IME support
 
 ### Gameplay
 - AABB and circle collision detection

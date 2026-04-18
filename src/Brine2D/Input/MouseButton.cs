@@ -5,10 +5,10 @@ namespace Brine2D.Input;
 /// </summary>
 public enum MouseButton
 {
-    Unknown = -1,
-    Left = 0,
-    Middle = 1,
-    Right = 2,
-    X1 = 3,
-    X2 = 4
+    Unknown = 0,
+    Left,
+    Middle,
+    Right,
+    X1,
+    X2
 }

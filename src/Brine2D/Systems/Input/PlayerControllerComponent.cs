@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using Brine2D.ECS;
+using Brine2D.Input;
 
 namespace Brine2D.Systems.Input;
 
@@ -31,6 +32,13 @@ public class PlayerControllerComponent : Component
     public bool NormalizeDiagonals { get; set; } = true;
 
     /// <summary>
+    /// Optional action map for custom key bindings. When null, the system uses
+    /// default WASD / arrow key bindings.
+    /// Expected actions: "MoveUp", "MoveDown", "MoveLeft", "MoveRight".
+    /// </summary>
+    public InputActionMap? ActionMap { get; set; }
+
+    /// <summary>
     /// Current input direction this frame (calculated by system).
     /// </summary>
     public Vector2 InputDirection { get; internal set; }
@@ -59,5 +67,5 @@ public enum InputMode
     /// <summary>
     /// Both keyboard and gamepad (gamepad overrides keyboard).
     /// </summary>
-    KeyboardAndGamepad
+    KeyboardAndGamepad,
 }

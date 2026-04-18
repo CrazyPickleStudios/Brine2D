@@ -49,18 +49,30 @@ internal static class InputMapping
         SDL3.SDL.Keycode.Alpha9 => Key.D9,
 
         // Function keys
-        SDL3.SDL.Keycode.F1  => Key.F1,
-        SDL3.SDL.Keycode.F2  => Key.F2,
-        SDL3.SDL.Keycode.F3  => Key.F3,
-        SDL3.SDL.Keycode.F4  => Key.F4,
-        SDL3.SDL.Keycode.F5  => Key.F5,
-        SDL3.SDL.Keycode.F6  => Key.F6,
-        SDL3.SDL.Keycode.F7  => Key.F7,
-        SDL3.SDL.Keycode.F8  => Key.F8,
-        SDL3.SDL.Keycode.F9  => Key.F9,
+        SDL3.SDL.Keycode.F1 => Key.F1,
+        SDL3.SDL.Keycode.F2 => Key.F2,
+        SDL3.SDL.Keycode.F3 => Key.F3,
+        SDL3.SDL.Keycode.F4 => Key.F4,
+        SDL3.SDL.Keycode.F5 => Key.F5,
+        SDL3.SDL.Keycode.F6 => Key.F6,
+        SDL3.SDL.Keycode.F7 => Key.F7,
+        SDL3.SDL.Keycode.F8 => Key.F8,
+        SDL3.SDL.Keycode.F9 => Key.F9,
         SDL3.SDL.Keycode.F10 => Key.F10,
         SDL3.SDL.Keycode.F11 => Key.F11,
         SDL3.SDL.Keycode.F12 => Key.F12,
+        SDL3.SDL.Keycode.F13 => Key.F13,
+        SDL3.SDL.Keycode.F14 => Key.F14,
+        SDL3.SDL.Keycode.F15 => Key.F15,
+        SDL3.SDL.Keycode.F16 => Key.F16,
+        SDL3.SDL.Keycode.F17 => Key.F17,
+        SDL3.SDL.Keycode.F18 => Key.F18,
+        SDL3.SDL.Keycode.F19 => Key.F19,
+        SDL3.SDL.Keycode.F20 => Key.F20,
+        SDL3.SDL.Keycode.F21 => Key.F21,
+        SDL3.SDL.Keycode.F22 => Key.F22,
+        SDL3.SDL.Keycode.F23 => Key.F23,
+        SDL3.SDL.Keycode.F24 => Key.F24,
 
         // Arrow keys
         SDL3.SDL.Keycode.Left  => Key.Left,
@@ -157,7 +169,7 @@ internal static class InputMapping
         SDL3.SDL.GamepadButton.DPadDown      => GamepadButton.DPadDown,
         SDL3.SDL.GamepadButton.DPadLeft      => GamepadButton.DPadLeft,
         SDL3.SDL.GamepadButton.DPadRight     => GamepadButton.DPadRight,
-        _                                    => GamepadButton.A
+        _                                    => GamepadButton.Unknown
     };
 
     internal static SDL3.SDL.GamepadAxis ToSDLAxis(GamepadAxis axis) => axis switch
@@ -168,6 +180,6 @@ internal static class InputMapping
         GamepadAxis.RightY       => SDL3.SDL.GamepadAxis.RightY,
         GamepadAxis.LeftTrigger  => SDL3.SDL.GamepadAxis.LeftTrigger,
         GamepadAxis.RightTrigger => SDL3.SDL.GamepadAxis.RightTrigger,
-        _                        => SDL3.SDL.GamepadAxis.LeftX
+        _                        => throw new ArgumentOutOfRangeException(nameof(axis), axis, "Unknown gamepad axis.")
     };
 }

@@ -7,6 +7,11 @@ namespace Brine2D.Input;
 public enum GamepadButton
 {
     /// <summary>
+    ///     Unknown or unmapped gamepad button.
+    /// </summary>
+    Unknown = 0,
+
+    /// <summary>
     ///     The bottom face button (Xbox A, PlayStation Cross).
     /// </summary>
     A,
