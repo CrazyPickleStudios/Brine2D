@@ -10,6 +10,7 @@ using Brine2D.Systems.Rendering;
 using Brine2D.Engine;
 using Brine2D.Performance;
 using Brine2D.Systems.Physics;
+using FeatureDemos.Components;
 
 namespace FeatureDemos.Scenes.Performance;
 
@@ -227,32 +228,32 @@ public class SpriteBenchmarkScene : DemoSceneBase
         
         World!.Query()
             .With<TransformComponent>()
-            .With<VelocityComponent>()
-            .ForEach((Entity entity, TransformComponent transform, VelocityComponent velocity) =>
+            .With<MovementComponent>()
+            .ForEach((Entity entity, TransformComponent transform, MovementComponent movement) =>
             {
                 // Update position (bounces off boundaries)
-                transform.Position += velocity.Velocity * deltaTime;
+                transform.Position += movement.Velocity * deltaTime;
                 
                 // Bounce off edges
                 if (transform.Position.X < -2000 || transform.Position.X > 3280)
-                    velocity.Velocity = new Vector2(-velocity.Velocity.X, velocity.Velocity.Y);
+                    movement.Velocity = new Vector2(-movement.Velocity.X, movement.Velocity.Y);
                 
                 if (transform.Position.Y < -2000 || transform.Position.Y > 2720)
-                    velocity.Velocity = new Vector2(velocity.Velocity.X, -velocity.Velocity.Y);
+                    movement.Velocity = new Vector2(movement.Velocity.X, -movement.Velocity.Y);
                 
                 // Subtle rotation based on velocity
-                transform.Rotation += velocity.Velocity.Length() * deltaTime * 0.01f;
+                transform.Rotation += movement.Velocity.Length() * deltaTime * 0.01f;
             });
         
         // Also animate sprite colors (demonstrates 3-component ForEach)
         World!.Query()
             .With<SpriteComponent>()
             .With<TransformComponent>()
-            .With<VelocityComponent>()
-            .ForEach((Entity entity, SpriteComponent sprite, TransformComponent transform, VelocityComponent velocity) =>
+            .With<MovementComponent>()
+            .ForEach((Entity entity, SpriteComponent sprite, TransformComponent transform, MovementComponent movement) =>
             {
                 // Pulse color based on speed
-                var speed = velocity.Velocity.Length();
+                var speed = movement.Velocity.Length();
                 var intensity = (byte)(100 + (speed / 10f) * 155);
                 
                 sprite.Tint = new Color(
@@ -342,11 +343,11 @@ public class SpriteBenchmarkScene : DemoSceneBase
             
             entity.AddComponent<TransformComponent>();
             entity.AddComponent<SpriteComponent>();
-            entity.AddComponent<VelocityComponent>();
+            entity.AddComponent<MovementComponent>();
             
             var transform = entity.GetComponent<TransformComponent>()!;
             var sprite = entity.GetComponent<SpriteComponent>()!;
-            var velocity = entity.GetComponent<VelocityComponent>()!;
+            var movement = entity.GetComponent<MovementComponent>()!;
             
             // Configure transform
             transform.Position = new Vector2(
@@ -368,7 +369,7 @@ public class SpriteBenchmarkScene : DemoSceneBase
                 (byte)random.Next(150, 255));
             
             // Configure velocity
-            velocity.Velocity = new Vector2(
+            movement.Velocity = new Vector2(
                 (float)(random.NextDouble() - 0.5) * 200,
                 (float)(random.NextDouble() - 0.5) * 200);
         }

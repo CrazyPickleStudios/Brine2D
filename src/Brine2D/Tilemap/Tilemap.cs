@@ -1,4 +1,4 @@
-using Brine2D.Collision;
+using Brine2D.Core;
 using System.Numerics;
 
 namespace Brine2D.Tilemap;
@@ -65,15 +65,16 @@ public class Tilemap
     }
 
     /// <summary>
-    /// Generates collision shapes for all solid tiles in the specified layer.
+    /// Returns world-space rectangles for all solid tiles in the specified layer.
+    /// Use these to create static collider entities in your scene.
     /// </summary>
-    public List<BoxCollider> GenerateColliders(string layerName)
+    public List<Rectangle> GenerateCollisionRects(string layerName)
     {
-        var colliders = new List<BoxCollider>();
+        var rects = new List<Rectangle>();
         var layer = GetLayer(layerName);
 
         if (layer == null || !layer.HasCollision || Tileset == null)
-            return colliders;
+            return rects;
 
         for (int y = 0; y < layer.Height; y++)
         {
@@ -84,19 +85,15 @@ public class Tilemap
 
                 if (Tileset.TileProperties.TryGetValue(tile.Id, out var props) && props.IsSolid)
                 {
-                    var worldX = x * TileWidth;
-                    var worldY = y * TileHeight;
-
-                    var collider = new BoxCollider(TileWidth, TileHeight)
-                    {
-                        Position = new Vector2(worldX, worldY)
-                    };
-
-                    colliders.Add(collider);
+                    rects.Add(new Rectangle(
+                        x * TileWidth,
+                        y * TileHeight,
+                        TileWidth,
+                        TileHeight));
                 }
             }
         }
 
-        return colliders;
+        return rects;
     }
 }

@@ -110,6 +110,12 @@ public interface IEntityWorld : IDisposable
     void DestroyEntity(Entity entity);
 
     /// <summary>
+    /// Destroys all entities but keeps systems and their configuration intact.
+    /// Useful for scene resets without reloading.
+    /// </summary>
+    void ClearEntities();
+
+    /// <summary>
     /// Gets an entity by its unique ID.
     /// </summary>
     Entity? GetEntityById(long id);

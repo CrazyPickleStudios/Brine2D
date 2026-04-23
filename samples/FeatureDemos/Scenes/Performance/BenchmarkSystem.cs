@@ -2,8 +2,8 @@ using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Systems;
-using Brine2D.Systems.Physics;
 using System.Numerics;
+using FeatureDemos.Components; // Add this
 
 namespace FeatureDemos.Scenes.Performance;
 
@@ -12,10 +12,6 @@ public class BenchmarkSystem : UpdateSystemBase
     public string Name => "BenchmarkSystem";
     public int UpdateOrder => 50;
     
-    public BenchmarkSystem()
-    {
-    }
-    
     public override void Update(IEntityWorld world, GameTime gameTime)
     {
         var deltaTime = (float)gameTime.DeltaTime;
@@ -23,8 +19,8 @@ public class BenchmarkSystem : UpdateSystemBase
         // Intentional CPU load; shows up in the F4 system profiler
         world.Query()
             .With<TransformComponent>()
-            .With<VelocityComponent>()
-            .ForEach((Entity entity, TransformComponent transform, VelocityComponent velocity) =>
+            .With<MovementComponent>()
+            .ForEach((Entity entity, TransformComponent transform, MovementComponent movement) =>
             {
                 var result = 0.0;
                 for (int i = 0; i < 1000; i++)
@@ -32,13 +28,13 @@ public class BenchmarkSystem : UpdateSystemBase
                     result += Math.Sin(transform.Position.X + i) * Math.Cos(transform.Position.Y + i);
                 }
                 
-                transform.Position += velocity.Velocity * deltaTime * (float)result * 0.0001f;
+                transform.Position += movement.Velocity * deltaTime * (float)result * 0.0001f;
                 
                 if (transform.Position.X < -2000 || transform.Position.X > 3280)
-                    velocity.Velocity = new Vector2(-velocity.Velocity.X, velocity.Velocity.Y);
+                    movement.Velocity = new Vector2(-movement.Velocity.X, movement.Velocity.Y);
                 
                 if (transform.Position.Y < -2000 || transform.Position.Y > 2720)
-                    velocity.Velocity = new Vector2(velocity.Velocity.X, -velocity.Velocity.Y);
+                    movement.Velocity = new Vector2(movement.Velocity.X, -movement.Velocity.Y);
             });
     }
 }

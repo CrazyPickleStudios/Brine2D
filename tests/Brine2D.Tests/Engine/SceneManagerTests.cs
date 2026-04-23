@@ -7,7 +7,6 @@ using Brine2D.Hosting;
 using Brine2D.Input;
 using Brine2D.Rendering;
 using Brine2D.Systems.Audio;
-using Brine2D.Systems.Collision;
 using Brine2D.Systems.Physics;
 using Brine2D.Systems.Rendering;
 using Brine2D.Threading;
@@ -166,8 +165,7 @@ public class SceneManagerTests : TestBase
         {
             typeof(SpriteRenderingSystem),
             typeof(ParticleSystem),
-            typeof(VelocitySystem),
-            typeof(CollisionDetectionSystem),
+            typeof(Box2DPhysicsSystem),
             typeof(AudioSystem),
             typeof(CameraSystem),
             typeof(DebugRenderer),

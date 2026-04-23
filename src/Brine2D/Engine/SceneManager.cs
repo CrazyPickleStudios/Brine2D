@@ -5,7 +5,6 @@ using Brine2D.ECS;
 using Brine2D.Hosting;
 using Brine2D.Rendering;
 using Brine2D.Systems.Audio;
-using Brine2D.Systems.Collision;
 using Brine2D.Systems.Physics;
 using Brine2D.Systems.Rendering;
 using Brine2D.Threading;
@@ -35,8 +34,7 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
     [
         (typeof(SpriteRenderingSystem), static w => w.AddSystem<SpriteRenderingSystem>()),
         (typeof(ParticleSystem),        static w => w.AddSystem<ParticleSystem>()),
-        (typeof(VelocitySystem),        static w => w.AddSystem<VelocitySystem>()),
-        (typeof(CollisionDetectionSystem), static w => w.AddSystem<CollisionDetectionSystem>()),
+        (typeof(Box2DPhysicsSystem),    static w => w.AddSystem<Box2DPhysicsSystem>()),
         (typeof(AudioSystem),           static w => w.AddSystem<AudioSystem>()),
         (typeof(CameraSystem),          static w => w.AddSystem<CameraSystem>()),
         (typeof(DebugRenderer),         static w => w.AddSystem<DebugRenderer>(static d => d.IsEnabled = false)),

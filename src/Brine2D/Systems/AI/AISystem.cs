@@ -15,7 +15,7 @@ namespace Brine2D.Systems.AI;
 public class AISystem : UpdateSystemBase
 {
     public string Name => "AISystem";
-    public int UpdateOrder => 50; 
+    public override int UpdateOrder => 50; 
 
     private readonly Random _random = new();
     private CachedEntityQuery<AIControllerComponent>? _aiQuery;
@@ -28,7 +28,7 @@ public class AISystem : UpdateSystemBase
         foreach (var (entity, ai) in _aiQuery)
         {
             var transform = entity.GetComponent<TransformComponent>();
-            var velocity = entity.GetComponent<VelocityComponent>();
+            var physicsBody = entity.GetComponent<PhysicsBodyComponent>();
 
             if (transform == null || !ai.IsEnabled)
                 continue;
@@ -46,10 +46,10 @@ public class AISystem : UpdateSystemBase
 
             ai.MoveDirection = moveDirection;
 
-            // Apply to velocity component if it exists
-            if (velocity != null && moveDirection != Vector2.Zero)
+            // Apply velocity directly to physics body
+            if (physicsBody != null && moveDirection != Vector2.Zero)
             {
-                velocity.SetDirection(moveDirection, ai.MoveSpeed);
+                physicsBody.LinearVelocity = moveDirection * ai.MoveSpeed;
             }
         }
     }

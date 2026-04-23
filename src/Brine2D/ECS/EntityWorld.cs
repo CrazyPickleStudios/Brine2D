@@ -90,7 +90,7 @@ internal class EntityWorld : IEntityWorld, IDisposable
     /// <param name="configure">Optional configuration action for the system.</param>
     /// <example>
     /// <code>
-    /// World.AddSystem&lt;PhysicsSystem&gt;();
+    /// World.AddSystem&lt;Box2DPhysicsSystem&gt;();
     ///
     /// World.AddSystem&lt;DebugRenderer&gt;(debug =>
     /// {
@@ -581,6 +581,22 @@ internal class EntityWorld : IEntityWorld, IDisposable
             q.Invalidate();
 
         _logger?.LogInformation("World cleared: entities and systems removed");
+    }
+
+    /// <summary>
+    /// Destroys all entities but keeps systems intact. Use for scene resets
+    /// where the system pipeline should remain unchanged.
+    /// </summary>
+    public void ClearEntities()
+    {
+        _logger?.LogDebug("Clearing entities");
+
+        TeardownEntities();
+
+        foreach (var q in _cachedQueries)
+            q.Invalidate();
+
+        _logger?.LogInformation("Entities cleared: {SystemCount} systems retained", _registeredSystems.Count);
     }
 
     /// <summary>
@@ -1093,6 +1109,13 @@ internal class EntityWorld : IEntityWorld, IDisposable
 
         foreach (var (type, pool) in _componentPools)
         {
+            var component = pool.Get(entityId);
+            if (component != null)
+            {
+                component.OnRemoved();
+                component.Entity = null;
+            }
+
             if (pool.Remove(entityId))
             {
                 var current = type;

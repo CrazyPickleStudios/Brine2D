@@ -1,6 +1,7 @@
 using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS;
+using Brine2D.ECS.Components;
 using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
 using Brine2D.Input;
@@ -32,7 +33,7 @@ public class PlayerControllerSystem : UpdateSystemBase
 
         foreach (var (entity, controller) in _playerQuery)
         {
-            var velocity = entity.GetComponent<VelocityComponent>();
+            var physicsBody = entity.GetComponent<PhysicsBodyComponent>();
 
             if (!controller.IsEnabled)
                 continue;
@@ -40,12 +41,17 @@ public class PlayerControllerSystem : UpdateSystemBase
             var inputDirection = GetInputDirection(controller);
             controller.InputDirection = inputDirection;
 
-            if (velocity != null)
+            if (physicsBody != null)
             {
                 if (inputDirection != Vector2.Zero)
-                    velocity.SetDirection(inputDirection, controller.MoveSpeed);
+                {
+                    // Set velocity directly with normalized direction * speed
+                    physicsBody.LinearVelocity = inputDirection * controller.MoveSpeed;
+                }
                 else
-                    velocity.Velocity = Vector2.Zero;
+                {
+                    physicsBody.LinearVelocity = Vector2.Zero;
+                }
             }
         }
     }

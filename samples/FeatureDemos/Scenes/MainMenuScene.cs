@@ -8,7 +8,7 @@ using FeatureDemos.Scenes.ECS;
 using FeatureDemos.Scenes.Transitions;
 using FeatureDemos.Scenes.Advanced;
 using FeatureDemos.Scenes.Audio;
-using FeatureDemos.Scenes.Collision;
+using FeatureDemos.Scenes.Physics;
 using FeatureDemos.Scenes.UI;
 using FeatureDemos.Scenes.Performance;
 using FeatureDemos.Scenes.Rendering;
@@ -59,8 +59,8 @@ public class MainMenuScene : Scene
             new("Texture Atlasing",      () => _sceneManager.LoadScene<TextureAtlasDemoScene>(new FadeTransition(0.5f, Color.Black)),     "Sprite batching & atlases",      "Rendering"),
             new("Scissor Rects",         () => _sceneManager.LoadScene<ScissorRectDemoScene>(new FadeTransition(0.5f, Color.Black)),       "UI clipping & scroll views",     "Rendering"),
 
-            // Collision
-            new("Collision Detection",   () => _sceneManager.LoadScene<CollisionDemoScene>(new FadeTransition(0.5f, Color.Black)),         "Physics & colliders",            "Collision"),
+            // Physics
+            new("Box2D Physics",         () => _sceneManager.LoadScene<PhysicsDemoScene>(new FadeTransition(0.5f, Color.Black)),           "Rigid body simulation",          "Physics"),
 
             // Audio
             new("Spatial Audio",         () => _sceneManager.LoadScene<SpatialAudioDemoScene>(new FadeTransition(0.5f, Color.Black)),      "2D spatial audio with panning",  "Audio"),

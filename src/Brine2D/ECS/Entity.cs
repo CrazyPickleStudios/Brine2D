@@ -133,12 +133,8 @@ public class Entity
     /// Override to implement custom cleanup logic.
     /// </summary>
     /// <remarks>
-    /// Always call base.OnDestroy() when overriding to ensure behaviors are detached
-    /// and components are removed from pools.
-    /// Note: Component.OnRemoved() is intentionally NOT called here for performance.
-    /// Entity destruction is final. If you need OnRemoved callbacks, call
-    /// RemoveComponent&lt;T&gt;() explicitly before destroying the entity.
-    /// Children are destroyed synchronously so their OnDestroy can safely
+    /// Components receive <see cref="Component.OnRemoved"/> automatically during
+    /// destruction. Children are destroyed synchronously so their OnDestroy can safely
     /// access parent state (components, behaviors, etc.). Each child is then
     /// queued for deferred removal from the world so that the entity lookup
     /// and tag index are properly cleaned up.

@@ -1,7 +1,7 @@
-﻿using Brine2D.Collision;
-using Brine2D.Engine;
+﻿using Brine2D.Engine;
 using Brine2D.Hosting;
 using Brine2D.Performance;
+using Brine2D.Physics;
 using Brine2D.Rendering;
 using Brine2D.Rendering.SDL;
 using Brine2D.Systems.Rendering;
@@ -10,7 +10,6 @@ using Brine2D.UI;
 using FeatureDemos.Scenes;
 using FeatureDemos.Scenes.Advanced;
 using FeatureDemos.Scenes.Audio;
-using FeatureDemos.Scenes.Collision;
 using FeatureDemos.Scenes.ECS;
 using FeatureDemos.Scenes.Performance;
 using FeatureDemos.Scenes.Rendering;
@@ -36,7 +35,7 @@ builder.Configure(options =>
 builder.Services.AddPostProcessing();
 builder.Services.AddTextureAtlasing();
 builder.Services.AddTilemapServices();
-builder.Services.AddCollisionSystem();
+builder.Services.AddPhysics();
 builder.Services.AddUICanvas();
 builder.Services.AddPerformanceMonitoring();
 
