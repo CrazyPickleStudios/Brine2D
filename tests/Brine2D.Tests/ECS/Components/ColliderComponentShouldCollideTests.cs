@@ -1,6 +1,7 @@
 using Brine2D.Collision;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
+using Brine2D.Physics;
 
 namespace Brine2D.Tests.ECS.Components;
 
@@ -237,7 +238,7 @@ public class ColliderComponentShouldCollideTests : TestBase
 
         var fired = false;
         collider1.OnCollisionStay += (_, _) => fired = true;
-        collider1.NotifyCollisionStay(collider2, CollisionContact.Empty);
+        collider1.NotifyCollisionStay(collider2, CollisionContact.Empty, null, null);
 
         Assert.True(fired);
     }
@@ -257,8 +258,8 @@ public class ColliderComponentShouldCollideTests : TestBase
         var collider2 = entity2.GetComponent<PhysicsBodyComponent>()!;
 
         var fired = false;
-        collider1.OnTriggerStay += (_, _) => fired = true;
-        collider1.NotifyTriggerStay(collider2, CollisionContact.Empty);
+        collider1.OnTriggerStay += (_) => fired = true;
+        collider1.NotifyTriggerStay(collider2);
 
         Assert.True(fired);
     }
@@ -273,7 +274,7 @@ public class ColliderComponentShouldCollideTests : TestBase
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            collider.SetPolygon(new System.Numerics.Vector2[] { new(0, 0), new(1, 0) }));
+            new PolygonShape(new System.Numerics.Vector2[] { new(0, 0), new(1, 0) }));
     }
 
     [Fact]
@@ -286,7 +287,7 @@ public class ColliderComponentShouldCollideTests : TestBase
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
 
         var verts = new System.Numerics.Vector2[9];
-        Assert.Throws<ArgumentOutOfRangeException>(() => collider.SetPolygon(verts));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PolygonShape(verts));
     }
 
     [Fact]

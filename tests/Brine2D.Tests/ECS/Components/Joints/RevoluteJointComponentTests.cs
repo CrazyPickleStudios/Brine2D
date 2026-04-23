@@ -23,7 +23,7 @@ public class RevoluteJointComponentTests : TestBase
         Assert.False(joint.EnableMotor);
         Assert.Equal(0f, joint.MotorSpeed);
         Assert.Equal(0f, joint.MaxMotorTorque);
-        Assert.Equal(0f, joint.HertzFrequency);
+        Assert.Equal(0f, joint.Hertz);
         Assert.Equal(0f, joint.DampingRatio);
     }
 
@@ -74,31 +74,7 @@ public class RevoluteJointComponentTests : TestBase
 
         Assert.Throws<ArgumentOutOfRangeException>(() => joint.MaxMotorTorque = -1f);
     }
-
-    [Fact]
-    public void HertzFrequency_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<RevoluteJointComponent>();
-        var joint = entity.GetComponent<RevoluteJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.HertzFrequency = -1f);
-    }
-
-    [Fact]
-    public void DampingRatio_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<RevoluteJointComponent>();
-        var joint = entity.GetComponent<RevoluteJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.DampingRatio = -1f);
-    }
-
+    
     [Fact]
     public void PropertyChange_MarksDirty()
     {

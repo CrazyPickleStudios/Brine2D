@@ -276,7 +276,7 @@ public class EntityWorldTests : TestBase
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity().AddComponent<TransformComponent>();
         var entity2 = world.CreateEntity().AddComponent<TransformComponent>();
-        var entity3 = world.CreateEntity().AddComponent<VelocityComponent>();
+        var entity3 = world.CreateEntity().AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
         // Act
@@ -296,15 +296,15 @@ public class EntityWorldTests : TestBase
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         var entity2 = world.CreateEntity()
             .AddComponent<TransformComponent>();
         var entity3 = world.CreateEntity()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
         // Act
-        var withBoth = world.GetEntitiesWithComponents<TransformComponent, VelocityComponent>().ToList();
+        var withBoth = world.GetEntitiesWithComponents<TransformComponent, PhysicsBodyComponent>().ToList();
 
         // Assert
         Assert.Single(withBoth);
@@ -492,7 +492,7 @@ public class EntityWorldTests : TestBase
         var world = CreateTestWorld();
 
         // Act
-        var builder = world.CreateCachedQuery<TransformComponent, VelocityComponent>();
+        var builder = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent>();
 
         // Assert
         Assert.NotNull(builder);
@@ -505,7 +505,7 @@ public class EntityWorldTests : TestBase
         var world = CreateTestWorld();
 
         // Act
-        var builder = world.CreateCachedQuery<TransformComponent, VelocityComponent, TestComponent>();
+        var builder = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent, TestComponent>();
 
         // Assert
         Assert.NotNull(builder);
@@ -594,7 +594,7 @@ public class EntityWorldTests : TestBase
 
         var player = world.CreateEntity("Player")
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 200f)
+            .AddComponent<PhysicsBodyComponent>() // TODO: Test something with this? -RP
             .AddTag("Player");
 
         var enemy = world.CreateEntity("Enemy")
@@ -612,7 +612,7 @@ public class EntityWorldTests : TestBase
 
         var movableEntities = world.Query()
             .With<TransformComponent>()
-            .With<VelocityComponent>()
+            .With<PhysicsBodyComponent>()
             .Execute()
             .ToList();
         Assert.Single(movableEntities);

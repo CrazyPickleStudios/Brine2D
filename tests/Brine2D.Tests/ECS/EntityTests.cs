@@ -429,7 +429,7 @@ public class EntityTests : TestBase
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
         entity.AddComponent<TransformComponent>();
-        entity.AddComponent<VelocityComponent>();
+        entity.AddComponent<PhysicsBodyComponent>();
 
         // Act
         var components = entity.GetAllComponents().ToList();
@@ -437,7 +437,7 @@ public class EntityTests : TestBase
         // Assert
         Assert.Equal(2, components.Count);
         Assert.Contains(components, c => c is TransformComponent);
-        Assert.Contains(components, c => c is VelocityComponent);
+        Assert.Contains(components, c => c is PhysicsBodyComponent);
     }
 
     #endregion

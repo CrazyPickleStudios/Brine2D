@@ -17,7 +17,7 @@ public class EntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity().AddComponent<TransformComponent>();
-        var entity2 = world.CreateEntity().AddComponent<VelocityComponent>();
+        var entity2 = world.CreateEntity().AddComponent<PhysicsBodyComponent>();
         var entity3 = world.CreateEntity().AddComponent<TransformComponent>();
         world.Flush();
 
@@ -41,17 +41,17 @@ public class EntityQueryTests : TestBase
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         var entity2 = world.CreateEntity()
             .AddComponent<TransformComponent>();
         var entity3 = world.CreateEntity()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
         // Act
         var results = world.Query()
             .With<TransformComponent>()
-            .With<VelocityComponent>()
+            .With<PhysicsBodyComponent>()
             .Execute()
             .ToList();
 
@@ -66,16 +66,16 @@ public class EntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 2);
         var entity2 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 200f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 3);
         var entity3 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 50f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         world.Flush();
 
         // Act
         var results = world.Query()
-            .With<VelocityComponent>(v => v.MaxSpeed >= 100f)
+            .With<PhysicsBodyComponent>(v => v.Layer >= 2)
             .Execute()
             .ToList();
 
@@ -94,14 +94,14 @@ public class EntityQueryTests : TestBase
         var entity1 = world.CreateEntity().AddComponent<TransformComponent>();
         var entity2 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         var entity3 = world.CreateEntity().AddComponent<TransformComponent>();
         world.Flush();
 
         // Act
         var results = world.Query()
             .With<TransformComponent>()
-            .Without<VelocityComponent>()
+            .Without<PhysicsBodyComponent>()
             .Execute()
             .ToList();
 
@@ -342,17 +342,17 @@ public class EntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 300f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 3);
         var entity2 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         var entity3 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 200f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 2);
         world.Flush();
 
         // Act
         var results = world.Query()
-            .With<VelocityComponent>()
-            .OrderBy(e => e.GetComponent<VelocityComponent>()!.MaxSpeed)
+            .With<PhysicsBodyComponent>()
+            .OrderBy(e => e.GetComponent<PhysicsBodyComponent>()!.Layer)
             .Execute()
             .ToList();
 
@@ -369,17 +369,17 @@ public class EntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 300f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 3);
         var entity2 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         var entity3 = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 200f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 2);
         world.Flush();
 
         // Act
         var results = world.Query()
-            .With<VelocityComponent>()
-            .OrderByDescending(e => e.GetComponent<VelocityComponent>()!.MaxSpeed)
+            .With<PhysicsBodyComponent>()
+            .OrderByDescending(e => e.GetComponent<PhysicsBodyComponent>()!.Layer)
             .Execute()
             .ToList();
 
@@ -396,17 +396,17 @@ public class EntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity("C")
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         var entity2 = world.CreateEntity("A")
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         var entity3 = world.CreateEntity("B")
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         world.Flush();
 
         // Act
         var results = world.Query()
-            .With<VelocityComponent>()
-            .OrderBy(e => e.GetComponent<VelocityComponent>()!.MaxSpeed)
+            .With<PhysicsBodyComponent>()
+            .OrderBy(e => e.GetComponent<PhysicsBodyComponent>()!.Layer)
             .ThenBy(e => e.Name)
             .Execute()
             .ToList();
@@ -652,18 +652,18 @@ public class EntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity = world.CreateEntity()
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         world.Flush();
 
         float capturedSpeed = 0;
 
         // Act
         world.Query()
-            .With<VelocityComponent>()
-            .ForEach<VelocityComponent>((e, v) => capturedSpeed = v.MaxSpeed);
+            .With<PhysicsBodyComponent>()
+            .ForEach<PhysicsBodyComponent>((e, v) => capturedSpeed = v.Layer);
 
         // Assert
-        Assert.Equal(100f, capturedSpeed);
+        Assert.Equal(1, capturedSpeed);
     }
 
     [Fact]
@@ -673,25 +673,25 @@ public class EntityQueryTests : TestBase
         var world = CreateTestWorld();
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(10, 20))
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f);
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1);
         world.Flush();
 
         Vector2 capturedPos = Vector2.Zero;
-        float capturedSpeed = 0;
+        float capturedLayer = 0;
 
         // Act
         world.Query()
             .With<TransformComponent>()
-            .With<VelocityComponent>()
-            .ForEach<TransformComponent, VelocityComponent>((e, t, v) =>
+            .With<PhysicsBodyComponent>()
+            .ForEach<TransformComponent, PhysicsBodyComponent>((e, t, v) =>
             {
                 capturedPos = t.LocalPosition;
-                capturedSpeed = v.MaxSpeed;
+                capturedLayer = v.Layer;
             });
 
         // Assert
         Assert.Equal(new Vector2(10, 20), capturedPos);
-        Assert.Equal(100f, capturedSpeed);
+        Assert.Equal(1, capturedLayer);
     }
 
     #endregion
@@ -775,17 +775,17 @@ public class EntityQueryTests : TestBase
         // Create various entities
         var player = world.CreateEntity("Player")
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0, 0))
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 200f)
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 3)
             .AddTags("Player", "Controllable");
 
         var enemy1 = world.CreateEntity("Enemy1")
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(50, 0))
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 150f)
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 2)
             .AddTags("Enemy", "Flying");
 
         var enemy2 = world.CreateEntity("Enemy2")
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(200, 0))
-            .AddComponent<VelocityComponent>(v => v.MaxSpeed = 100f)
+            .AddComponent<PhysicsBodyComponent>(v => v.Layer = 1)
             .AddTag("Enemy");
 
         world.Flush();
@@ -793,10 +793,10 @@ public class EntityQueryTests : TestBase
         // Act - Find enemies within 100 units, sorted by speed descending, take top 1
         var results = world.Query()
             .With<TransformComponent>()
-            .With<VelocityComponent>()
+            .With<PhysicsBodyComponent>()
             .WithTag("Enemy")
             .WithinRadius(Vector2.Zero, 100f)
-            .OrderByDescending(e => e.GetComponent<VelocityComponent>()!.MaxSpeed)
+            .OrderByDescending(e => e.GetComponent<PhysicsBodyComponent>()!.Layer)
             .Take(1)
             .Execute()
             .ToList();

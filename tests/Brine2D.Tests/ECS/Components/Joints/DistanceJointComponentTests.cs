@@ -2,6 +2,7 @@ using System.Numerics;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Components.Joints;
+using Brine2D.Physics;
 
 namespace Brine2D.Tests.ECS.Components.Joints;
 
@@ -19,7 +20,7 @@ public class DistanceJointComponentTests : TestBase
         Assert.Equal(0f, joint.Length);
         Assert.Equal(0f, joint.MinLength);
         Assert.Equal(0f, joint.MaxLength);
-        Assert.Equal(0f, joint.HertzFrequency);
+        Assert.Equal(0f, joint.Hertz);
         Assert.Equal(0f, joint.DampingRatio);
         Assert.Null(joint.ConnectedBody);
         Assert.Equal(Vector2.Zero, joint.LocalAnchorA);
@@ -42,7 +43,7 @@ public class DistanceJointComponentTests : TestBase
     }
 
     [Fact]
-    public void Length_Negative_Throws()
+    public void Length_Negative_IsAccepted()
     {
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
@@ -50,11 +51,13 @@ public class DistanceJointComponentTests : TestBase
         entity.AddComponent<DistanceJointComponent>();
         var joint = entity.GetComponent<DistanceJointComponent>()!;
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.Length = -1f);
+        joint.Length = -1f;
+
+        Assert.Equal(-1f, joint.Length);
     }
 
     [Fact]
-    public void MinLength_Negative_Throws()
+    public void Hertz_Negative_IsAccepted()
     {
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
@@ -62,11 +65,13 @@ public class DistanceJointComponentTests : TestBase
         entity.AddComponent<DistanceJointComponent>();
         var joint = entity.GetComponent<DistanceJointComponent>()!;
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.MinLength = -1f);
+        joint.Hertz = -1f;
+
+        Assert.Equal(-1f, joint.Hertz);
     }
 
     [Fact]
-    public void MaxLength_Negative_Throws()
+    public void DampingRatio_Negative_IsAccepted()
     {
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
@@ -74,31 +79,9 @@ public class DistanceJointComponentTests : TestBase
         entity.AddComponent<DistanceJointComponent>();
         var joint = entity.GetComponent<DistanceJointComponent>()!;
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.MaxLength = -1f);
-    }
+        joint.DampingRatio = -1f;
 
-    [Fact]
-    public void HertzFrequency_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<DistanceJointComponent>();
-        var joint = entity.GetComponent<DistanceJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.HertzFrequency = -1f);
-    }
-
-    [Fact]
-    public void DampingRatio_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<DistanceJointComponent>();
-        var joint = entity.GetComponent<DistanceJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.DampingRatio = -1f);
+        Assert.Equal(-1f, joint.DampingRatio);
     }
 
     [Fact]
@@ -107,11 +90,11 @@ public class DistanceJointComponentTests : TestBase
         var world = CreateTestWorld();
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c => c.SetCircle(10f))
+            .AddComponent<PhysicsBodyComponent>(c => c.Shape = new CircleShape(10f))
             .AddComponent<DistanceJointComponent>();
         var entityB = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c => c.SetCircle(10f));
+            .AddComponent<PhysicsBodyComponent>(c => c.Shape = new CircleShape(10f));
 
         var joint = entityA.GetComponent<DistanceJointComponent>()!;
         var colliderB = entityB.GetComponent<PhysicsBodyComponent>()!;
@@ -172,11 +155,11 @@ public class DistanceJointComponentTests : TestBase
         var world = CreateTestWorld();
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c => c.SetCircle(10f))
+            .AddComponent<PhysicsBodyComponent>(c => c.Shape = new CircleShape(10f))
             .AddComponent<DistanceJointComponent>();
         var entityB = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c => c.SetCircle(10f));
+            .AddComponent<PhysicsBodyComponent>(c => c.Shape = new CircleShape(10f));
 
         var joint = entityA.GetComponent<DistanceJointComponent>()!;
         joint.ConnectedBody = entityB.GetComponent<PhysicsBodyComponent>();

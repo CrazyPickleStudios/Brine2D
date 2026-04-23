@@ -15,7 +15,7 @@ public class CachedEntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity().AddComponent<TransformComponent>();
-        var entity2 = world.CreateEntity().AddComponent<VelocityComponent>();
+        var entity2 = world.CreateEntity().AddComponent<PhysicsBodyComponent>();
         var entity3 = world.CreateEntity().AddComponent<TransformComponent>();
         world.Flush();
 
@@ -156,15 +156,15 @@ public class CachedEntityQueryTests : TestBase
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         var entity2 = world.CreateEntity()
             .AddComponent<TransformComponent>();
         var entity3 = world.CreateEntity()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
         // Act
-        var query = world.CreateCachedQuery<TransformComponent, VelocityComponent>().Build();
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent>().Build();
         var results = query.Execute().ToList();
 
         // Assert
@@ -179,10 +179,10 @@ public class CachedEntityQueryTests : TestBase
         var world = CreateTestWorld();
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
-        var query = world.CreateCachedQuery<TransformComponent, VelocityComponent>().Build();
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent>().Build();
 
         // Act - Execute twice
         var results1 = query.Execute().ToList();
@@ -201,17 +201,17 @@ public class CachedEntityQueryTests : TestBase
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
-        var query = world.CreateCachedQuery<TransformComponent, VelocityComponent>().Build();
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent>().Build();
         var initialResults = query.Execute().ToList();
         Assert.Single(initialResults);
 
         // Act - Add new matching entity
         var entity2 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
         var newResults = query.Execute().ToList();
@@ -231,15 +231,15 @@ public class CachedEntityQueryTests : TestBase
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>()
+            .AddComponent<PhysicsBodyComponent>()
             .AddComponent<TestComponent>();
         var entity2 = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>();
+            .AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
         // Act
-        var query = world.CreateCachedQuery<TransformComponent, VelocityComponent, TestComponent>().Build();
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent, TestComponent>().Build();
         var results = query.Execute().ToList();
 
         // Assert
@@ -254,11 +254,11 @@ public class CachedEntityQueryTests : TestBase
         var world = CreateTestWorld();
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>()
+            .AddComponent<PhysicsBodyComponent>()
             .AddComponent<TestComponent>();
         world.Flush();
 
-        var query = world.CreateCachedQuery<TransformComponent, VelocityComponent, TestComponent>().Build();
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent, TestComponent>().Build();
 
         // Act - Execute twice
         var results1 = query.Execute().ToList();
@@ -463,12 +463,12 @@ public class CachedEntityQueryTests : TestBase
         // Arrange
         var world = CreateTestWorld();
         var entity1 = world.CreateEntity().AddComponent<TransformComponent>();
-        var entity2 = world.CreateEntity().AddComponent<VelocityComponent>();
+        var entity2 = world.CreateEntity().AddComponent<PhysicsBodyComponent>();
         world.Flush();
 
         // Act
         var query1 = world.CreateCachedQuery<TransformComponent>().Build();
-        var query2 = world.CreateCachedQuery<VelocityComponent>().Build();
+        var query2 = world.CreateCachedQuery<PhysicsBodyComponent>().Build();
 
         var results1 = query1.Execute().ToList();
         var results2 = query2.Execute().ToList();
@@ -487,22 +487,22 @@ public class CachedEntityQueryTests : TestBase
         var world = CreateTestWorld();
         var player = world.CreateEntity("Player")
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>()
+            .AddComponent<PhysicsBodyComponent>()
             .AddTag("Player");
         
         var enemy = world.CreateEntity("Enemy")
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>()
+            .AddComponent<PhysicsBodyComponent>()
             .AddTag("Enemy");
         
         world.Flush();
 
         // Act
-        var playerQuery = world.CreateCachedQuery<TransformComponent, VelocityComponent>()
+        var playerQuery = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent>()
             .WithTag("Player")
             .Build();
         
-        var enemyQuery = world.CreateCachedQuery<TransformComponent, VelocityComponent>()
+        var enemyQuery = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent>()
             .WithTag("Enemy")
             .Build();
 
@@ -518,7 +518,7 @@ public class CachedEntityQueryTests : TestBase
         // Add new enemy
         var enemy2 = world.CreateEntity("Enemy2")
             .AddComponent<TransformComponent>()
-            .AddComponent<VelocityComponent>()
+            .AddComponent<PhysicsBodyComponent>()
             .AddTag("Enemy");
         world.Flush();
 

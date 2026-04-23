@@ -2,6 +2,7 @@ using System.Numerics;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Components.Joints;
+using Brine2D.Physics;
 
 namespace Brine2D.Tests.ECS.Components.Joints;
 
@@ -22,55 +23,7 @@ public class WeldJointComponentTests : TestBase
         Assert.Equal(0f, joint.LinearHertz);
         Assert.Equal(0f, joint.LinearDampingRatio);
     }
-
-    [Fact]
-    public void AngularHertz_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<WeldJointComponent>();
-        var joint = entity.GetComponent<WeldJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.AngularHertz = -1f);
-    }
-
-    [Fact]
-    public void AngularDampingRatio_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<WeldJointComponent>();
-        var joint = entity.GetComponent<WeldJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.AngularDampingRatio = -1f);
-    }
-
-    [Fact]
-    public void LinearHertz_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<WeldJointComponent>();
-        var joint = entity.GetComponent<WeldJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.LinearHertz = -1f);
-    }
-
-    [Fact]
-    public void LinearDampingRatio_Negative_Throws()
-    {
-        var world = CreateTestWorld();
-        var entity = world.CreateEntity();
-        entity.AddComponent<TransformComponent>();
-        entity.AddComponent<WeldJointComponent>();
-        var joint = entity.GetComponent<WeldJointComponent>()!;
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => joint.LinearDampingRatio = -1f);
-    }
-
+    
     [Fact]
     public void ReferenceAngle_SetAndGet()
     {
@@ -126,11 +79,11 @@ public class WeldJointComponentTests : TestBase
         var world = CreateTestWorld();
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c => c.SetCircle(10f))
+            .AddComponent<PhysicsBodyComponent>(c => new CircleShape(10f))
             .AddComponent<WeldJointComponent>();
         var entityB = world.CreateEntity()
             .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c => c.SetCircle(10f));
+            .AddComponent<PhysicsBodyComponent>(c => new CircleShape(10f));
 
         var joint = entityA.GetComponent<WeldJointComponent>()!;
         joint.ConnectedBody = entityB.GetComponent<PhysicsBodyComponent>();

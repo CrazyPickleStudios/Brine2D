@@ -18,7 +18,7 @@ public class ColliderComponentTests : TestBase
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
 
         Assert.Equal(0, collider.Layer);
-        Assert.Equal(0xFFFFFFFF, collider.CollisionMask);
+        Assert.Equal(ulong.MaxValue, collider.CollisionMask);
         Assert.False(collider.IsTrigger);
         Assert.Equal(Vector2.Zero, collider.Offset);
         Assert.Empty(collider.CollidingEntities);
@@ -34,10 +34,10 @@ public class ColliderComponentTests : TestBase
         entity.AddComponent<PhysicsBodyComponent>();
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
 
-        collider.SetCircle(50f);
+        collider.Shape = new CircleShape(50f);
 
-        Assert.Equal(ShapeType.Circle, collider.ShapeType);
-        Assert.Equal(50f, collider.Radius);
+        Assert.IsType<CircleShape>(collider.Shape);
+        Assert.Equal(50f, ((CircleShape)collider.Shape).Radius);
     }
 
     [Fact]
@@ -49,11 +49,11 @@ public class ColliderComponentTests : TestBase
         entity.AddComponent<PhysicsBodyComponent>();
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
 
-        collider.SetBox(100f, 50f);
+        collider.Shape = new BoxShape(100f, 50f);
 
-        Assert.Equal(ShapeType.Box, collider.ShapeType);
-        Assert.Equal(100f, collider.Width);
-        Assert.Equal(50f, collider.Height);
+        Assert.IsType<BoxShape>(collider.Shape);
+        Assert.Equal(100f, ((BoxShape)collider.Shape).Width);
+        Assert.Equal(50f, ((BoxShape)collider.Shape).Height);
     }
 
     [Fact]
@@ -64,12 +64,12 @@ public class ColliderComponentTests : TestBase
         entity.AddComponent<TransformComponent>();
         entity.AddComponent<PhysicsBodyComponent>();
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
-        collider.SetBox(100f, 50f);
+        collider.Shape = new BoxShape(100f, 50f);
 
-        collider.SetCircle(25f);
+        collider.Shape = new CircleShape(25f);
 
-        Assert.Equal(ShapeType.Circle, collider.ShapeType);
-        Assert.Equal(25f, collider.Radius);
+        Assert.IsType<CircleShape>(collider.Shape);
+        Assert.Equal(25f, ((CircleShape)collider.Shape).Radius);
     }
 
     [Fact]
@@ -80,13 +80,13 @@ public class ColliderComponentTests : TestBase
         entity.AddComponent<TransformComponent>();
         entity.AddComponent<PhysicsBodyComponent>();
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
-        collider.SetCircle(50f);
+        collider.Shape = new CircleShape(50f);
 
-        collider.SetBox(80f, 60f);
+        collider.Shape = new BoxShape(80f, 60f);
 
-        Assert.Equal(ShapeType.Box, collider.ShapeType);
-        Assert.Equal(80f, collider.Width);
-        Assert.Equal(60f, collider.Height);
+        Assert.IsType<BoxShape>(collider.Shape);
+        Assert.Equal(80f, ((BoxShape)collider.Shape).Width);
+        Assert.Equal(60f, ((BoxShape)collider.Shape).Height);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class ColliderComponentTests : TestBase
         entity.AddComponent<PhysicsBodyComponent>();
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
 
-        Assert.Equal(0xFFFFFFFF, collider.CollisionMask);
+        Assert.Equal(ulong.MaxValue, collider.CollisionMask);
     }
 
     [Fact]
@@ -246,9 +246,9 @@ public class ColliderComponentTests : TestBase
         var collider2 = entity2.GetComponent<PhysicsBodyComponent>()!;
 
         var eventFired = false;
-        collider1.OnTriggerEnter += (_, _) => eventFired = true;
+        collider1.OnTriggerEnter += (_) => eventFired = true;
 
-        collider1.NotifyTriggerEnter(collider2, CollisionContact.Empty);
+        collider1.NotifyTriggerEnter(collider2, null, null);
 
         Assert.True(eventFired);
     }
@@ -271,7 +271,7 @@ public class ColliderComponentTests : TestBase
         var eventFired = false;
         collider1.OnCollisionEnter += (_, _) => eventFired = true;
 
-        collider1.NotifyCollisionEnter(collider2, CollisionContact.Empty);
+        collider1.NotifyCollisionEnter(collider2, CollisionContact.Empty, null, null);
 
         Assert.True(eventFired);
     }
@@ -337,7 +337,7 @@ public class ColliderComponentTests : TestBase
         var collider1 = entity1.GetComponent<PhysicsBodyComponent>()!;
         var collider2 = entity2.GetComponent<PhysicsBodyComponent>()!;
 
-        collider1.NotifyCollisionEnter(collider2, CollisionContact.Empty);
+        collider1.NotifyCollisionEnter(collider2, CollisionContact.Empty, null, null);
 
         Assert.Contains(entity2, collider1.CollidingEntities);
     }
@@ -357,7 +357,7 @@ public class ColliderComponentTests : TestBase
         var collider1 = entity1.GetComponent<PhysicsBodyComponent>()!;
         var collider2 = entity2.GetComponent<PhysicsBodyComponent>()!;
 
-        collider1.NotifyCollisionEnter(collider2, CollisionContact.Empty);
+        collider1.NotifyCollisionEnter(collider2, CollisionContact.Empty, null, null);
         collider1.NotifyCollisionExit(collider2);
 
         Assert.DoesNotContain(entity2, collider1.CollidingEntities);
@@ -371,7 +371,7 @@ public class ColliderComponentTests : TestBase
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
-                c.SetCircle(50f);
+                c. Shape = new CircleShape(50f);
                 c.Layer = 3;
                 c.CollisionMask = 0x00000008;
                 c.IsTrigger = true;
@@ -381,8 +381,8 @@ public class ColliderComponentTests : TestBase
 
         var collider = entity.GetComponent<PhysicsBodyComponent>()!;
 
-        Assert.Equal(ShapeType.Circle, collider.ShapeType);
-        Assert.Equal(50f, collider.Radius);
+        Assert.IsType<CircleShape>(collider.Shape);
+        Assert.Equal(50f, ((CircleShape)collider.Shape).Radius);
         Assert.Equal(3, collider.Layer);
         Assert.Equal(0x00000008u, collider.CollisionMask);
         Assert.True(collider.IsTrigger);

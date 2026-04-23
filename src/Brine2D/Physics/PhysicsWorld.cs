@@ -395,10 +395,10 @@ public sealed unsafe class PhysicsWorld : IDisposable
         var f = filter?.ToB2() ?? B2.DefaultQueryFilter();
 
         int rawCapacity = Math.Max(results.Length * 8, 16);
-        var rawArray = ArrayPool<RaycastHit>.Shared.Rent(rawCapacity);
+        var rawArray = ArrayPool<RawRaycastHit>.Shared.Rent(rawCapacity);
         try
         {
-            fixed (RaycastHit* ptr = rawArray)
+            fixed (RawRaycastHit* ptr = rawArray)
             {
                 var ctx = new RaycastContext { Buffer = ptr, Capacity = rawCapacity, Count = 0 };
                 B2.WorldCastRay(_worldId, o, translation, f, &RaycastAllCallback, &ctx);
@@ -406,21 +406,33 @@ public sealed unsafe class PhysicsWorld : IDisposable
 
                 wasTruncated = raw >= rawCapacity;
 
-                new Span<RaycastHit>(ptr, raw).Sort((a, b) => a.Fraction.CompareTo(b.Fraction));
+                new Span<RawRaycastHit>(ptr, raw).Sort((a, b) => a.Fraction.CompareTo(b.Fraction));
 
                 int deduped = DeduplicateRaycastByBody(ptr, raw);
                 int written = Math.Min(deduped, results.Length);
-                new ReadOnlySpan<RaycastHit>(ptr, written).CopyTo(results);
 
                 for (int i = 0; i < written; i++)
-                    results[i] = results[i] with { Distance = results[i].Fraction * maxDistance };
+                {
+                    var h = ptr[i];
+                    var resolved = ResolveHitFromShapeId(h.ShapeId);
+                    results[i] = new RaycastHit
+                    {
+                        Component = resolved.Component,
+                        SubShape = resolved.SubShape,
+                        ShapeId = h.ShapeId,
+                        Point = h.Point,
+                        Normal = h.Normal,
+                        Fraction = h.Fraction,
+                        Distance = h.Fraction * maxDistance
+                    };
+                }
 
                 return written;
             }
         }
         finally
         {
-            ArrayPool<RaycastHit>.Shared.Return(rawArray, clearArray: true);
+            ArrayPool<RawRaycastHit>.Shared.Return(rawArray, clearArray: true);
         }
     }
 
@@ -458,10 +470,10 @@ public sealed unsafe class PhysicsWorld : IDisposable
         var f = filter?.ToB2() ?? B2.DefaultQueryFilter();
 
         int rawCapacity = Math.Max(results.Length, 16);
-        var rawArray = ArrayPool<RaycastHit>.Shared.Rent(rawCapacity);
+        var rawArray = ArrayPool<RawRaycastHit>.Shared.Rent(rawCapacity);
         try
         {
-            fixed (RaycastHit* ptr = rawArray)
+            fixed (RawRaycastHit* ptr = rawArray)
             {
                 var ctx = new RaycastContext { Buffer = ptr, Capacity = rawCapacity, Count = 0 };
                 B2.WorldCastRay(_worldId, o, translation, f, &RaycastAllCallback, &ctx);
@@ -469,17 +481,22 @@ public sealed unsafe class PhysicsWorld : IDisposable
 
                 wasTruncated = raw >= rawCapacity;
 
-                new Span<RaycastHit>(ptr, raw).Sort((a, b) => a.Fraction.CompareTo(b.Fraction));
+                new Span<RawRaycastHit>(ptr, raw).Sort((a, b) => a.Fraction.CompareTo(b.Fraction));
 
                 int written = Math.Min(raw, results.Length);
                 for (int i = 0; i < written; i++)
                 {
-                    var hit = ResolveHitFromShapeId(ptr[i].ShapeId);
-                    results[i] = ptr[i] with
+                    var h = ptr[i];
+                    var resolved = ResolveHitFromShapeId(h.ShapeId);
+                    results[i] = new RaycastHit
                     {
-                        Component = hit.Component,
-                        SubShape = hit.SubShape,
-                        Distance = ptr[i].Fraction * maxDistance
+                        Component = resolved.Component,
+                        SubShape = resolved.SubShape,
+                        ShapeId = h.ShapeId,
+                        Point = h.Point,
+                        Normal = h.Normal,
+                        Fraction = h.Fraction,
+                        Distance = h.Fraction * maxDistance
                     };
                 }
 
@@ -488,7 +505,7 @@ public sealed unsafe class PhysicsWorld : IDisposable
         }
         finally
         {
-            ArrayPool<RaycastHit>.Shared.Return(rawArray, clearArray: true);
+            ArrayPool<RawRaycastHit>.Shared.Return(rawArray, clearArray: true);
         }
     }
 
@@ -1837,7 +1854,7 @@ public sealed unsafe class PhysicsWorld : IDisposable
         return new OverlapHit { Component = comp, SubShape = null };
     }
 
-    private int DeduplicateRaycastByBody(RaycastHit* ptr, int raw)
+    private int DeduplicateRaycastByBody(RawRaycastHit* ptr, int raw)
     {
         int count = 0;
         var seenBuf = ArrayPool<nint>.Shared.Rent(raw > 0 ? raw : 1);
@@ -1857,11 +1874,11 @@ public sealed unsafe class PhysicsWorld : IDisposable
                     }
                 }
 
-                if (found) continue;
-
-                seenBuf[seenCount++] = bodyIndex;
-                var hit = ResolveHitFromShapeId(ptr[i].ShapeId);
-                ptr[count++] = ptr[i] with { Component = hit.Component, SubShape = hit.SubShape };
+                if (!found)
+                {
+                    seenBuf[seenCount++] = bodyIndex;
+                    ptr[count++] = ptr[i];
+                }
             }
         }
         finally
@@ -1933,12 +1950,12 @@ public sealed unsafe class PhysicsWorld : IDisposable
         if (ctx->Count >= ctx->Capacity)
             return 0f;
 
-        ctx->Buffer[ctx->Count++] = new RaycastHit
+        ctx->Buffer[ctx->Count++] = new RawRaycastHit
         {
+            ShapeId = shapeId,
             Point = new Vector2(point.x, point.y),
             Normal = new Vector2(normal.x, normal.y),
-            Fraction = fraction,
-            ShapeId = shapeId
+            Fraction = fraction
         };
 
         return 1f;
@@ -1998,9 +2015,17 @@ public sealed unsafe class PhysicsWorld : IDisposable
         public bool Found;
     }
 
+    private struct RawRaycastHit
+    {
+        public B2.ShapeId ShapeId;
+        public Vector2 Point;
+        public Vector2 Normal;
+        public float Fraction;
+    }
+
     private struct RaycastContext
     {
-        public RaycastHit* Buffer;
+        public RawRaycastHit* Buffer;
         public int Capacity;
         public int Count;
     }
