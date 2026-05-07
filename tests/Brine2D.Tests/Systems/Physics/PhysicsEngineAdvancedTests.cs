@@ -11,25 +11,15 @@ using Brine2D.Systems.Physics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class PhysicsEngineAdvancedTests : TestBase, IDisposable
+public class PhysicsEngineAdvancedTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
-    private Box2DPhysicsSystem CreateSystem() => new(_physicsWorld);
+    private Box2DPhysicsSystem CreateSystem() => new(PhysicsWorld);
 
     private void Step(IEntityWorld world, Box2DPhysicsSystem system, int count = 1)
     {
         for (int i = 0; i < count; i++)
             system.FixedUpdate(world, FixedTime);
     }
-
-    // -------------------------------------------------------------------------
-    // OnCollisionHit / EnableHitEvents
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void OnCollisionHit_HighSpeedImpact_Fires()
@@ -57,10 +47,8 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
 
         world.Flush();
 
-        // Set threshold to 0 so any impact fires the event, then give body a
-        // large downward velocity so it hits the floor on the very next step.
         Step(world, system);
-        _physicsWorld.SetContactHitEventThreshold(0f);
+        PhysicsWorld.SetContactHitEventThreshold(0f);
         dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(0f, 5000f);
 
         bool hitFired = false;
@@ -105,15 +93,11 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         dynEntity.GetComponent<PhysicsBodyComponent>()!.OnCollisionHit += (_, _) => hitFired = true;
 
         Step(world, system);
-        _physicsWorld.SetContactHitEventThreshold(0f);
+        PhysicsWorld.SetContactHitEventThreshold(0f);
         Step(world, system, 60);
 
         Assert.False(hitFired, "OnCollisionHit must not fire when EnableHitEvents is false.");
     }
-
-    // -------------------------------------------------------------------------
-    // Sub-shape enter/exit events carry correct SubShape arguments
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void OnCollisionEnterWithShape_SubShapeHit_ReportsCorrectSubShape()
@@ -123,7 +107,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
 
         SubShape? reportedSelfSub = null;
 
-        // Compound body: primary shape + one sub-shape offset far to the right.
         var compoundEntity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -137,7 +120,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         var subShape = compoundBody.AddSubShape(
             new BoxShape(20f, 400f) { Offset = new Vector2(200f, 0f) });  // sub-shape on right
 
-        // Projectile aimed at the sub-shape, not the primary.
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(300f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -176,7 +158,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         var subShape = compoundBody.AddSubShape(
             new BoxShape(400f, 20f) { Offset = new Vector2(0f, -60f) });
 
-        // Ball drops onto the sub-shape (offset upward), then gets moved away.
         var dynEntity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -188,7 +169,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         world.Flush();
         Step(world, system, 20);
 
-        // Teleport body far away to force exit.
         var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
         dynBody.Teleport(new Vector2(5000f, 5000f));
         Step(world, system, 3);
@@ -241,7 +221,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
 
         var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
 
-        // Diagnostics: check shapes are live before we move
         bool mainShapeValid = B2.ShapeIsValid(sensorBody.ShapeId);
         bool subShapeValid = B2.ShapeIsValid(triggerSub.ShapeId);
         bool subShapeIsSensor = subShapeValid && B2.ShapeIsSensor(triggerSub.ShapeId);
@@ -264,17 +243,12 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         Assert.Same(triggerSub, reportedSub);
     }
 
-    // -------------------------------------------------------------------------
-    // Sub-shape ShouldCollide filter
-    // -------------------------------------------------------------------------
-
     [Fact]
     public void SubShape_ShouldCollide_ReturnFalse_PreventsThatShapeColliding()
     {
         var world = CreateTestWorld();
         var system = CreateSystem();
 
-        // Static wall with a sub-shape that blocks everything except layer 5.
         var wallEntity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -288,7 +262,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
             isTrigger: false)
             .ShouldCollide = (other, _) => other.Layer == 5;
 
-        // Projectile on layer 0 — should be blocked by primary wall but pass through sub-shape.
         var projectile = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(300f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -311,9 +284,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
 
         Step(world, system, 20);
 
-        // Body hits primary wall but the sub-shape ShouldCollide returned false for layer 0,
-        // so the sub-shape never independently collides. The primary shape collision still fires.
-        // Key assertion: ShouldCollide on sub-shape was invoked without throwing.
         Assert.True(B2.BodyIsValid(projectile.GetComponent<PhysicsBodyComponent>()!.BodyId));
     }
 
@@ -329,16 +299,13 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
             {
                 c.Shape = new BoxShape(20f, 400f);
                 c.BodyType = PhysicsBodyType.Static;
-                // Primary shape: always block.
-                c.CollisionMask = 0;  // Primary shape passes everything through via mask.
+                c.CollisionMask = 0;
             });
 
         var wallBody = wallEntity.GetComponent<PhysicsBodyComponent>()!;
-        // Sub-shape with ShouldCollide = always true.
         wallBody.AddSubShape(new BoxShape(20f, 400f))
             .ShouldCollide = (_, _) => true;
 
-        // Reset mask on wall so sub-shape filter drives the decision.
         wallBody.CollisionMask = ulong.MaxValue;
 
         var projectile = world.CreateEntity()
@@ -360,10 +327,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
 
         Assert.True(collided, "Sub-shape ShouldCollide returning true must allow collision.");
     }
-
-    // -------------------------------------------------------------------------
-    // Joint break threshold / OnBreak
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void Joint_BreakForce_Exceeded_OnBreakFires()
@@ -399,14 +362,13 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         {
             j.ConnectedBody = bodyB;
             j.Length = 50f;
-            j.BreakForce = 0.001f;   // tiny threshold — any force breaks it
+            j.BreakForce = 0.001f;
             j.OnBreak += _ => breakFired = true;
         });
 
         world.Flush();
         Step(world, system, 2);
 
-        // Apply a large impulse to exceed BreakForce.
         bodyA.ApplyLinearImpulse(new Vector2(100000f, 0f));
         Step(world, system, 5);
 
@@ -488,9 +450,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         entityA.AddComponent<WeldJointComponent>(j =>
         {
             j.ConnectedBody = entityB.GetComponent<PhysicsBodyComponent>()!;
-            // Non-zero LinearHertz activates Box2D's spring solver, which populates
-            // JointGetConstraintForce. Rigid welds (LinearHertz=0) use the hard
-            // constraint path and report zero constraint force in Box2D 3.x.
             j.LinearHertz = 60f;
             j.LinearDampingRatio = 0f;
             j.BreakForce = 1f;
@@ -501,22 +460,15 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         world.Flush();
         Step(world, system, 2);
 
-        // Large impulse — the spring constraint resists it and reports force >> 1.
         bodyA.ApplyLinearImpulse(new Vector2(100000f, 0f));
 
-        // Step 1: weld breaks, breakCount → 1, IsDirty set for rebuild.
         Step(world, system, 1);
         Assert.True(breakCount >= 1, $"Joint should have broken on step 1. breakCount={breakCount}");
 
-        // Step 2: joint is rebuilt by SyncJoints, bodyA is still moving so it breaks again.
         Step(world, system, 1);
         Assert.True(breakCount >= 2,
             $"RebuildAfterBreak=true should have rebuilt the joint causing it to break again. breakCount={breakCount}");
     }
-
-    // -------------------------------------------------------------------------
-    // GetSleepingBodies
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void GetSleepingBodies_SettledDynamicBody_AppearsInList()
@@ -524,7 +476,6 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         var world = CreateTestWorld();
         var system = CreateSystem();
 
-        // Floor to land on.
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -543,10 +494,9 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
 
         world.Flush();
 
-        // Step long enough for the body to land and sleep.
         Step(world, system, 180);
 
-        var sleeping = _physicsWorld.GetSleepingBodies().ToList();
+        var sleeping = PhysicsWorld.GetSleepingBodies().ToList();
         var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
 
         Assert.Contains(dynBody, sleeping);
@@ -578,12 +528,11 @@ public class PhysicsEngineAdvancedTests : TestBase, IDisposable
         Step(world, system, 180);
 
         var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
-        Assert.Contains(dynBody, _physicsWorld.GetSleepingBodies());
+        Assert.Contains(dynBody, PhysicsWorld.GetSleepingBodies());
 
-        // Wake it with an impulse.
         dynBody.ApplyLinearImpulse(new Vector2(0f, -500f));
         Step(world, system, 1);
 
-        Assert.DoesNotContain(dynBody, _physicsWorld.GetSleepingBodies());
+        Assert.DoesNotContain(dynBody, PhysicsWorld.GetSleepingBodies());
     }
 }

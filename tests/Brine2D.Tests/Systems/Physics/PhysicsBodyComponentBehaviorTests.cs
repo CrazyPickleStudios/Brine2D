@@ -9,13 +9,11 @@ using Brine2D.Systems.Physics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class PhysicsBodyComponentBehaviorTests : TestBase, IDisposable
+public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
 {
     private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
     private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
+    
     // ── Collision events ──────────────────────────────────────────────────────
 
     [Fact]

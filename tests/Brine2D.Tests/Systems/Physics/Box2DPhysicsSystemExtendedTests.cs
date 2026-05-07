@@ -12,22 +12,21 @@ using System.Numerics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class Box2DPhysicsSystemExtendedTests : TestBase, IDisposable
+public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
+    public Box2DPhysicsSystemExtendedTests() : base(gravity: Vector2.Zero) { }
 
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
-    private Box2DPhysicsSystem CreateSystem() => new(_physicsWorld);
+    private Box2DPhysicsSystem CreateSystem() => new(PhysicsWorld);
 
     private void Step(IEntityWorld world, Box2DPhysicsSystem system, int count = 1)
     {
         for (int i = 0; i < count; i++)
             system.FixedUpdate(world, FixedTime);
     }
+    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
 
+    private readonly PhysicsWorld _physicsWorld = new();
+    
     // -------------------------------------------------------------------------
     // IgnoreCollision / RestoreCollision
     // -------------------------------------------------------------------------

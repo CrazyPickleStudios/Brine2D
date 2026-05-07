@@ -10,19 +10,15 @@ using System.Numerics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class KinematicCharacterSystemMoreTests : TestBase, IDisposable
+public class KinematicCharacterSystemMoreTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
+    public KinematicCharacterSystemMoreTests() : base(gravity: Vector2.Zero) { }
 
     private (Box2DPhysicsSystem physics, KinematicCharacterSystem pre, KinematicCharacterSystem post) CreateSystems()
     {
-        var physics = new Box2DPhysicsSystem(_physicsWorld);
-        var pre = new KinematicCharacterSystem(_physicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
-        var post = new KinematicCharacterSystem(_physicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
+        var physics = new Box2DPhysicsSystem(PhysicsWorld);
+        var pre = new KinematicCharacterSystem(PhysicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
+        var post = new KinematicCharacterSystem(PhysicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
         return (physics, pre, post);
     }
 
@@ -36,6 +32,9 @@ public class KinematicCharacterSystemMoreTests : TestBase, IDisposable
             post.FixedUpdate(world, FixedTime);
         }
     }
+    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
+
+    private readonly PhysicsWorld _physicsWorld = new();
 
     // -------------------------------------------------------------------------
     // OnAirborne event

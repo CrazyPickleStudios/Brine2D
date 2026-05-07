@@ -8,20 +8,17 @@ using Brine2D.Core;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class PolygonShapeOffsetIntegrationTests : TestBase, IDisposable
+public class PolygonShapeOffsetIntegrationTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
     private static Vector2[] SquareVerts(float halfSize) =>
     [
         new(-halfSize, -halfSize), new(halfSize, -halfSize),
         new(halfSize, halfSize),   new(-halfSize, halfSize)
     ];
+    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
 
+    private readonly PhysicsWorld _physicsWorld = new();
+    
     [Fact]
     public void PolygonShape_WithOffset_BuildsValidLiveBody()
     {

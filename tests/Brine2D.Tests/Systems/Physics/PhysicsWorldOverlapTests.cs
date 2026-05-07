@@ -14,16 +14,10 @@ namespace Brine2D.Tests.Systems.Physics;
 /// are registered, then steps the world once so bodies are live in Box2D.
 /// </summary>
 [Collection("Physics")]
-public class PhysicsWorldOverlapTests : TestBase, IDisposable
+public class PhysicsWorldOverlapTests : PhysicsTestBase
 {
-    private static readonly GameTime OneStep = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
     private (IEntityWorld world, Box2DPhysicsSystem system) Setup() =>
-        (CreateTestWorld(), new Box2DPhysicsSystem(_physicsWorld));
+        (CreateTestWorld(), new Box2DPhysicsSystem(PhysicsWorld));
 
     private (IEntityWorld world, Box2DPhysicsSystem system, PhysicsBodyComponent body)
         SetupWithStaticCircleAt(Vector2 position, float radius = 30f)
@@ -37,7 +31,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
                 c.BodyType = PhysicsBodyType.Static;
             });
         world.Flush();
-        system.FixedUpdate(world, OneStep);
+        system.FixedUpdate(world, FixedTime);
         var body = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
         return (world, system, body);
     }
@@ -62,19 +56,19 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
                 c.IsTrigger = true;
             });
         world.Flush();
-        system.FixedUpdate(world, OneStep);
+        system.FixedUpdate(world, FixedTime);
         var entities = world.Entities.ToArray();
         var solid = entities[0].GetComponent<PhysicsBodyComponent>()!;
         var sensor = entities[1].GetComponent<PhysicsBodyComponent>()!;
         return (world, system, solid, sensor);
     }
-    
+
     [Fact]
     public void OverlapPointFirst_BodyAtPoint_ReturnsComponent()
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapPointFirst(new Vector2(200f, 200f));
+        var result = PhysicsWorld.OverlapPointFirst(new Vector2(200f, 200f));
 
         Assert.NotNull(result);
         Assert.Same(body, result.Value.Component);
@@ -85,7 +79,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapPointFirst(new Vector2(9000f, 9000f));
+        var result = PhysicsWorld.OverlapPointFirst(new Vector2(9000f, 9000f));
 
         Assert.Null(result);
     }
@@ -95,7 +89,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var hit = _physicsWorld.OverlapPointFirst(new Vector2(200f, 200f));
+        var hit = PhysicsWorld.OverlapPointFirst(new Vector2(200f, 200f));
 
         Assert.NotNull(hit);
         Assert.Same(body, hit.Value.Component);
@@ -116,9 +110,9 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
             });
 
         world.Flush();
-        system.FixedUpdate(world, OneStep);
+        system.FixedUpdate(world, FixedTime);
 
-        var hit = _physicsWorld.OverlapPointFirst(new Vector2(300f, 300f));
+        var hit = PhysicsWorld.OverlapPointFirst(new Vector2(300f, 300f));
 
         Assert.NotNull(hit);
         Assert.Null(hit.Value.SubShape);
@@ -139,20 +133,20 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
             });
 
         world.Flush();
-        system.FixedUpdate(world, OneStep);
+        system.FixedUpdate(world, FixedTime);
 
-        var hit = _physicsWorld.OverlapPointFirst(new Vector2(280f, 200f));
+        var hit = PhysicsWorld.OverlapPointFirst(new Vector2(280f, 200f));
 
         Assert.NotNull(hit);
         Assert.NotNull(hit.Value.SubShape);
     }
-    
+
     [Fact]
     public void OverlapCircleFirst_ExcludeSensors_SkipsSensor()
     {
         var (_, _, solid, _) = SetupWithSolidAndSensorCircle(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapCircleFirst(
+        var result = PhysicsWorld.OverlapCircleFirst(
             new Vector2(200f, 200f), 50f, PhysicsQueryFilter.SolidOnly);
 
         Assert.NotNull(result);
@@ -164,7 +158,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         SetupWithSolidAndSensorCircle(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapCircleFirst(new Vector2(200f, 200f), 50f);
+        var result = PhysicsWorld.OverlapCircleFirst(new Vector2(200f, 200f), 50f);
 
         Assert.NotNull(result);
     }
@@ -176,7 +170,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
 
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapCircle(new Vector2(200f, 200f), 50f, results, PhysicsQueryFilter.SolidOnly);
+        int count = PhysicsWorld.OverlapCircle(new Vector2(200f, 200f), 50f, results, PhysicsQueryFilter.SolidOnly);
 
         Assert.Equal(1, count);
         Assert.False(results[0].Component!.IsTrigger);
@@ -187,7 +181,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         var (_, _, solid, _) = SetupWithSolidAndSensorCircle(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapBoxFirst(new Vector2(200f, 200f), 60f, 60f, 0f, PhysicsQueryFilter.SolidOnly);
+        var result = PhysicsWorld.OverlapBoxFirst(new Vector2(200f, 200f), 60f, 60f, 0f, PhysicsQueryFilter.SolidOnly);
 
         Assert.NotNull(result);
         Assert.Same(solid, result.Value.Component);
@@ -198,7 +192,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         var (_, _, solid, _) = SetupWithSolidAndSensorCircle(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapCapsuleFirst(new Vector2(200f, 150f), new Vector2(200f, 250f), 40f, PhysicsQueryFilter.SolidOnly);
+        var result = PhysicsWorld.OverlapCapsuleFirst(new Vector2(200f, 150f), new Vector2(200f, 250f), 40f, PhysicsQueryFilter.SolidOnly);
 
         Assert.NotNull(result);
         Assert.Same(solid, result.Value.Component);
@@ -217,32 +211,32 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
             new Vector2(150f, 250f)
         ];
 
-        var result = _physicsWorld.OverlapPolygonFirst(verts, PhysicsQueryFilter.SolidOnly);
+        var result = PhysicsWorld.OverlapPolygonFirst(verts, PhysicsQueryFilter.SolidOnly);
 
         Assert.NotNull(result);
         Assert.Same(solid, result.Value.Component);
     }
-    
+
     [Fact]
     public void SubStepCount_SetValidValue_UpdatesProperty()
     {
-        _physicsWorld.SubStepCount = 8;
+        PhysicsWorld.SubStepCount = 8;
 
-        Assert.Equal(8, _physicsWorld.SubStepCount);
+        Assert.Equal(8, PhysicsWorld.SubStepCount);
     }
 
     [Fact]
     public void SubStepCount_SetToZero_Throws()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => _physicsWorld.SubStepCount = 0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => PhysicsWorld.SubStepCount = 0);
     }
 
     [Fact]
     public void SubStepCount_SetToNegative_Throws()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => _physicsWorld.SubStepCount = -1);
+        Assert.Throws<ArgumentOutOfRangeException>(() => PhysicsWorld.SubStepCount = -1);
     }
-    
+
     [Fact]
     public void IsBullet_ChangeOnLiveBody_DoesNotThrow()
     {
@@ -258,12 +252,12 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
             });
 
         world.Flush();
-        system.FixedUpdate(world, OneStep);
+        system.FixedUpdate(world, FixedTime);
 
         var body = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
         body.IsBullet = true;
 
-        var ex = Record.Exception(() => system.FixedUpdate(world, OneStep));
+        var ex = Record.Exception(() => system.FixedUpdate(world, FixedTime));
         Assert.Null(ex);
         Assert.True(body.IsBullet);
     }
@@ -283,20 +277,20 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
             });
 
         world.Flush();
-        system.FixedUpdate(world, OneStep);
+        system.FixedUpdate(world, FixedTime);
 
         var body = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
         body.IsBullet = true;
 
         Assert.False(body.IsBulletDirty);
     }
-    
+
     [Fact]
     public void OverlapAABBFirst_BodyInAABB_ReturnsComponent()
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapAABBFirst(new Vector2(150f, 150f), new Vector2(250f, 250f));
+        var result = PhysicsWorld.OverlapAABBFirst(new Vector2(150f, 150f), new Vector2(250f, 250f));
 
         Assert.NotNull(result);
         Assert.Same(body, result.Value.Component);
@@ -307,7 +301,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapAABBFirst(new Vector2(9000f, 9000f), new Vector2(9100f, 9100f));
+        var result = PhysicsWorld.OverlapAABBFirst(new Vector2(9000f, 9000f), new Vector2(9100f, 9100f));
 
         Assert.Null(result);
     }
@@ -317,7 +311,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var hit = _physicsWorld.OverlapAABBFirst(new Vector2(150f, 150f), new Vector2(250f, 250f));
+        var hit = PhysicsWorld.OverlapAABBFirst(new Vector2(150f, 150f), new Vector2(250f, 250f));
 
         Assert.NotNull(hit);
         Assert.Same(body, hit.Value.Component);
@@ -328,7 +322,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var hit = _physicsWorld.OverlapAABBFirst(new Vector2(9000f, 9000f), new Vector2(9100f, 9100f));
+        var hit = PhysicsWorld.OverlapAABBFirst(new Vector2(9000f, 9000f), new Vector2(9100f, 9100f));
 
         Assert.Null(hit);
     }
@@ -339,7 +333,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapAABB(new Vector2(150f, 150f), new Vector2(250f, 250f), results);
+        int count = PhysicsWorld.OverlapAABB(new Vector2(150f, 150f), new Vector2(250f, 250f), results);
 
         Assert.Equal(1, count);
         Assert.Same(body, results[0].Component);
@@ -350,7 +344,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        int count = _physicsWorld.OverlapAABB(new Vector2(150f, 150f), new Vector2(250f, 250f), Span<OverlapHit>.Empty);
+        int count = PhysicsWorld.OverlapAABB(new Vector2(150f, 150f), new Vector2(250f, 250f), Span<OverlapHit>.Empty);
 
         Assert.Equal(0, count);
     }
@@ -361,7 +355,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapAABBShapes(new Vector2(150f, 150f), new Vector2(250f, 250f), results);
+        int count = PhysicsWorld.OverlapAABBShapes(new Vector2(150f, 150f), new Vector2(250f, 250f), results);
 
         Assert.Equal(1, count);
     }
@@ -383,20 +377,20 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         }
 
         world.Flush();
-        system.FixedUpdate(world, OneStep);
+        system.FixedUpdate(world, FixedTime);
 
         var results = new OverlapHit[8];
-        int count = _physicsWorld.OverlapAABB(new Vector2(100f, 100f), new Vector2(400f, 400f), results);
+        int count = PhysicsWorld.OverlapAABB(new Vector2(100f, 100f), new Vector2(400f, 400f), results);
 
         Assert.Equal(2, count);
     }
-    
+
     [Fact]
     public void OverlapCircleFirst_BodyInRadius_ReturnsComponent()
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapCircleFirst(new Vector2(200f, 200f), 50f);
+        var result = PhysicsWorld.OverlapCircleFirst(new Vector2(200f, 200f), 50f);
 
         Assert.NotNull(result);
         Assert.Same(body, result.Value.Component);
@@ -407,7 +401,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapCircleFirst(new Vector2(9000f, 9000f), 50f);
+        var result = PhysicsWorld.OverlapCircleFirst(new Vector2(9000f, 9000f), 50f);
 
         Assert.Null(result);
     }
@@ -417,7 +411,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var hit = _physicsWorld.OverlapCircleFirst(new Vector2(200f, 200f), 50f);
+        var hit = PhysicsWorld.OverlapCircleFirst(new Vector2(200f, 200f), 50f);
 
         Assert.NotNull(hit);
         Assert.Same(body, hit.Value.Component);
@@ -429,7 +423,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapCircle(new Vector2(200f, 200f), 50f, results);
+        int count = PhysicsWorld.OverlapCircle(new Vector2(200f, 200f), 50f, results);
 
         Assert.Equal(1, count);
         Assert.Same(body, results[0]!.Component);
@@ -440,7 +434,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
     {
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        int count = _physicsWorld.OverlapCircle(new Vector2(200f, 200f), 50f, Span<OverlapHit>.Empty);
+        int count = PhysicsWorld.OverlapCircle(new Vector2(200f, 200f), 50f, Span<OverlapHit>.Empty);
 
         Assert.Equal(0, count);
     }
@@ -451,7 +445,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapCircleShapes(new Vector2(200f, 200f), 50f, results);
+        int count = PhysicsWorld.OverlapCircleShapes(new Vector2(200f, 200f), 50f, results);
 
         Assert.Equal(1, count);
     }
@@ -462,17 +456,17 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapCircle(new Vector2(9000f, 9000f), 1f, results);
+        int count = PhysicsWorld.OverlapCircle(new Vector2(9000f, 9000f), 1f, results);
 
         Assert.Equal(0, count);
     }
-    
+
     [Fact]
     public void OverlapCapsuleFirst_BodyInCapsule_ReturnsComponent()
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapCapsuleFirst(new Vector2(200f, 150f), new Vector2(200f, 250f), 40f);
+        var result = PhysicsWorld.OverlapCapsuleFirst(new Vector2(200f, 150f), new Vector2(200f, 250f), 40f);
 
         Assert.NotNull(result);
         Assert.Same(body, result.Value.Component);
@@ -484,7 +478,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapCapsule(new Vector2(200f, 150f), new Vector2(200f, 250f), 40f, results);
+        int count = PhysicsWorld.OverlapCapsule(new Vector2(200f, 150f), new Vector2(200f, 250f), 40f, results);
 
         Assert.Equal(1, count);
         Assert.Same(body, results[0]!.Component);
@@ -496,18 +490,18 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapCapsuleShapes(
+        int count = PhysicsWorld.OverlapCapsuleShapes(
             new Vector2(200f, 150f), new Vector2(200f, 250f), 40f, results);
 
         Assert.Equal(1, count);
     }
-    
+
     [Fact]
     public void OverlapBoxFirst_BodyInBox_ReturnsComponent()
     {
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
 
-        var result = _physicsWorld.OverlapBoxFirst(new Vector2(200f, 200f), 60f, 60f, 0f);
+        var result = PhysicsWorld.OverlapBoxFirst(new Vector2(200f, 200f), 60f, 60f, 0f);
 
         Assert.NotNull(result);
         Assert.Same(body, result.Value.Component);
@@ -519,7 +513,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         var (_, _, body) = SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapBox(new Vector2(200f, 200f), 60f, 60f, 0f, results);
+        int count = PhysicsWorld.OverlapBox(new Vector2(200f, 200f), 60f, 60f, 0f, results);
 
         Assert.Equal(1, count);
         Assert.Same(body, results[0]!.Component);
@@ -531,7 +525,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapBoxShapes(new Vector2(200f, 200f), 60f, 60f, 0f, results);
+        int count = PhysicsWorld.OverlapBoxShapes(new Vector2(200f, 200f), 60f, 60f, 0f, results);
 
         Assert.Equal(1, count);
     }
@@ -542,11 +536,11 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         SetupWithStaticCircleAt(new Vector2(200f, 200f), 30f);
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapBox(new Vector2(9000f, 9000f), 10f, 10f, 0f, results);
+        int count = PhysicsWorld.OverlapBox(new Vector2(9000f, 9000f), 10f, 10f, 0f, results);
 
         Assert.Equal(0, count);
     }
-    
+
     [Fact]
     public void OverlapPolygonFirst_BodyInPolygon_ReturnsComponent()
     {
@@ -560,7 +554,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
             new Vector2(150f, 250f)
         ];
 
-        var result = _physicsWorld.OverlapPolygonFirst(verts);
+        var result = PhysicsWorld.OverlapPolygonFirst(verts);
 
         Assert.NotNull(result);
         Assert.Same(body, result.Value.Component);
@@ -581,7 +575,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
 
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapPolygon(verts, results);
+        int count = PhysicsWorld.OverlapPolygon(verts, results);
 
         Assert.Equal(1, count);
         Assert.Same(body, results[0]!.Component);
@@ -602,7 +596,7 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
 
         var results = new OverlapHit[8];
 
-        int count = _physicsWorld.OverlapPolygonShapes(verts, results);
+        int count = PhysicsWorld.OverlapPolygonShapes(verts, results);
 
         Assert.Equal(1, count);
     }
@@ -615,6 +609,6 @@ public class PhysicsWorldOverlapTests : TestBase, IDisposable
         var results = new OverlapHit[8];
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            _physicsWorld.OverlapPolygon(verts, results));
+            PhysicsWorld.OverlapPolygon(verts, results));
     }
 }

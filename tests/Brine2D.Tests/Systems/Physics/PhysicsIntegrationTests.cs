@@ -1,4 +1,3 @@
-using System.Numerics;
 using Box2D.NET.Bindings;
 using Brine2D.Collision;
 using Brine2D.Core;
@@ -7,29 +6,46 @@ using Brine2D.ECS.Components;
 using Brine2D.ECS.Components.Joints;
 using Brine2D.Physics;
 using Brine2D.Systems.Physics;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Numerics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class PhysicsIntegrationTests : TestBase, IDisposable
+public class PhysicsIntegrationTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
+    public PhysicsIntegrationTests() : base() { }
 
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose()
+    private (IEntityWorld world, Box2DPhysicsSystem physics, KinematicCharacterSystem preStep, KinematicCharacterSystem postStep) CreateSystems()
     {
-        _physicsWorld.Dispose();
+        var world = CreateTestWorld();
+        var physics = new Box2DPhysicsSystem(PhysicsWorld);
+        var pre = new KinematicCharacterSystem(PhysicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
+        var post = new KinematicCharacterSystem(PhysicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
+        return (world, physics, pre, post);
     }
 
-    private Box2DPhysicsSystem CreateSystem() => new(_physicsWorld);
+    private void Step(IEntityWorld world, Box2DPhysicsSystem physics, KinematicCharacterSystem pre, KinematicCharacterSystem post, int steps = 1)
+    {
+        for (int i = 0; i < steps; i++)
+        {
+            pre.FixedUpdate(world, FixedTime);
+            physics.FixedUpdate(world, FixedTime);
+            post.FixedUpdate(world, FixedTime);
+        }
+    }
+
+    private Box2DPhysicsSystem CreateSystem() => new(PhysicsWorld);
 
     private void Step(IEntityWorld world, Box2DPhysicsSystem system, int count = 1)
     {
         for (int i = 0; i < count; i++)
             system.FixedUpdate(world, FixedTime);
     }
+    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
 
+    private readonly PhysicsWorld _physicsWorld = new();
+    
     // ── Collision events ──────────────────────────────────────────────────────
 
     [Fact]
@@ -123,7 +139,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
 
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
         var bodyB = entityB.GetComponent<PhysicsBodyComponent>()!;
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
 
         collisionFired = false;
         Step(world, system, 5);
@@ -156,7 +172,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
 
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
         var bodyB = entityB.GetComponent<PhysicsBodyComponent>()!;
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
         Step(world, system, 3);
 
         // Separate, then restore and re-approach.
@@ -165,7 +181,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         world.Flush();
         Step(world, system, 3);
 
-        _physicsWorld.RestoreCollision(bodyA, bodyB);
+        PhysicsWorld.RestoreCollision(bodyA, bodyB);
 
         entityB.GetComponent<TransformComponent>()!.LocalPosition = new Vector2(50f, 0f);
         bodyB.IsDirty = true;
@@ -199,7 +215,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
 
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
         var bodyB = entityB.GetComponent<PhysicsBodyComponent>()!;
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
 
         // Destroy B — PurgeIgnoredPairsForBody fires in DestroyBody (Bug #2 fix).
         entityB.Destroy();
@@ -258,7 +274,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         var system = CreateSystem();
         bool collisionFired = false;
 
-        _physicsWorld.SetCustomCollisionFilter((_, _) => false);
+        PhysicsWorld.SetCustomCollisionFilter((_, _) => false);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -277,10 +293,8 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         Step(world, system, 5);
 
         Assert.False(collisionFired);
-        _physicsWorld.SetCustomCollisionFilter(null);
+        PhysicsWorld.SetCustomCollisionFilter(null);
     }
-
-    // ── GravityOverride ───────────────────────────────────────────────────────
 
     [Fact]
     public void GravityOverride_Body_IgnoresWorldGravity()
@@ -308,8 +322,6 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
 
         Assert.True(posA < posB, "Body with GravityOverride=0 should fall less than body under world gravity.");
     }
-
-    // ── FreezePositionX / FreezePositionY ────────────────────────────────────
 
     [Fact]
     public void FreezePositionX_DynamicBody_DoesNotMoveHorizontally()
@@ -354,8 +366,6 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         Assert.True(MathF.Abs(y - 100f) < 2f, $"Expected Y≈100 but got {y}");
     }
 
-    // ── Teleport suppresses phantom velocity ──────────────────────────────────
-
     [Fact]
     public void Teleport_KinematicBody_SuppressesPhantomVelocity()
     {
@@ -382,8 +392,6 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         Assert.Equal(0f, speed, precision: 1);
     }
 
-    // ── Raycast ───────────────────────────────────────────────────────────────
-
     [Fact]
     public void RaycastClosest_HitsLiveBody_ReturnsHit()
     {
@@ -400,7 +408,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         world.Flush();
         Step(world, system);
 
-        var hit = _physicsWorld.RaycastClosest(new Vector2(0f, 0f), new Vector2(1f, 0f), 1000f);
+        var hit = PhysicsWorld.RaycastClosest(new Vector2(0f, 0f), new Vector2(1f, 0f), 1000f);
 
         Assert.NotNull(hit);
         Assert.NotNull(hit.Value.Component);
@@ -426,12 +434,10 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         Step(world, system);
 
         var buffer = new RaycastHit[8];
-        int count = _physicsWorld.RaycastAll(new Vector2(0f, 0f), new Vector2(1f, 0f), 1000f, buffer);
+        int count = PhysicsWorld.RaycastAll(new Vector2(0f, 0f), new Vector2(1f, 0f), 1000f, buffer);
 
         Assert.True(count >= 3);
     }
-
-    // ── ShapeCast ─────────────────────────────────────────────────────────────
 
     [Fact]
     public void ShapeCastClosest_HitsBody_ReturnsHit()
@@ -449,12 +455,10 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         world.Flush();
         Step(world, system);
 
-        var hit = _physicsWorld.ShapeCastClosest(new Vector2(0f, 0f), 10f, new Vector2(1f, 0f), 500f);
+        var hit = PhysicsWorld.ShapeCastClosest(new Vector2(0f, 0f), 10f, new Vector2(1f, 0f), 500f);
 
         Assert.NotNull(hit);
     }
-
-    // ── Overlap queries ───────────────────────────────────────────────────────
 
     [Fact]
     public void OverlapCircle_LiveBody_ReturnsHit()
@@ -473,7 +477,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         Step(world, system);
 
         var buffer = new OverlapHit[8];
-        int count = _physicsWorld.OverlapCircle(Vector2.Zero, 100f, buffer);
+        int count = PhysicsWorld.OverlapCircle(Vector2.Zero, 100f, buffer);
 
         Assert.True(count >= 1);
     }
@@ -495,7 +499,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
         Step(world, system);
 
         var buffer = new OverlapHit[8];
-        int count = _physicsWorld.OverlapAABB(new Vector2(-100f, -100f), new Vector2(100f, 100f), buffer);
+        int count = PhysicsWorld.OverlapAABB(new Vector2(-100f, -100f), new Vector2(100f, 100f), buffer);
 
         Assert.True(count >= 1);
     }
@@ -525,7 +529,7 @@ public class PhysicsIntegrationTests : TestBase, IDisposable
 
         var body = movingEntity.GetComponent<PhysicsBodyComponent>()!;
         var contacts = new List<ContactPair>();
-        _physicsWorld.GetContactsAll(body, contacts);
+        PhysicsWorld.GetContactsAll(body, contacts);
 
         Assert.NotEmpty(contacts);
     }
