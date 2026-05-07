@@ -1,6 +1,4 @@
-using Xunit;
-
-namespace Brine2D.Tests;
+namespace Brine2D.Tests.Systems.Physics;
 
 [CollectionDefinition("Physics", DisableParallelization = true)]
-public sealed class PhysicsCollection;
+public class PhysicsCollectionDefinition;

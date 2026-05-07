@@ -8,6 +8,7 @@ using Brine2D.Systems.Physics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
+[Collection("Physics")]
 public class Box2DPhysicsSystemKinematicTests : TestBase, IDisposable
 {
     private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));

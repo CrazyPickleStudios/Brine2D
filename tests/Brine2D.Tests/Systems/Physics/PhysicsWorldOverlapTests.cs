@@ -13,6 +13,7 @@ namespace Brine2D.Tests.Systems.Physics;
 /// Each test wires up a Box2DPhysicsSystem so ComponentResolver and AllBodiesResolver
 /// are registered, then steps the world once so bodies are live in Box2D.
 /// </summary>
+[Collection("Physics")]
 public class PhysicsWorldOverlapTests : TestBase, IDisposable
 {
     private static readonly GameTime OneStep = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
