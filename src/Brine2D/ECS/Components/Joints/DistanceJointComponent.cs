@@ -20,7 +20,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointSetSpringDampingRatio(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -30,7 +33,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointEnableLimit(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -40,7 +46,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointEnableMotor(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -50,7 +59,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointEnableSpring(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -63,7 +75,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointSetSpringHertz(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -77,7 +92,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointSetLength(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -87,7 +105,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointSetLengthRange(JointId, MinLength, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -97,7 +118,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointSetMaxMotorForce(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -107,7 +131,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointSetLengthRange(JointId, value, MaxLength);
+            else
+                IsDirty = true;
         }
     }
 
@@ -117,7 +144,10 @@ public sealed class DistanceJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.DistanceJointSetMotorSpeed(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -131,9 +161,7 @@ public sealed class DistanceJointComponent : JointComponent
         def.collideConnected = CollideConnected;
 
         if (Length > 0f)
-        {
             def.length = Length;
-        }
 
         def.enableSpring = EnableSpring;
         def.hertz = Hertz;

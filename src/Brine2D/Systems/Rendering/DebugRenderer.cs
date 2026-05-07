@@ -111,10 +111,10 @@ public class DebugRenderer : RenderSystemBase
             case PolygonShape poly:
             {
                 var verts = poly.Vertices;
-                for (int i = 0; i < verts.Length; i++)
+                for (int i = 0; i < verts.Count; i++)
                 {
                     var a = bodyPos + RotatePoint(verts[i], rotation);
-                    var b = bodyPos + RotatePoint(verts[(i + 1) % verts.Length], rotation);
+                    var b = bodyPos + RotatePoint(verts[(i + 1) % verts.Count], rotation);
                     renderer.DrawLine(a, b, color, 1.5f);
                 }
                 break;

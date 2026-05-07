@@ -3,6 +3,7 @@ using Brine2D.Physics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
+[Collection("Physics")]
 public class PhysicsWorldTests : IDisposable
 {
     private PhysicsWorld? _world;
@@ -10,6 +11,7 @@ public class PhysicsWorldTests : IDisposable
     public void Dispose()
     {
         _world?.Dispose();
+        PhysicsWorld.ResetForTesting();
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using Box2D.NET.Bindings;
 using Brine2D.ECS.Components;
 
 namespace Brine2D.Physics;
@@ -18,4 +19,9 @@ public readonly struct OverlapHit
     /// (or the body uses a chain shape whose segments have no individual <see cref="SubShape"/>).
     /// </summary>
     public SubShape? SubShape { get; init; }
+
+    /// <summary>
+    /// The raw Box2D shape ID that was overlapped.
+    /// </summary>
+    internal B2.ShapeId ShapeId { get; init; }
 }

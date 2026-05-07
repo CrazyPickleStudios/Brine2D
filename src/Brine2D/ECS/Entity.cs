@@ -627,6 +627,42 @@ public class Entity
     }
 
     /// <summary>
+    /// Creates, configures, and adds a behavior of the specified type.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="configure"/> is invoked after the behavior is constructed (via DI)
+    /// but before <see cref="Behavior.OnAttached"/> is called, so configured values are
+    /// available during attachment.
+    /// </remarks>
+    /// <typeparam name="T">The behavior type.</typeparam>
+    /// <param name="configure">An action to configure the behavior before it is attached.</param>
+    /// <returns>This entity for method chaining.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if entity is not in a world.</exception>
+    public Entity AddBehavior<T>(Action<T> configure) where T : Behavior
+    {
+        if (_world == null)
+            throw new InvalidOperationException("Cannot add behavior - entity is not in a world");
+
+        if (HasBehavior<T>())
+        {
+            _logger?.LogWarning("Entity {Name} already has behavior {Type}, skipping", Name, typeof(T).Name);
+            return this;
+        }
+
+        var behavior = _world.CreateBehavior<T>();
+        configure(behavior);
+
+        behavior.Entity = this;
+        _behaviors.Add(behavior);
+        behavior.OnAttached();
+
+        _world.NotifyBehaviorAdded(this, behavior);
+        _logger?.LogDebug("Entity {Name} added behavior {Behavior}", Name, typeof(T).Name);
+
+        return this;
+    }
+
+    /// <summary>
     /// Checks if this entity has a behavior of the specified type.
     /// </summary>
     public bool HasBehavior<T>() where T : Behavior

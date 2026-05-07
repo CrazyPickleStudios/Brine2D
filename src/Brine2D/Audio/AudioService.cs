@@ -512,7 +512,11 @@ internal sealed class AudioService : IAudioService
     public void StopAllSounds()
     {
         ThrowIfDisposed();
+        StopAllSoundsCore();
+    }
 
+    private void StopAllSoundsCore()
+    {
         lock (_tracksLock)
         {
             _soundTrackBuffer.Clear();
@@ -1074,7 +1078,7 @@ internal sealed class AudioService : IAudioService
 
         FinishCrossfade();
         StopMusicCore();
-        StopAllSounds();
+        StopAllSoundsCore(); 
         ProcessDeferredDestroys();
 
         List<nint> remainingTracks;

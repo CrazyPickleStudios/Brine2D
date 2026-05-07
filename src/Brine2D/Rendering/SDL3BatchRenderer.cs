@@ -145,22 +145,46 @@ internal sealed class SDL3BatchRenderer : IDisposable
             AddQuad(x, y, width, height, color, u1, v1, u2, v2, onFlushNeeded);
     }
 
-    public void DrawRectangleFilled(float x, float y, float width, float height, Color color, Action? onFlushNeeded = null)
+    public void DrawRectangleFilled(float x, float y, float width, float height, Color color, float rotation = 0f, Action? onFlushNeeded = null)
     {
         EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode, onFlushNeeded);
-        AddQuad(x, y, width, height, color, onFlushNeeded: onFlushNeeded);
+        if (rotation != 0f)
+            AddQuadRotated(x, y, width, height, null, rotation, color, onFlushNeeded: onFlushNeeded);
+        else
+            AddQuad(x, y, width, height, color, onFlushNeeded: onFlushNeeded);
     }
 
-    public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1, Action? onFlushNeeded = null)
+    public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f, float rotation = 0f, Action? onFlushNeeded = null)
     {
         if (width <= 0 || height <= 0)
             return;
+
+        if (rotation != 0f)
+        {
+            float hw = width * 0.5f;
+            float hh = height * 0.5f;
+            float cx = x + hw;
+            float cy = y + hh;
+            float cos = MathF.Cos(rotation);
+            float sin = MathF.Sin(rotation);
+
+            (float X, float Y) tl = RotatePoint(-hw, -hh, cos, sin, cx, cy);
+            (float X, float Y) tr = RotatePoint( hw, -hh, cos, sin, cx, cy);
+            (float X, float Y) br = RotatePoint( hw,  hh, cos, sin, cx, cy);
+            (float X, float Y) bl = RotatePoint(-hw,  hh, cos, sin, cx, cy);
+
+            DrawLine(tl.X, tl.Y, tr.X, tr.Y, color, thickness, onFlushNeeded);
+            DrawLine(tr.X, tr.Y, br.X, br.Y, color, thickness, onFlushNeeded);
+            DrawLine(br.X, br.Y, bl.X, bl.Y, color, thickness, onFlushNeeded);
+            DrawLine(bl.X, bl.Y, tl.X, tl.Y, color, thickness, onFlushNeeded);
+            return;
+        }
 
         var ht = Math.Max(thickness, 0.5f) / 2f;
 
         if (ht * 2 >= width || ht * 2 >= height)
         {
-            DrawRectangleFilled(x, y, width, height, color, onFlushNeeded);
+            DrawRectangleFilled(x, y, width, height, color, 0f, onFlushNeeded);
             return;
         }
 

@@ -20,7 +20,10 @@ public sealed class MotorJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.MotorJointSetAngularOffset(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -34,7 +37,10 @@ public sealed class MotorJointComponent : JointComponent
         set
         {
             field = Math.Clamp(value, 0f, 1f);
-            IsDirty = true;
+            if (IsLive)
+                B2.MotorJointSetCorrectionFactor(JointId, field);
+            else
+                IsDirty = true;
         }
     } = 0.3f;
 
@@ -47,7 +53,10 @@ public sealed class MotorJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.MotorJointSetLinearOffset(JointId, new B2.Vec2 { x = value.X, y = value.Y });
+            else
+                IsDirty = true;
         }
     }
 
@@ -61,7 +70,10 @@ public sealed class MotorJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.MotorJointSetMaxForce(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -75,7 +87,10 @@ public sealed class MotorJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.MotorJointSetMaxTorque(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 

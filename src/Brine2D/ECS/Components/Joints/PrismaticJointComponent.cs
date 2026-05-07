@@ -27,7 +27,10 @@ public sealed class PrismaticJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointSetSpringDampingRatio(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -37,7 +40,10 @@ public sealed class PrismaticJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointEnableLimit(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -47,7 +53,10 @@ public sealed class PrismaticJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointEnableMotor(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -61,7 +70,10 @@ public sealed class PrismaticJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointSetSpringHertz(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -87,7 +99,10 @@ public sealed class PrismaticJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointSetLimits(JointId, value, UpperTranslation);
+            else
+                IsDirty = true;
         }
     }
 
@@ -101,7 +116,10 @@ public sealed class PrismaticJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointSetMaxMotorForce(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -119,7 +137,10 @@ public sealed class PrismaticJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointSetMotorSpeed(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -142,7 +163,10 @@ public sealed class PrismaticJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.PrismaticJointSetLimits(JointId, LowerTranslation, value);
+            else
+                IsDirty = true;
         }
     }
 

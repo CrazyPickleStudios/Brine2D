@@ -594,7 +594,7 @@ public class EntityWorldTests : TestBase
 
         var player = world.CreateEntity("Player")
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100, 100))
-            .AddComponent<PhysicsBodyComponent>() // TODO: Test something with this? -RP
+            .AddComponent<PhysicsBodyComponent>(c => c.Layer = 1)
             .AddTag("Player");
 
         var enemy = world.CreateEntity("Enemy")

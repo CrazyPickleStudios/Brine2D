@@ -93,8 +93,8 @@ public interface IDrawContext
     /// <returns>Width and height in pixels</returns>
     Vector2 MeasureText(string text, TextRenderOptions options);
 
-    void DrawRectangleFilled(float x, float y, float width, float height, Color color);
-    void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f);
+    void DrawRectangleFilled(float x, float y, float width, float height, Color color, float rotation = 0f);
+    void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f, float rotation = 0f);
     void DrawCircleFilled(float centerX, float centerY, float radius, Color color);
     void DrawCircleOutline(float centerX, float centerY, float radius, Color color, float thickness = 1f);
     void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1f);

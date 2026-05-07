@@ -9,10 +9,12 @@ namespace Brine2D.ECS.Components;
 /// </summary>
 public sealed class SubShape
 {
+    private bool _isTrigger;
+
     internal SubShape(ShapeDefinition definition, bool isTrigger, float? friction, float? restitution)
     {
-        Definition = definition;
-        IsTrigger = isTrigger;
+        _definition = definition;
+        _isTrigger = isTrigger;
         Friction = friction;
         Restitution = restitution;
     }
@@ -32,7 +34,32 @@ public sealed class SubShape
         }
     }
 
-    public ShapeDefinition Definition { get; }
+    private ShapeDefinition _definition;
+
+    public ShapeDefinition Definition => _definition;
+
+    /// <summary>
+    /// Updates the geometry of this sub-shape. When the body is live and the new definition
+    /// is the same shape type as the current one, the change is applied via a lightweight
+    /// <c>B2.ShapeSet*</c> call. When the shape type changes, a full body rebuild is triggered.
+    /// Chain shapes are not supported.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="newDefinition"/> is a <see cref="ChainShape"/>.</exception>
+    public void UpdateDefinition(ShapeDefinition newDefinition)
+    {
+        if (newDefinition is ChainShape)
+            throw new ArgumentException("Chain shapes are not supported as sub-shapes.", nameof(newDefinition));
+
+        bool sameType = _definition.GetType() == newDefinition.GetType();
+        _definition = newDefinition;
+
+        if (sameType)
+            MarkOwnerGeometryDirty?.Invoke();
+        else
+            MarkOwnerDirty?.Invoke();
+    }
+
+    internal Action? MarkOwnerGeometryDirty { get; set; }
 
     /// <summary>
     ///     Whether hit events (<see cref="PhysicsBodyComponent.OnCollisionHit" />) are enabled for
@@ -64,7 +91,21 @@ public sealed class SubShape
         }
     }
 
-    public bool IsTrigger { get; }
+    /// <summary>
+    ///     When <c>true</c>, this sub-shape acts as a sensor: it fires trigger events but
+    ///     generates no collision response. Changing this on a live body applies immediately
+    ///     via a lightweight sensor-events toggle — no full rebuild is required.
+    /// </summary>
+    public bool IsTrigger
+    {
+        get => _isTrigger;
+        set
+        {
+            if (_isTrigger == value) return;
+            _isTrigger = value;
+            MarkOwnerTriggerDirty?.Invoke();
+        }
+    }
 
     /// <summary>
     ///     Collision layer override for this sub-shape (0–63). When <c>null</c>, inherits
@@ -82,6 +123,23 @@ public sealed class SubShape
                 ArgumentOutOfRangeException.ThrowIfGreaterThan(value.Value, 63);
             }
 
+            field = value;
+            MarkOwnerFilterDirty?.Invoke();
+        }
+    }
+
+    /// <summary>
+    ///     Raw category bitmask override for this sub-shape. When non-zero, overrides the
+    ///     single-bit mask derived from <see cref="Layer"/> (i.e. <c>1UL &lt;&lt; Layer</c>).
+    ///     When <c>null</c>, falls back to <see cref="Layer"/>-derived bits or the owning
+    ///     body's <see cref="PhysicsBodyComponent.CategoryBits"/>.
+    ///     Takes effect immediately on a live body via a lightweight filter update.
+    /// </summary>
+    public ulong? CategoryBits
+    {
+        get;
+        set
+        {
             field = value;
             MarkOwnerFilterDirty?.Invoke();
         }
@@ -136,6 +194,13 @@ public sealed class SubShape
     internal Action? MarkOwnerMaterialDirty { get; set; }
 
     /// <summary>
+    ///     Invoked when <see cref="IsTrigger" /> changes on a live body sub-shape.
+    ///     Wired by the owning <see cref="PhysicsBodyComponent" /> to propagate the change
+    ///     into the system's sub-shape trigger handler.
+    /// </summary>
+    internal Action? MarkOwnerTriggerDirty { get; set; }
+
+    /// <summary>
     ///     Invoked when <see cref="ShouldCollide" /> transitions between null and non-null.
     ///     Wired by the owning <see cref="PhysicsBodyComponent" /> to propagate changes into the
     ///     system's filter-active count.
@@ -143,4 +208,21 @@ public sealed class SubShape
     internal Action<bool>? MarkOwnerShouldCollideChanged { get; set; }
 
     internal B2.ShapeId ShapeId { get; set; }
+
+    /// <summary>
+    /// Box2D collision group index for this sub-shape. Overrides the owning body's
+    /// <see cref="PhysicsBodyComponent.GroupIndex"/> for this shape only.
+    /// Positive = always collide with same group, negative = never collide, 0 = use
+    /// category/mask bits (default).
+    /// </summary>
+    public int GroupIndex
+    {
+        get => field;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            MarkOwnerFilterDirty?.Invoke();
+        }
+    }
 }

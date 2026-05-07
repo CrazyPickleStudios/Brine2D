@@ -17,7 +17,10 @@ public sealed class WheelJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointSetSpringDampingRatio(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -27,7 +30,10 @@ public sealed class WheelJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointEnableLimit(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -37,7 +43,10 @@ public sealed class WheelJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointEnableMotor(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -50,7 +59,10 @@ public sealed class WheelJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointEnableSpring(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -64,7 +76,10 @@ public sealed class WheelJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointSetSpringHertz(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -91,7 +106,10 @@ public sealed class WheelJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointSetLimits(JointId, value, UpperTranslation);
+            else
+                IsDirty = true;
         }
     }
 
@@ -105,7 +123,10 @@ public sealed class WheelJointComponent : JointComponent
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointSetMaxMotorTorque(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -118,7 +139,10 @@ public sealed class WheelJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointSetMotorSpeed(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -136,7 +160,10 @@ public sealed class WheelJointComponent : JointComponent
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WheelJointSetLimits(JointId, LowerTranslation, value);
+            else
+                IsDirty = true;
         }
     }
 

@@ -1,6 +1,7 @@
 using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Hosting;
+using Brine2D.Systems.Physics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -12,65 +13,58 @@ namespace Brine2D.Integration.Tests.Hosting;
 /// </summary>
 public class GameApplicationSmokeTests
 {
+    private static GameApplicationBuilder HeadlessBuilder() =>
+        GameApplication.CreateBuilder()
+            .Configure(o => o.Headless = true)
+            .ExcludeDefaultSystem<Box2DPhysicsSystem>();
+
     [Fact]
     public async Task Build_InHeadlessMode_SucceedsAndDisposesCleanly()
     {
-        await using var game = GameApplication.CreateBuilder()
-            .Configure(o => o.Headless = true)
-            .Build();
+        await using var game = HeadlessBuilder().Build();
     }
 
     [Fact]
     public async Task RunAsync_CancelledExternally_CompletesNormally()
     {
-        // TODO: 
-        //await using var game = GameApplication.CreateBuilder()
-        //    .Configure(o => o.Headless = true)
-        //    .Build();
+        await using var game = HeadlessBuilder().Build();
 
-        //using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
 
-        //// Clean shutdown via cancellation is not an error; task completes with RanToCompletion.
-        //await game.RunAsync<NeverExitScene>(cts.Token);
+        await game.RunAsync<NeverExitScene>(cts.Token);
     }
 
     [Fact]
     public async Task RunAsync_SceneRequestsExit_CompletesWithoutHanging()
     {
-        // TODO: 
-        //await using var game = GameApplication.CreateBuilder()
-        //    .Configure(o => o.Headless = true)
-        //    .Build();
+        await using var game = HeadlessBuilder().Build();
 
-        //await game.RunAsync<ImmediateExitScene>(
-        //    sp => new ImmediateExitScene(sp.GetRequiredService<IHostApplicationLifetime>()));
+        await game.RunAsync<ImmediateExitScene>(
+            sp => new ImmediateExitScene(sp.GetRequiredService<IHostApplicationLifetime>()));
     }
 
     [Fact]
     public async Task RunAsync_CalledTwice_Throws()
     {
-        // TODO: 
-        //var game = GameApplication.CreateBuilder()
-        //    .Configure(o => o.Headless = true)
-        //    .Build();
+        var game = HeadlessBuilder().Build();
 
-        //var sceneEntered = new TaskCompletionSource();
-        //var firstRun = game.RunAsync<SignalingScene>(sp => new SignalingScene(sceneEntered));
+        var sceneEntered = new TaskCompletionSource();
+        var firstRun = game.RunAsync<SignalingScene>(sp => new SignalingScene(sceneEntered));
 
-        //await sceneEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await sceneEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        //await Assert.ThrowsAsync<InvalidOperationException>(() => game.RunAsync<NeverExitScene>());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => game.RunAsync<NeverExitScene>());
 
-        //await game.DisposeAsync();
-        //await firstRun;
+        await game.DisposeAsync();
+
+        try { await firstRun; }
+        catch (TaskCanceledException) { }
     }
 
     [Fact]
     public async Task RunAsync_AfterDispose_ThrowsObjectDisposedException()
     {
-        var game = GameApplication.CreateBuilder()
-            .Configure(o => o.Headless = true)
-            .Build();
+        var game = HeadlessBuilder().Build();
 
         await game.DisposeAsync();
 
@@ -80,34 +74,29 @@ public class GameApplicationSmokeTests
     [Fact]
     public async Task RunAsync_FatalSceneException_PropagatesAndDisposesCleanly()
     {
-        await using var game = GameApplication.CreateBuilder()
-            .Configure(o => o.Headless = true)
-            .Build();
+        await using var game = HeadlessBuilder().Build();
 
-        // TODO: var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => game.RunAsync<FaultyScene>());
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => game.RunAsync<FaultyScene>());
 
-        // TODO: Assert.Contains("Intentional test failure", ex.Message);
+        Assert.Contains("Intentional test failure", ex.Message);
     }
 
     [Fact]
     public async Task RunAsync_FaultyConfigureScene_ThrowsGameConfigurationException()
     {
-        await using var game = GameApplication.CreateBuilder()
-            .Configure(o => o.Headless = true)
+        await using var game = HeadlessBuilder()
             .ConfigureScene(_ => throw new Exception("scene config failure"))
             .Build();
 
-        // TODO: var ex = await Assert.ThrowsAsync<GameConfigurationException>(() => game.RunAsync<NeverExitScene>());
+        var ex = await Assert.ThrowsAsync<GameConfigurationException>(() => game.RunAsync<NeverExitScene>());
 
-        // TODO: Assert.Contains("ConfigureScene", ex.Message);
+        Assert.Contains("ConfigureScene", ex.Message);
     }
 
     [Fact]
     public async Task DisposeAsync_CalledTwice_DoesNotThrow()
     {
-        var game = GameApplication.CreateBuilder()
-            .Configure(o => o.Headless = true)
-            .Build();
+        var game = HeadlessBuilder().Build();
 
         await game.DisposeAsync();
         await game.DisposeAsync();
@@ -116,21 +105,16 @@ public class GameApplicationSmokeTests
     [Fact]
     public async Task DisposeAsync_WhileRunning_CancelsGameThreadAndCompletes()
     {
-        // TODO: 
-        //var game = GameApplication.CreateBuilder()
-        //    .Configure(o => o.Headless = true)
-        //    .Build();
+        var game = HeadlessBuilder().Build();
 
-        //var sceneEntered = new TaskCompletionSource();
+        var sceneEntered = new TaskCompletionSource();
+        var runTask = game.RunAsync<SignalingScene>(sp => new SignalingScene(sceneEntered));
 
-        //var runTask = game.RunAsync<SignalingScene>(
-        //    sp => new SignalingScene(sceneEntered));
+        await sceneEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        //await sceneEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await game.DisposeAsync();
 
-        //await game.DisposeAsync();
-
-        //Assert.True(runTask.IsCompleted);
+        Assert.True(runTask.IsCompleted);
     }
 
     private sealed class NeverExitScene : Scene { }

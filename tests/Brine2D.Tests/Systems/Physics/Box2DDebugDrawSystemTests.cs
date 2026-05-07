@@ -4,6 +4,7 @@ using Brine2D.Systems.Physics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
+[Collection("Physics")]
 public class Box2DDebugDrawSystemTests : IDisposable
 {
     private readonly PhysicsWorld _physicsWorld = new();

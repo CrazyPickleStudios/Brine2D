@@ -5,17 +5,25 @@ namespace Brine2D.ECS.Components.Joints;
 
 /// <summary>
 ///     Locks two bodies together at a shared anchor with optional spring softness.
-///     A rigid weld (zero hertz) is equivalent to merging the two bodies.
+///     A rigid weld (<see cref="LinearHertz"/> = 0) is equivalent to merging the two bodies.
 /// </summary>
+/// <remarks>
+///     <b>Break force limitation:</b> Box2D 3.x only reports constraint force for soft joints.
+///     <see cref="JointComponent.BreakForce"/> has no effect when <see cref="LinearHertz"/> is 0 (the default).
+///     Set <see cref="LinearHertz"/> to a positive value to enable break detection.
+/// </remarks>
 public sealed class WeldJointComponent : JointComponent
 {
     public float AngularDampingRatio
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WeldJointSetAngularDampingRatio(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -24,21 +32,27 @@ public sealed class WeldJointComponent : JointComponent
     /// </summary>
     public float AngularHertz
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WeldJointSetAngularHertz(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
     public float LinearDampingRatio
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WeldJointSetLinearDampingRatio(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -47,20 +61,24 @@ public sealed class WeldJointComponent : JointComponent
     /// </summary>
     public float LinearHertz
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.WeldJointSetLinearHertz(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
     /// <summary>
     ///     Initial relative angle between the bodies in radians.
+    ///     Requires a joint rebuild — set once at construction time.
     /// </summary>
     public float ReferenceAngle
     {
-        get => field;
+        get;
         set
         {
             field = value;

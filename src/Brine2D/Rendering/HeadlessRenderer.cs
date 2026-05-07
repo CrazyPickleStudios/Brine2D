@@ -165,6 +165,16 @@ internal sealed class HeadlessRenderer : IRenderer
         ThrowIfDisposed();
     }
 
+    public void DrawRectangleFilled(float x, float y, float width, float height, Color color, float rotation = 0f)
+    {
+        ThrowIfDisposed();
+    }
+
+    public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f, float rotation = 0f)
+    {
+        ThrowIfDisposed();
+    }
+
     public void DrawRectangleOutline(Rectangle rect, Color color, float thickness = 1f)
     {
         ThrowIfDisposed();

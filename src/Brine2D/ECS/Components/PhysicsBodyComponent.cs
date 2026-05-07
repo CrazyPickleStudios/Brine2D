@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Numerics;
 using Box2D.NET.Bindings;
 using Brine2D.Collision;
@@ -28,6 +29,11 @@ public class PhysicsBodyComponent : Component
 
     internal bool IsDirty { get; set; } = true;
 
+    internal PhysicsWorld? World { get; set; }
+
+    internal bool HasCollisionStaySubscribers =>
+        OnCollisionStay != null || OnCollisionStayWithShape != null;
+
     /// <summary>
     /// Set by the physics system when only the collision filter (layer/mask) has changed on a
     /// live body. The system applies a lightweight <c>B2.ShapeSetFilter</c> call instead of a
@@ -56,6 +62,14 @@ public class PhysicsBodyComponent : Component
     /// <c>B2.ShapeEnableHitEvents</c> instead of a full rebuild.
     /// </summary>
     internal bool IsMaterialDirty { get; set; }
+
+    /// <summary>
+    /// Set when <see cref="SubShape.IsTrigger"/> changes on a live body sub-shape. The system
+    /// calls <c>B2.ShapeEnableSensorEvents</c> and <c>B2.ShapeEnableContactEvents</c> on the
+    /// affected sub-shape, updates density, and flushes stale contact/sensor pairs — no full
+    /// rebuild is required.
+    /// </summary>
+    internal bool IsSubShapeTriggerDirty { get; set; }
 
     /// <summary>
     /// Set by <see cref="Teleport"/> to tell the physics system to reset the kinematic
@@ -98,6 +112,10 @@ public class PhysicsBodyComponent : Component
                         $"ChainShape requires BodyType.Static (current: {BodyType}). Set BodyType = Static before assigning a ChainShape.");
             }
 
+            if (value is SegmentShape && BodyType != PhysicsBodyType.Static)
+                throw new InvalidOperationException(
+                    $"SegmentShape requires BodyType.Static (current: {BodyType}). Set BodyType = Static before assigning a SegmentShape.");
+
             _shape = value;
             IsDirty = true;
         }
@@ -118,11 +136,41 @@ public class PhysicsBodyComponent : Component
         }
     }
 
-    public ulong CollisionMask
+    /// <summary>
+    /// Raw category bitmask for this body's shapes. When non-zero, overrides the single-bit
+    /// mask derived from <see cref="Layer"/> (i.e. <c>1UL &lt;&lt; Layer</c>), allowing a
+    /// body to belong to multiple collision categories simultaneously.
+    /// <para>
+    /// Example: <c>CategoryBits = (1UL &lt;&lt; 0) | (1UL &lt;&lt; 3)</c> makes this body
+    /// a member of both layer 0 and layer 3 for the purpose of collision filtering.
+    /// </para>
+    /// Set to <c>0</c> (default) to use the single-layer behaviour driven by <see cref="Layer"/>.
+    /// </summary>
+    public ulong CategoryBits
     {
-        get ;
+        get;
         set
         {
+            if (value == 0 && field != 0)
+                Trace.TraceWarning(
+                    $"[Brine2D] CategoryBits reset to 0 on entity '{Entity?.Name}' — this body will fall back to the single-layer category derived from Layer. " +
+                    "If you intended to make this body invisible to all queries, set CollisionMask = 0 instead.");
+            field = value;
+            if (B2.BodyIsValid(BodyId))
+                IsFilterDirty = true;
+            else
+                IsDirty = true;
+        }
+    }
+
+    public ulong CollisionMask
+    {
+        get;
+        set
+        {
+            if (value == 0)
+                Trace.TraceWarning(
+                    $"[Brine2D] CollisionMask = 0 on entity '{Entity?.Name}' — this body will not collide with anything.");
             field = value;
             if (B2.BodyIsValid(BodyId))
                 IsFilterDirty = true;
@@ -131,6 +179,16 @@ public class PhysicsBodyComponent : Component
         }
     } = ulong.MaxValue;
 
+    /// <summary>
+    /// When <c>true</c>, this body acts as a sensor: it reports overlaps via
+    /// <c>OnTriggerEnter</c> / <c>OnTriggerStay</c> / <c>OnTriggerExit</c> but generates
+    /// no collision response forces.
+    /// </summary>
+    /// <remarks>
+    /// Box2D only generates sensor events when a sensor shape overlaps a <em>non-sensor</em>
+    /// shape. Two bodies that both have <c>IsTrigger = true</c> will not fire trigger events
+    /// with each other.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when setting to <c>true</c> while <see cref="Shape"/> is a <see cref="ChainShape"/>.
     /// </exception>
@@ -158,13 +216,16 @@ public class PhysicsBodyComponent : Component
     /// </exception>
     public PhysicsBodyType BodyType
     {
-        get ;
+        get;
         set
         {
             if (field == value) return;
             if (value != PhysicsBodyType.Static && _shape is ChainShape)
                 throw new InvalidOperationException(
                     $"ChainShape requires BodyType.Static. Cannot change BodyType to {value}. Assign a different Shape first.");
+            if (value != PhysicsBodyType.Static && _shape is SegmentShape)
+                throw new InvalidOperationException(
+                    $"SegmentShape requires BodyType.Static. Cannot change BodyType to {value}. Assign a different Shape first.");
             field = value;
             if (B2.BodyIsValid(BodyId))
                 IsBodyTypeDirty = true;
@@ -233,16 +294,27 @@ public class PhysicsBodyComponent : Component
     /// </exception>
     public bool IsBullet
     {
-        get ;
+        get;
         set
         {
             if (value && _shape is ChainShape)
                 throw new InvalidOperationException(
                     "ChainShape does not support IsBullet. Assign a different Shape first.");
+            if (field == value) return;
             field = value;
-            IsDirty = true;
+            if (B2.BodyIsValid(BodyId))
+                IsBulletDirty = true;
+            else
+                IsDirty = true;
         }
     }
+
+    /// <summary>
+    /// Set when <see cref="IsBullet"/> changes on a live body. The physics system performs a
+    /// full body rebuild (bullet mode cannot be changed without recreating the body in Box2D),
+    /// preserving the current velocity.
+    /// </summary>
+    internal bool IsBulletDirty { get; set; }
 
     /// <summary>
     /// Whether hit events (<see cref="OnCollisionHit"/>) are enabled for this body's primary shape.
@@ -261,18 +333,78 @@ public class PhysicsBodyComponent : Component
         }
     } = true;
 
+
+
     public bool FixedRotation
     {
-        get ;
+        get;
         set
         {
             field = value;
             if (B2.BodyIsValid(BodyId))
+            {
+                AssertSimulationThread();
                 B2.BodySetFixedRotation(BodyId, value);
+            }
             else
                 IsDirty = true;
         }
     }
+
+    /// <summary>
+    /// When <c>true</c>, the physics system zeroes the X component of this body's linear
+    /// velocity every fixed-update step. Only affects <see cref="PhysicsBodyType.Dynamic"/> bodies.
+    /// </summary>
+    public bool FreezePositionX { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, the physics system zeroes the Y component of this body's linear
+    /// velocity every fixed-update step. Only affects <see cref="PhysicsBodyType.Dynamic"/> bodies.
+    /// </summary>
+    public bool FreezePositionY { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, this body acts as a one-way platform: bodies approaching from the
+    /// non-solid side (opposite to <see cref="PlatformNormalDirection"/>) pass through,
+    /// while bodies approaching from the solid side collide normally.
+    /// </summary>
+    /// <remarks>
+    /// The physics system installs a Box2D pre-solve callback when any body in the scene has
+    /// this flag set, and removes it automatically when none do.
+    /// </remarks>
+    public bool IsOneWayPlatform
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            IsOneWayPlatformDirty = true;
+        }
+    }
+
+    /// <summary>
+    /// The outward normal of the solid surface in world space (does not need to be normalized).
+    /// Default is <c>(0, -1)</c> — solid from above in Y-down screen space.
+    /// Only used when <see cref="IsOneWayPlatform"/> is <c>true</c>.
+    /// </summary>
+    public Vector2 PlatformNormalDirection { get; set; } = new Vector2(0f, -1f);
+
+    /// <summary>
+    /// Applies a <see cref="Physics.PhysicsMaterial"/> preset, setting
+    /// <see cref="SurfaceFriction"/> and <see cref="Restitution"/> in one assignment.
+    /// </summary>
+    public PhysicsMaterial? Material
+    {
+        set
+        {
+            if (value == null) return;
+            SurfaceFriction = value.Friction;
+            Restitution = value.Restitution;
+        }
+    }
+
+    internal bool IsOneWayPlatformDirty { get; set; }
 
     /// <summary>
     /// Scales the world gravity applied to this body. Default is 1. Set to 0 to disable
@@ -281,12 +413,13 @@ public class PhysicsBodyComponent : Component
     /// </summary>
     public float GravityScale
     {
-        get ;
+        get;
         set
         {
             field = value;
             if (B2.BodyIsValid(BodyId))
             {
+                AssertSimulationThread();
                 if (GravityOverride == null)
                     B2.BodySetGravityScale(BodyId, value);
             }
@@ -308,9 +441,16 @@ public class PhysicsBodyComponent : Component
     /// </remarks>
     public Vector2? GravityOverride
     {
-        get ;
+        get;
         set
         {
+            Debug.WriteLineIf(
+                value.HasValue && BodyType != PhysicsBodyType.Dynamic,
+                $"[Brine2D] GravityOverride set on non-Dynamic body '{Entity?.Name}' — has no effect.");
+            Debug.WriteLineIf(
+                value.HasValue && value.Value == Vector2.Zero,
+                $"[Brine2D] GravityOverride = Vector2.Zero on '{Entity?.Name}' means zero-gravity (gravity disabled), " +
+                "not world gravity. Set GravityOverride = null to restore world gravity.");
             field = value;
             if (B2.BodyIsValid(BodyId))
                 B2.BodySetGravityScale(BodyId, value.HasValue ? 0f : GravityScale);
@@ -319,15 +459,58 @@ public class PhysicsBodyComponent : Component
         }
     }
 
+    /// <summary>
+    /// Overrides the body-local center of mass offset in pixels.
+    /// When set, the physics system applies this after computing mass from shapes.
+    /// Set to <c>null</c> to use the geometry-derived center.
+    /// Changes on a live body apply immediately.
+    /// </summary>
+    public Vector2? CenterOfMassOverride
+    {
+        get;
+        set
+        {
+            field = value;
+            if (B2.BodyIsValid(BodyId))
+                IsMassDirty = true;
+            else
+                IsDirty = true;
+        }
+    }
+
+    /// <summary>
+    /// Overrides the rotational inertia of the body in simulation units.
+    /// Must be greater than zero when set. Set to <c>null</c> to use the geometry-derived value.
+    /// Changes on a live body apply immediately.
+    /// Has no effect on <see cref="PhysicsBodyType.Static"/> or <see cref="PhysicsBodyType.Kinematic"/> bodies.
+    /// </summary>
+    public float? RotationalInertiaOverride
+    {
+        get;
+        set
+        {
+            if (value.HasValue)
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, 0f);
+            field = value;
+            if (B2.BodyIsValid(BodyId))
+                IsMassDirty = true;
+            else
+                IsDirty = true;
+        }
+    }
+
     public float LinearDamping
     {
-        get ;
+        get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
             if (B2.BodyIsValid(BodyId))
+            {
+                AssertSimulationThread();
                 B2.BodySetLinearDamping(BodyId, value);
+            }
             else
                 IsDirty = true;
         }
@@ -335,18 +518,53 @@ public class PhysicsBodyComponent : Component
 
     public float AngularDamping
     {
-        get ;
+        get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
             if (B2.BodyIsValid(BodyId))
+            {
+                AssertSimulationThread();
                 B2.BodySetAngularDamping(BodyId, value);
+            }
             else
                 IsDirty = true;
         }
     }
 
+    /// <summary>
+    /// The sleep speed threshold for this body in simulation units per second. When the body's
+    /// linear and angular speed drops below this value it becomes eligible for sleeping.
+    /// Set to 0 to use the Box2D world default. Changes on a live body apply immediately.
+    /// </summary>
+    public float SleepThreshold
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            field = value;
+            if (B2.BodyIsValid(BodyId))
+            {
+                AssertSimulationThread();
+                B2.BodySetSleepThreshold(BodyId, value > 0f ? value : B2.DefaultBodyDef().sleepThreshold);
+            }
+            else
+                IsDirty = true;
+        }
+    }
+
+    /// <summary>
+    /// Translates the physics body's origin relative to the entity's
+    /// <see cref="TransformComponent.Position"/> in pixels.
+    /// </summary>
+    /// <remarks>
+    /// <b>Warning:</b> changing <c>Offset</c> on a live body triggers a full body rebuild
+    /// (velocity is preserved, but all shape IDs change and sub-step kinematic state resets).
+    /// Set <c>Offset</c> once at construction time. If you need to reposition the body at
+    /// runtime, use <see cref="Teleport"/> instead.
+    /// </remarks>
     public Vector2 Offset
     {
         get ;
@@ -374,6 +592,7 @@ public class PhysicsBodyComponent : Component
             field = value;
             if (B2.BodyIsValid(BodyId))
             {
+                AssertSimulationThread();
                 if (value)
                     B2.BodyEnable(BodyId);
                 else
@@ -405,33 +624,60 @@ public class PhysicsBodyComponent : Component
 
     public IReadOnlySet<Entity> CollidingEntities => _collidingEntities;
 
+    /// <summary>
+    /// Returns all bodies currently in active contact or sensor overlap with this body.
+    /// This is the union of <see cref="ActiveContactPairs"/> and <see cref="ActiveSensorPairs"/>.
+    /// </summary>
+    public IEnumerable<PhysicsBodyComponent> CollidingBodies =>
+        ActiveContactPairs.Concat<PhysicsBodyComponent>(ActiveSensorPairs);
+
     internal HashSet<PhysicsBodyComponent> ActiveContactPairs { get; } = [];
 
     internal HashSet<PhysicsBodyComponent> ActiveSensorPairs { get; } = [];
 
-    /// <summary>
-    /// Tracks the sub-shapes involved in each active sensor pair so that
-    /// <see cref="OnTriggerStayWithShape"/> and <see cref="OnTriggerExitWithShape"/> receive
-    /// the same sub-shape detail as <see cref="OnTriggerEnterWithShape"/>.
-    /// Key: other body's <c>BodyId.index1</c>.
-    /// Value: (selfSubShape, otherSubShape) — either may be null for the primary shape.
-    /// </summary>
+    /// <summary>Sub-shape pairs for active sensor overlaps, keyed by other body's index1.</summary>
     internal Dictionary<nint, (SubShape? Self, SubShape? Other)> ActiveSensorSubShapes { get; } = new();
 
-    /// <summary>
-    /// Tracks the sub-shapes involved in each active contact pair so that
-    /// <see cref="OnCollisionStayWithShape"/> and <see cref="OnCollisionExitWithShape"/> receive
-    /// the same sub-shape detail as <see cref="OnCollisionEnterWithShape"/>.
-    /// Key: other body's <c>BodyId.index1</c>.
-    /// Value: (selfSubShape, otherSubShape) — either may be null for the primary shape.
-    /// </summary>
+    /// <summary>Sub-shape pairs for active contact pairs, keyed by other body's index1.</summary>
     internal Dictionary<nint, (SubShape? Self, SubShape? Other)> ActiveContactSubShapes { get; } = new();
 
+    /// <summary>
+    /// Fired once when another body begins touching this body.
+    /// </summary>
+    /// <remarks>
+    /// In rare cases — typically when a fast-moving body makes and breaks contact within
+    /// a single physics sub-step — <see cref="OnCollisionEnter"/> and
+    /// <see cref="OnCollisionExit"/> may both fire on the same fixed-update tick with no
+    /// intervening <see cref="OnCollisionStay"/>. This is expected Box2D behavior.
+    /// </remarks>
     public event Action<PhysicsBodyComponent, CollisionContact>? OnCollisionEnter;
 
     public event Action<PhysicsBodyComponent, CollisionContact>? OnCollisionStay;
 
+    /// <summary>
+    /// Fired once when another body stops touching this body.
+    /// </summary>
+    /// <remarks>
+    /// May fire on the same tick as <see cref="OnCollisionEnter"/> for contacts that are
+    /// created and destroyed within a single physics sub-step. See <see cref="OnCollisionEnter"/>
+    /// for details.
+    /// </remarks>
     public event Action<PhysicsBodyComponent>? OnCollisionExit;
+
+    /// <summary>
+    /// Fired every fixed-update tick while this body remains in contact with another body,
+    /// with sub-shape detail.
+    /// </summary>
+    /// <remarks>
+    /// The sub-shape arguments reflect the sub-shapes that were present at the time the
+    /// contact was <em>first established</em> (i.e. the enter tick), not necessarily the
+    /// current sub-shapes. If sub-shapes are rebuilt at runtime (e.g. via a
+    /// <see cref="Shape"/> reassignment or <see cref="AddSubShape"/> call) while a contact
+    /// is already active, the reported sub-shape references may be stale until the contact
+    /// ends and re-enters. Use <see cref="OnCollisionStay"/> for body-level events that are
+    /// unaffected by sub-shape rebuilds.
+    /// </remarks>
+    public event Action<PhysicsBodyComponent, CollisionContact, SubShape?, SubShape?>? OnCollisionStayWithShape;
 
     /// <summary>
     /// Fired once when another body begins touching this body, with sub-shape detail.
@@ -440,13 +686,7 @@ public class PhysicsBodyComponent : Component
     /// <em>other</em> body (<c>null</c> when its primary shape was hit).
     /// </summary>
     public event Action<PhysicsBodyComponent, CollisionContact, SubShape?, SubShape?>? OnCollisionEnterWithShape;
-
-    /// <summary>
-    /// Fired each fixed-update frame while a collision persists, with sub-shape detail.
-    /// Arguments mirror <see cref="OnCollisionEnterWithShape"/>.
-    /// </summary>
-    public event Action<PhysicsBodyComponent, CollisionContact, SubShape?, SubShape?>? OnCollisionStayWithShape;
-
+    
     /// <summary>
     /// Fired once when another body stops touching this body, with sub-shape detail.
     /// Arguments mirror <see cref="OnCollisionEnterWithShape"/>.
@@ -456,6 +696,12 @@ public class PhysicsBodyComponent : Component
     /// <summary>
     /// Fired once when another body begins overlapping this trigger.
     /// </summary>
+    /// <remarks>
+    /// In rare cases — typically when a fast-moving body enters and exits the trigger within
+    /// a single physics sub-step — <see cref="OnTriggerEnter"/> and <see cref="OnTriggerExit"/>
+    /// may both fire on the same fixed-update tick with no intervening <see cref="OnTriggerStay"/>.
+    /// This is expected Box2D behavior.
+    /// </remarks>
     public event Action<PhysicsBodyComponent>? OnTriggerEnter;
 
     /// <summary>
@@ -477,6 +723,14 @@ public class PhysicsBodyComponent : Component
     /// </summary>
     public event Action<PhysicsBodyComponent, SubShape?, SubShape?>? OnTriggerStayWithShape;
 
+    /// <summary>
+    /// Fired once when another body stops overlapping this trigger.
+    /// </summary>
+    /// <remarks>
+    /// May fire on the same tick as <see cref="OnTriggerEnter"/> for overlaps that are
+    /// created and destroyed within a single physics sub-step. See <see cref="OnTriggerEnter"/>
+    /// for details.
+    /// </remarks>
     public event Action<PhysicsBodyComponent>? OnTriggerExit;
 
     /// <summary>
@@ -522,6 +776,24 @@ public class PhysicsBodyComponent : Component
     /// <summary>Fired once when this body wakes from sleep.</summary>
     public event Action<PhysicsBodyComponent>? OnBodyWake;
 
+    internal void AssertSimulationThread()
+    {
+        var simId = World?.SimulationThreadId ?? 0;
+        if (simId != 0 && Environment.CurrentManagedThreadId != simId)
+        {
+#if DEBUG
+            throw new InvalidOperationException(
+                "[Brine2D] PhysicsBodyComponent live-body mutation must be called from the simulation thread " +
+                "(inside FixedUpdate). Calling from another thread causes undefined behavior in Box2D.");
+#else
+            Trace.TraceWarning(
+                "[Brine2D] PhysicsBodyComponent live-body mutation called from outside the simulation thread " +
+                "(thread " + Environment.CurrentManagedThreadId + " != expected " + simId + "). " +
+                "This causes undefined behavior in Box2D.");
+#endif
+        }
+    }
+
     /// <summary>
     /// Raised by the physics system when the <see cref="ShouldCollide"/> delegate (or any
     /// sub-shape <see cref="SubShape.ShouldCollide"/> delegate) transitions between null and
@@ -541,6 +813,12 @@ public class PhysicsBodyComponent : Component
     {
         if (definition is ChainShape)
             throw new ArgumentException("Chain shapes are not supported as sub-shapes.", nameof(definition));
+
+        if (definition is SegmentShape && BodyType != PhysicsBodyType.Static)
+            throw new ArgumentException(
+                "SegmentShape is one-sided static geometry and cannot be used as a sub-shape on a non-static body. " +
+                "Use a CapsuleShape or BoxShape for dynamic/kinematic compound bodies.",
+                nameof(definition));
 
         var sub = new SubShape(definition, isTrigger,
             friction.HasValue ? Math.Clamp(friction.Value, 0f, 1f) : null,
@@ -563,6 +841,22 @@ public class PhysicsBodyComponent : Component
         };
         sub.MarkOwnerShouldCollideChanged = isSet => ShouldCollideChanged?.Invoke(isSet);
 
+        sub.MarkOwnerTriggerDirty = () =>
+        {
+            if (B2.BodyIsValid(BodyId))
+                IsSubShapeTriggerDirty = true;
+            else
+                IsDirty = true;
+        };
+
+        sub.MarkOwnerGeometryDirty = () =>
+        {
+            if (B2.BodyIsValid(BodyId))
+                IsSubShapeGeometryDirty = true;
+            else
+                IsDirty = true;
+        };
+
         _subShapes.Add(sub);
         IsDirty = true;
         return sub;
@@ -576,7 +870,9 @@ public class PhysicsBodyComponent : Component
         sub.MarkOwnerDirty = null;
         sub.MarkOwnerFilterDirty = null;
         sub.MarkOwnerMaterialDirty = null;
+        sub.MarkOwnerTriggerDirty = null;
         sub.MarkOwnerShouldCollideChanged = null;
+        sub.MarkOwnerGeometryDirty = null;
         IsDirty = true;
         return true;
     }
@@ -590,7 +886,9 @@ public class PhysicsBodyComponent : Component
             sub.MarkOwnerDirty = null;
             sub.MarkOwnerFilterDirty = null;
             sub.MarkOwnerMaterialDirty = null;
+            sub.MarkOwnerTriggerDirty = null;
             sub.MarkOwnerShouldCollideChanged = null;
+            sub.MarkOwnerGeometryDirty = null;
         }
         _subShapes.Clear();
         IsDirty = true;
@@ -601,7 +899,9 @@ public class PhysicsBodyComponent : Component
         if (B2.BodyIsValid(BodyId))
         {
             OnBodyDestroyed?.Invoke(BodyId.index1);
-            B2.DestroyBody(BodyId);
+
+            if (B2.WorldIsValid(B2.BodyGetWorld(BodyId)))
+                B2.DestroyBody(BodyId);
         }
 
         BodyId = default;
@@ -614,17 +914,54 @@ public class PhysicsBodyComponent : Component
             sub.MarkOwnerDirty = null;
             sub.MarkOwnerFilterDirty = null;
             sub.MarkOwnerMaterialDirty = null;
+            sub.MarkOwnerTriggerDirty = null;
             sub.MarkOwnerShouldCollideChanged = null;
+            sub.MarkOwnerGeometryDirty = null;
         }
+
+        _shape = null;
+        _subShapes.Clear();
+
+        BodyType = PhysicsBodyType.Dynamic;
+        Layer = 0;
+        CategoryBits = 0;
+        CollisionMask = ulong.MaxValue;
+        GroupIndex = 0;
+        IsTrigger = false;
+        IsBullet = false;
+        EnableHitEvents = true;
+        FixedRotation = false;
+        FreezePositionX = false;
+        FreezePositionY = false;
+        IsOneWayPlatform = false;
+        PlatformNormalDirection = new Vector2(0f, -1f);
+        Mass = 1f;
+        SurfaceFriction = 0f;
+        Restitution = 0f;
+        LinearDamping = 0f;
+        AngularDamping = 0f;
+        GravityScale = 1f;
+        Offset = Vector2.Zero;
+        IsSimulationEnabled = true;
 
         IsDirty = true;
         IsFilterDirty = false;
         IsBodyTypeDirty = false;
         IsMassDirty = false;
         IsMaterialDirty = false;
+        IsSubShapeTriggerDirty = false;
+        IsSubShapeGeometryDirty = false;
+        IsBulletDirty = false;
         IsTeleporting = false;
         IsSimulationEnabledDirty = false;
+        IsOneWayPlatformDirty = false;
+
+        InitialLinearVelocity = Vector2.Zero;
+        InitialAngularVelocity = 0f;
+        SleepThreshold = 0;
         GravityOverride = null;
+        CenterOfMassOverride = null;
+        RotationalInertiaOverride = null;
         _collidingEntities.Clear();
         ActiveContactPairs.Clear();
         ActiveSensorPairs.Clear();
@@ -634,6 +971,13 @@ public class PhysicsBodyComponent : Component
         ShouldCollide = null;
         OnBodySleep = null;
         OnBodyWake = null;
+        OnCollisionEnter = null;
+        OnCollisionStay = null;
+        OnCollisionExit = null;
+        OnCollisionHit = null;
+        OnTriggerEnter = null;
+        OnTriggerStay = null;
+        OnTriggerExit = null;
         OnCollisionEnterWithShape = null;
         OnCollisionStayWithShape = null;
         OnCollisionExitWithShape = null;
@@ -641,22 +985,27 @@ public class PhysicsBodyComponent : Component
         OnTriggerStayWithShape = null;
         OnTriggerExitWithShape = null;
         ShouldCollideChanged = null;
-
-        ActiveContactSubShapes.Clear();
-        OnCollisionEnterWithShape = null;
-        OnCollisionStayWithShape = null;
-        OnCollisionExitWithShape = null;
     }
 
     public void ApplyForce(Vector2 force)
     {
         if (!B2.BodyIsValid(BodyId)) return;
+        Debug.WriteLineIf(!IsSimulationEnabled,
+            $"[Brine2D] ApplyForce called on simulation-disabled body '{Entity?.Name}' — has no effect.");
+        Debug.WriteLineIf(BodyType != PhysicsBodyType.Dynamic,
+            $"[Brine2D] ApplyForce called on {BodyType} body '{Entity?.Name}' — forces only affect Dynamic bodies.");
+        AssertSimulationThread();
         B2.BodyApplyForceToCenter(BodyId, new B2.Vec2 { x = force.X, y = force.Y }, true);
     }
 
     public void ApplyForce(Vector2 force, Vector2 worldPoint)
     {
         if (!B2.BodyIsValid(BodyId)) return;
+        Debug.WriteLineIf(!IsSimulationEnabled,
+            $"[Brine2D] ApplyForce called on simulation-disabled body '{Entity?.Name}' — has no effect.");
+        Debug.WriteLineIf(BodyType != PhysicsBodyType.Dynamic,
+            $"[Brine2D] ApplyForce called on {BodyType} body '{Entity?.Name}' — forces only affect Dynamic bodies.");
+        AssertSimulationThread();
         B2.BodyApplyForce(BodyId,
             new B2.Vec2 { x = force.X, y = force.Y },
             new B2.Vec2 { x = worldPoint.X, y = worldPoint.Y },
@@ -666,12 +1015,22 @@ public class PhysicsBodyComponent : Component
     public void ApplyLinearImpulse(Vector2 impulse)
     {
         if (!B2.BodyIsValid(BodyId)) return;
+        Debug.WriteLineIf(!IsSimulationEnabled,
+            $"[Brine2D] ApplyLinearImpulse called on simulation-disabled body '{Entity?.Name}' — has no effect.");
+        Debug.WriteLineIf(BodyType != PhysicsBodyType.Dynamic,
+            $"[Brine2D] ApplyLinearImpulse called on {BodyType} body '{Entity?.Name}' — impulses only affect Dynamic bodies.");
+        AssertSimulationThread();
         B2.BodyApplyLinearImpulseToCenter(BodyId, new B2.Vec2 { x = impulse.X, y = impulse.Y }, true);
     }
 
     public void ApplyLinearImpulse(Vector2 impulse, Vector2 worldPoint)
     {
         if (!B2.BodyIsValid(BodyId)) return;
+        Debug.WriteLineIf(!IsSimulationEnabled,
+            $"[Brine2D] ApplyLinearImpulse called on simulation-disabled body '{Entity?.Name}' — has no effect.");
+        Debug.WriteLineIf(BodyType != PhysicsBodyType.Dynamic,
+            $"[Brine2D] ApplyLinearImpulse called on {BodyType} body '{Entity?.Name}' — impulses only affect Dynamic bodies.");
+        AssertSimulationThread();
         B2.BodyApplyLinearImpulse(BodyId,
             new B2.Vec2 { x = impulse.X, y = impulse.Y },
             new B2.Vec2 { x = worldPoint.X, y = worldPoint.Y },
@@ -681,12 +1040,22 @@ public class PhysicsBodyComponent : Component
     public void ApplyAngularImpulse(float impulse)
     {
         if (!B2.BodyIsValid(BodyId)) return;
+        Debug.WriteLineIf(!IsSimulationEnabled,
+            $"[Brine2D] ApplyAngularImpulse called on simulation-disabled body '{Entity?.Name}' — has no effect.");
+        Debug.WriteLineIf(BodyType != PhysicsBodyType.Dynamic,
+            $"[Brine2D] ApplyAngularImpulse called on {BodyType} body '{Entity?.Name}' — impulses only affect Dynamic bodies.");
+        AssertSimulationThread();
         B2.BodyApplyAngularImpulse(BodyId, impulse, true);
     }
 
     public void ApplyTorque(float torque)
     {
         if (!B2.BodyIsValid(BodyId)) return;
+        Debug.WriteLineIf(!IsSimulationEnabled,
+            $"[Brine2D] ApplyTorque called on simulation-disabled body '{Entity?.Name}' — has no effect.");
+        Debug.WriteLineIf(BodyType != PhysicsBodyType.Dynamic,
+            $"[Brine2D] ApplyTorque called on {BodyType} body '{Entity?.Name}' — torque only affects Dynamic bodies.");
+        AssertSimulationThread();
         B2.BodyApplyTorque(BodyId, torque, true);
     }
 
@@ -709,6 +1078,12 @@ public class PhysicsBodyComponent : Component
         set
         {
             if (!B2.BodyIsValid(BodyId)) return;
+            AssertSimulationThread();
+            if (BodyType == PhysicsBodyType.Kinematic)
+                Trace.TraceWarning(
+                    $"[Brine2D] LinearVelocity set directly on Kinematic body '{Entity?.Name}'. " +
+                    "The physics system overwrites kinematic velocity every fixed-update frame from position " +
+                    "displacement; this value will not persist.");
             B2.BodySetLinearVelocity(BodyId, new B2.Vec2 { x = value.X, y = value.Y });
         }
     }
@@ -719,15 +1094,89 @@ public class PhysicsBodyComponent : Component
         set
         {
             if (!B2.BodyIsValid(BodyId)) return;
+            AssertSimulationThread();
             B2.BodySetAngularVelocity(BodyId, value);
         }
     }
 
+    /// <summary>
+    /// Returns the velocity of this body at a given world-space point, accounting for both
+    /// linear and angular velocity. Useful for computing impact speed at a contact point.
+    /// Returns <see cref="Vector2.Zero"/> if the body is not live.
+    /// </summary>
+    /// <param name="worldPoint">The point in world (pixel) coordinates.</param>
+    public Vector2 GetVelocityAtPoint(Vector2 worldPoint)
+    {
+        if (!B2.BodyIsValid(BodyId)) return Vector2.Zero;
+        var lv = B2.BodyGetLinearVelocity(BodyId);
+        var av = B2.BodyGetAngularVelocity(BodyId);
+        var xf = B2.BodyGetTransform(BodyId);
+        float rx = worldPoint.X - xf.p.x;
+        float ry = worldPoint.Y - xf.p.y;
+        // v = linearVelocity + angularVelocity × r  (2D cross: ω × r = (-ω*ry, ω*rx))
+        return new Vector2(lv.x - av * ry, lv.y + av * rx);
+    }
+
     public bool IsAwake => B2.BodyIsValid(BodyId) && B2.BodyIsAwake(BodyId);
+
+    /// <summary>
+    /// Reads the live contact manifolds for this body directly from Box2D, written into
+    /// <paramref name="results"/>. Returns the number of contacts written.
+    /// Returns 0 if the body is not live, has no active contacts, or the component has not
+    /// been registered with a <see cref="PhysicsWorld"/>.
+    /// </summary>
+    /// <remarks>
+    /// Contact normals are oriented away from the other body toward this body.
+    /// Delegates to <see cref="PhysicsWorld.GetContacts(PhysicsBodyComponent,Span{ContactPair},out bool)"/>.
+    /// </remarks>
+    public int GetContacts(Span<ContactPair> results, out bool wasTruncated)
+        => World?.GetContacts(this, results, out wasTruncated) ?? (wasTruncated = false, 0).Item2;
+
+    /// <inheritdoc cref="GetContacts(Span{ContactPair},out bool)"/>
+    public int GetContacts(Span<ContactPair> results)
+        => World?.GetContacts(this, results) ?? 0;
+
+    /// <summary>
+    /// Reads all live contact manifolds for this body into <paramref name="results"/>,
+    /// retrying internally with a larger buffer until every contact is captured.
+    /// Clears <paramref name="results"/> before writing.
+    /// Delegates to <see cref="PhysicsWorld.GetContactsAll"/>.
+    /// </summary>
+    public void GetContactsAll(List<ContactPair> results)
+    {
+        if (World != null)
+            World.GetContactsAll(this, results);
+        else
+            results.Clear();
+    }
+
+    /// <summary>
+    /// Returns the physics-side world-space position of this body (body pivot, not entity origin).
+    /// Includes the <see cref="Offset"/> — equivalent to <c>transform.Position + Offset</c> when
+    /// the body is live. Returns <see cref="Vector2.Zero"/> if the body has not yet been created.
+    /// </summary>
+    public Vector2 GetWorldPosition()
+    {
+        if (!B2.BodyIsValid(BodyId)) return Vector2.Zero;
+        var p = B2.BodyGetPosition(BodyId);
+        return new Vector2(p.x, p.y);
+    }
+
+    /// <summary>
+    /// Returns the physics-side world-space rotation of this body in radians.
+    /// Returns 0 if the body has not yet been created.
+    /// </summary>
+    public float GetWorldRotation()
+    {
+        if (!B2.BodyIsValid(BodyId)) return 0f;
+        var q = B2.BodyGetRotation(BodyId);
+        return MathF.Atan2(q.s, q.c);
+    }
 
     public void SetAwake(bool awake)
     {
         if (!B2.BodyIsValid(BodyId)) return;
+        AssertSimulationThread();
         B2.BodySetAwake(BodyId, awake);
     }
 
@@ -887,10 +1336,11 @@ public class PhysicsBodyComponent : Component
     internal void NotifyCollisionExit(PhysicsBodyComponent other)
     {
         if (other.Entity == null) return;
-        _collidingEntities.Remove(other.Entity);
         ActiveContactPairs.Remove(other);
         ActiveContactSubShapes.TryGetValue(other.BodyId.index1, out var pair);
         ActiveContactSubShapes.Remove(other.BodyId.index1);
+        if (!IsEntityStillTracked(other.Entity))
+            _collidingEntities.Remove(other.Entity);
         OnCollisionExit?.Invoke(other);
         OnCollisionExitWithShape?.Invoke(other, pair.Self, pair.Other);
     }
@@ -898,29 +1348,175 @@ public class PhysicsBodyComponent : Component
     internal void NotifyTriggerExit(PhysicsBodyComponent other)
     {
         if (other.Entity == null) return;
-        _collidingEntities.Remove(other.Entity);
         ActiveSensorPairs.Remove(other);
         ActiveSensorSubShapes.TryGetValue(other.BodyId.index1, out var pair);
         ActiveSensorSubShapes.Remove(other.BodyId.index1);
+        if (!IsEntityStillTracked(other.Entity))
+            _collidingEntities.Remove(other.Entity);
         OnTriggerExit?.Invoke(other);
         OnTriggerExitWithShape?.Invoke(other, pair.Self, pair.Other);
     }
 
-    internal void RaiseCollisionExit(PhysicsBodyComponent other)
+    private bool IsEntityStillTracked(Entity entity)
     {
-        ActiveContactSubShapes.TryGetValue(other.BodyId.index1, out var pair);
-        ActiveContactSubShapes.Remove(other.BodyId.index1);
+        foreach (var body in ActiveContactPairs)
+            if (body.Entity == entity) return true;
+        foreach (var body in ActiveSensorPairs)
+            if (body.Entity == entity) return true;
+        return false;
+    }
+
+    internal void RaiseCollisionExit(PhysicsBodyComponent other, nint otherBodyIndex)
+    {
+        if (other.Entity == null) return;
+        ActiveContactSubShapes.TryGetValue(otherBodyIndex, out var pair);
+        ActiveContactSubShapes.Remove(otherBodyIndex);
         OnCollisionExit?.Invoke(other);
         OnCollisionExitWithShape?.Invoke(other, pair.Self, pair.Other);
     }
 
-    internal void RaiseTriggerExit(PhysicsBodyComponent other)
+    internal void RaiseTriggerExit(PhysicsBodyComponent other, nint otherBodyIndex)
     {
-        ActiveSensorSubShapes.TryGetValue(other.BodyId.index1, out var pair);
-        ActiveSensorSubShapes.Remove(other.BodyId.index1);
+        if (other.Entity == null) return;
+        ActiveSensorSubShapes.TryGetValue(otherBodyIndex, out var pair);
+        ActiveSensorSubShapes.Remove(otherBodyIndex);
         OnTriggerExit?.Invoke(other);
         OnTriggerExitWithShape?.Invoke(other, pair.Self, pair.Other);
     }
 
+    /// <summary>
+    /// Set when <see cref="SubShape.UpdateDefinition"/> is called with a same-type shape on a live
+    /// body. The system calls <c>B2.ShapeSet*</c> instead of a full rebuild, preserving contacts,
+    /// velocity, and sleeping state. A type-changing update marks <see cref="IsDirty"/> instead.
+    /// </summary>
+    internal bool IsSubShapeGeometryDirty { get; set; }
+
     internal HashSet<Entity> CollidingEntitiesInternal => _collidingEntities;
+
+    /// <summary>
+    /// Applies a force at a local-space point, generating both linear and angular acceleration.
+    /// <paramref name="localPoint"/> is in the body's local coordinate frame.
+    /// </summary>
+    public void ApplyForceAtLocalPoint(Vector2 force, Vector2 localPoint)
+    {
+        if (!B2.BodyIsValid(BodyId)) return;
+        AssertSimulationThread();
+        var xf = B2.BodyGetTransform(BodyId);
+        var worldPoint = new Vector2(
+            xf.p.x + localPoint.X * xf.q.c - localPoint.Y * xf.q.s,
+            xf.p.y + localPoint.X * xf.q.s + localPoint.Y * xf.q.c);
+        B2.BodyApplyForce(BodyId,
+            new B2.Vec2 { x = force.X, y = force.Y },
+            new B2.Vec2 { x = worldPoint.X, y = worldPoint.Y },
+            true);
+    }
+
+    /// <summary>
+    /// Applies a linear impulse at a local-space point, generating both linear and angular
+    /// velocity changes. <paramref name="localPoint"/> is in the body's local coordinate frame.
+    /// </summary>
+    public void ApplyLinearImpulseAtLocalPoint(Vector2 impulse, Vector2 localPoint)
+    {
+        if (!B2.BodyIsValid(BodyId)) return;
+        AssertSimulationThread();
+        var xf = B2.BodyGetTransform(BodyId);
+        var worldPoint = new Vector2(
+            xf.p.x + localPoint.X * xf.q.c - localPoint.Y * xf.q.s,
+            xf.p.y + localPoint.X * xf.q.s + localPoint.Y * xf.q.c);
+        B2.BodyApplyLinearImpulse(BodyId,
+            new B2.Vec2 { x = impulse.X, y = impulse.Y },
+            new B2.Vec2 { x = worldPoint.X, y = worldPoint.Y },
+            true);
+    }
+
+    /// <summary>
+    /// Box2D collision group index. Positive values cause members of the same group to
+    /// <em>always</em> collide with each other regardless of category/mask bits.
+    /// Negative values cause members of the same group to <em>never</em> collide with
+    /// each other. Zero (default) disables group-index logic and falls back to
+    /// category/mask filtering.
+    /// </summary>
+    public int GroupIndex
+    {
+        get => field;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            if (B2.BodyIsValid(BodyId))
+                IsFilterDirty = true;
+            else
+                IsDirty = true;
+        }
+    }
+
+    /// <summary>
+    /// Converts a point from local body space to world space using the body's current
+    /// live transform. Returns the point unchanged if the body has not yet been created.
+    /// </summary>
+    public Vector2 TransformPoint(Vector2 localPoint)
+    {
+        if (!B2.BodyIsValid(BodyId))
+            return localPoint;
+
+        var xf = B2.BodyGetTransform(BodyId);
+        float cos = xf.q.c;
+        float sin = xf.q.s;
+        return new Vector2(
+            cos * localPoint.X - sin * localPoint.Y + xf.p.x,
+            sin * localPoint.X + cos * localPoint.Y + xf.p.y);
+    }
+
+    /// <summary>
+    /// Converts a point from world space to local body space using the body's current
+    /// live transform. Returns the point unchanged if the body has not yet been created.
+    /// </summary>
+    public Vector2 InverseTransformPoint(Vector2 worldPoint)
+    {
+        if (!B2.BodyIsValid(BodyId))
+            return worldPoint;
+
+        var xf = B2.BodyGetTransform(BodyId);
+        float cos = xf.q.c;
+        float sin = xf.q.s;
+        float dx = worldPoint.X - xf.p.x;
+        float dy = worldPoint.Y - xf.p.y;
+        return new Vector2(
+             cos * dx + sin * dy,
+            -sin * dx + cos * dy);
+    }
+
+    /// <summary>
+    /// Converts a direction vector from local body space to world space (rotation only,
+    /// no translation). Returns the vector unchanged if the body has not yet been created.
+    /// </summary>
+    public Vector2 TransformDirection(Vector2 localDirection)
+    {
+        if (!B2.BodyIsValid(BodyId))
+            return localDirection;
+
+        var xf = B2.BodyGetTransform(BodyId);
+        float cos = xf.q.c;
+        float sin = xf.q.s;
+        return new Vector2(
+            cos * localDirection.X - sin * localDirection.Y,
+            sin * localDirection.X + cos * localDirection.Y);
+    }
+
+    /// <summary>
+    /// Converts a direction vector from world space to local body space (rotation only,
+    /// no translation). Returns the vector unchanged if the body has not yet been created.
+    /// </summary>
+    public Vector2 InverseTransformDirection(Vector2 worldDirection)
+    {
+        if (!B2.BodyIsValid(BodyId))
+            return worldDirection;
+
+        var xf = B2.BodyGetTransform(BodyId);
+        float cos = xf.q.c;
+        float sin = xf.q.s;
+        return new Vector2(
+             cos * worldDirection.X + sin * worldDirection.Y,
+            -sin * worldDirection.X + cos * worldDirection.Y);
+    }
 }

@@ -8,10 +8,6 @@ namespace Brine2D.ECS.Components.Joints;
 ///     Pulls body B toward a world-space target point using a soft spring force.
 ///     Ideal for click-to-drag interactions and soft positional control.
 ///     Body A is typically a static ground body; body B is the body being pulled.
-///     <para>
-///         Unlike other joints, <see cref="Target" /> can be updated every frame without
-///         rebuilding the joint — set it directly and Box2D will immediately respond.
-///     </para>
 /// </summary>
 public sealed class MouseJointComponent : JointComponent
 {
@@ -60,7 +56,7 @@ public sealed class MouseJointComponent : JointComponent
 
     /// <summary>
     ///     World-space target point in pixel coordinates.
-    ///     If the joint is live, this updates Box2D immediately (no rebuild required).
+    ///     Update this every fixed-update frame to drag the connected body.
     /// </summary>
     public Vector2 Target
     {
@@ -69,9 +65,9 @@ public sealed class MouseJointComponent : JointComponent
         {
             _target = value;
             if (IsLive)
-            {
                 B2.MouseJointSetTarget(JointId, new B2.Vec2 { x = value.X, y = value.Y });
-            }
+            else
+                IsDirty = true;
         }
     }
 

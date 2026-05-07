@@ -29,12 +29,12 @@ public class ShapeRenderSystem : RenderSystemBase, IDisposable
                     renderer.DrawRectangleFilled(
                         pos.X - rect.Width * 0.5f,
                         pos.Y - rect.Height * 0.5f,
-                        rect.Width, rect.Height, rect.FillColor);
+                        rect.Width, rect.Height, rect.FillColor, transform.Rotation);
                     if (rect.OutlineColor is { } rectOutline)
                         renderer.DrawRectangleOutline(
                             pos.X - rect.Width * 0.5f,
                             pos.Y - rect.Height * 0.5f,
-                            rect.Width, rect.Height, rectOutline, rect.OutlineThickness);
+                            rect.Width, rect.Height, rectOutline, rect.OutlineThickness, transform.Rotation);
                     break;
 
                 case CircleShapeComponent circle:

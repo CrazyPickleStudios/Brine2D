@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Box2D.NET.Bindings;
@@ -50,14 +51,30 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
     private readonly List<PhysicsBodyComponent> _staySensorBuffer = [];
     private readonly List<PhysicsBodyComponent> _activeBodySnapshot = [];
 
+    private bool _wasPaused;
+
+    private readonly Dictionary<nint, HashSet<(nint, nint)>> _contactKeysByBody = new();
+
+    private readonly Dictionary<(nint, nint), CollisionContact> _lastKnownContacts = new();
+
+    private readonly List<nint> _wakeBuffer = [];
+
+    // Carries the old body index alongside the component so FlushStalePairs uses the correct
+    // dictionary key even after BodyId has been reset to default by DestroyBody.
+    private readonly List<(PhysicsBodyComponent Collider, nint OldBodyIndex)> _pendingFlushAfterStep = [];
+
     // Tracks how many currently-live bodies or sub-shapes have ShouldCollide set.
     private int _shouldCollideCount;
 
     // Tracks whether the system collision filter is currently installed in Box2D.
     private bool _systemFilterInstalled;
 
+    private int _oneWayPlatformCount;
+    private bool _oneWayPlatformFilterInstalled;
+
     // Tracks awake state per body so we can fire OnBodyWake on transition.
     private readonly Dictionary<nint, bool> _prevAwakeState = new();
+    private readonly Dictionary<nint, bool> _registeredOneWayPlatform = new();
 
     private CachedEntityQuery<PhysicsBodyComponent, TransformComponent>? _colliderQuery;
     private CachedEntityQuery<RevoluteJointComponent, PhysicsBodyComponent>? _revoluteQuery;
@@ -73,6 +90,7 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         _physicsWorld = physicsWorld;
         _physicsWorld.ComponentResolver = handle =>
             _handleToCollider.TryGetValue(handle, out var c) ? c : null;
+        _physicsWorld.AllBodiesResolver = () => _handleToCollider.Values;
     }
 
     public override int FixedUpdateOrder => SystemFixedUpdateOrder.Physics;
@@ -83,26 +101,70 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             .OnlyEnabled()
             .Build();
 
-        var dt = (float)fixedTime.DeltaTime;
+        _physicsWorld.SimulationThreadId = Environment.CurrentManagedThreadId;
+        try
+        {
+            var dt = (float)fixedTime.DeltaTime;
 
-        TearDownDisabledBodies();
-        FlushSimulationDisabledBodies();
-        SyncToBox2D(dt);
-        SyncJoints(world);
-        SyncSystemFilter();
-        _physicsWorld.Step(dt);
-        SyncFromBox2D();
-        DispatchContactEvents();
-        DispatchSensorEvents();
-        DispatchStayEvents();
-        CheckJointBreaks();
-        _newContactPairsThisStep.Clear();
-        _newSensorPairsThisStep.Clear();
+            TearDownDisabledBodies();
+            FlushSimulationDisabledBodies();
+            SyncToBox2D(dt);
+            SyncJoints(world);
+            SyncSystemFilter();
+            SyncOneWayPlatformFilter();
+            ClampFrozenAxes();
+
+            if (_physicsWorld.IsPaused)
+            {
+                _wasPaused = true;
+                return;
+            }
+
+            if (_wasPaused)
+            {
+                _wasPaused = false;
+                WakeAllDynamicBodies();
+            }
+
+            _physicsWorld.Step(dt);
+            ClampFrozenAxes();
+            SyncFromBox2D();
+            DispatchSleepWakeEvents();
+            FlushPendingRebuildPairs();
+            DispatchContactEvents();
+            DispatchSensorEvents();
+            DispatchStayEvents();
+            CheckJointBreaks();
+            _newContactPairsThisStep.Clear();
+            _newSensorPairsThisStep.Clear();
+        }
+        finally
+        {
+            _physicsWorld.SimulationThreadId = 0;
+        }
+    }
+
+    private void WakeAllDynamicBodies()
+    {
+        foreach (var collider in _handleToCollider.Values)
+        {
+            if (!B2.BodyIsValid(collider.BodyId)) continue;
+            if (collider.BodyType == PhysicsBodyType.Dynamic && collider.IsSimulationEnabled)
+                B2.BodySetAwake(collider.BodyId, true);
+        }
+    }
+
+    private void FlushPendingRebuildPairs()
+    {
+        if (_pendingFlushAfterStep.Count == 0) return;
+        foreach (var (collider, oldBodyIndex) in _pendingFlushAfterStep)
+            FlushStalePairs(collider, oldBodyIndex);
+        _pendingFlushAfterStep.Clear();
     }
 
     private void SyncSystemFilter()
     {
-        bool needsFilter = _shouldCollideCount > 0;
+        bool needsFilter = _shouldCollideCount > 0 || _physicsWorld.HasIgnoredPairs;
 
         if (needsFilter == _systemFilterInstalled)
             return;
@@ -111,8 +173,13 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         _physicsWorld.SetSystemCollisionFilter(needsFilter
             ? (shapeA, shapeB) =>
             {
-                var compA = _handleToCollider.GetValueOrDefault(B2.ShapeGetBody(shapeA).index1);
-                var compB = _handleToCollider.GetValueOrDefault(B2.ShapeGetBody(shapeB).index1);
+                var bodyIndexA = B2.ShapeGetBody(shapeA).index1;
+                var bodyIndexB = B2.ShapeGetBody(shapeB).index1;
+
+                if (_physicsWorld.IsCollisionIgnored(bodyIndexA, bodyIndexB)) return false;
+
+                var compA = _handleToCollider.GetValueOrDefault(bodyIndexA);
+                var compB = _handleToCollider.GetValueOrDefault(bodyIndexB);
                 if (compA == null || compB == null) return true;
 
                 if (compA.ShouldCollide != null && !compA.ShouldCollide(compB)) return false;
@@ -129,6 +196,60 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             : null);
     }
 
+    private void SyncOneWayPlatformFilter()
+    {
+        bool needsFilter = _oneWayPlatformCount > 0;
+        if (needsFilter == _oneWayPlatformFilterInstalled) return;
+        _oneWayPlatformFilterInstalled = needsFilter;
+        _physicsWorld.SetSystemPreSolveFilter(needsFilter ? static c =>
+            {
+                if (c.BodyA.IsOneWayPlatform)
+                {
+                    // Normal points A→B. Cancel when it opposes PlatformNormalDirection
+                    // (visitor is on the pass-through side).
+                    if (Vector2.Dot(c.Normal, c.BodyA.PlatformNormalDirection) < 0f)
+                        return false;
+                }
+                if (c.BodyB.IsOneWayPlatform)
+                {
+                    // Normal still points A→B (toward platform). Cancel when it aligns
+                    // with PlatformNormalDirection (visitor approached from pass-through side).
+                    if (Vector2.Dot(c.Normal, c.BodyB.PlatformNormalDirection) > 0f)
+                        return false;
+                }
+                return true;
+            }
+            : null);
+    }
+
+    private void ClampFrozenAxes()
+    {
+        foreach (var (_, collider, transform) in _colliderQuery!)
+        {
+            if (!collider.FreezePositionX && !collider.FreezePositionY) continue;
+            if (!B2.BodyIsValid(collider.BodyId) || !collider.IsSimulationEnabled) continue;
+
+            if (collider.BodyType == PhysicsBodyType.Dynamic)
+            {
+                var vel = B2.BodyGetLinearVelocity(collider.BodyId);
+                if (collider.FreezePositionX) vel.x = 0f;
+                if (collider.FreezePositionY) vel.y = 0f;
+                B2.BodySetLinearVelocity(collider.BodyId, vel);
+            }
+            else if (collider.BodyType == PhysicsBodyType.Kinematic)
+            {
+                // Kinematic bodies are positioned by writing TransformComponent.
+                // Restore the frozen axis to the body's current Box2D position so the
+                // kinematic sync doesn't drive it along that axis next tick.
+                var bodyPos = B2.BodyGetPosition(collider.BodyId);
+                if (collider.FreezePositionX)
+                    transform.Position = new Vector2(bodyPos.x - collider.Offset.X, transform.Position.Y);
+                if (collider.FreezePositionY)
+                    transform.Position = new Vector2(transform.Position.X, bodyPos.y - collider.Offset.Y);
+            }
+        }
+    }
+
     private static SubShape? ResolveSubShape(PhysicsBodyComponent body, B2.ShapeId shapeId)
     {
         foreach (var sub in body.SubShapes)
@@ -140,7 +261,19 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
     }
 
     private void OnShouldCollideChanged(bool active)
-        => _shouldCollideCount += active ? 1 : -1;
+    {
+        if (!active && _shouldCollideCount <= 0)
+        {
+            System.Diagnostics.Debug.Fail(
+                "ShouldCollide unsubscribe imbalance: _shouldCollideCount would go negative.");
+            Trace.TraceWarning(
+                "[Brine2D] ShouldCollide unsubscribe imbalance detected: _shouldCollideCount is already 0. " +
+                "This indicates a subscribe/unsubscribe mismatch in the physics filter callback tracking.");
+            return;
+        }
+
+        _shouldCollideCount += active ? 1 : -1;
+    }
 
     private void TearDownDisabledBodies()
     {
@@ -164,7 +297,11 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             {
                 collider.IsSimulationEnabledDirty = false;
                 if (!collider.IsSimulationEnabled)
-                    FlushStalePairs(collider);
+                {
+                    _prevKinematicPositions.Remove(collider.BodyId.index1);
+                    _prevKinematicRotations.Remove(collider.BodyId.index1);
+                    FlushStalePairs(collider, collider.BodyId.index1);
+                }
             }
         }
     }
@@ -178,43 +315,79 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                 RebuildBody(entity, collider, transform);
 
                 if (collider.Shape == null)
-                    continue;
-
-                collider.IsDirty = false;
-                collider.IsFilterDirty = false;
-                collider.IsBodyTypeDirty = false;
-                collider.IsMassDirty = false;
-                collider.IsMaterialDirty = false;
-
-                if (collider.BodyType == PhysicsBodyType.Kinematic && B2.BodyIsValid(collider.BodyId))
                 {
-                    _prevKinematicPositions[collider.BodyId.index1] = transform.Position + collider.Offset;
-                    _prevKinematicRotations[collider.BodyId.index1] = transform.Rotation;
+                    collider.IsDirty = false;
+                    continue;
                 }
+
+                ClearAllDirtyFlags(collider);
+                PostRebuildSync(collider, transform);
+                continue;
             }
-            else if (collider.IsFilterDirty)
+
+            // IsBulletDirty requires a full rebuild. IsDirty takes precedence (handled above),
+            // so by this point IsDirty is guaranteed false.
+            if (collider.IsBulletDirty)
+            {
+                RebuildBody(entity, collider, transform);
+
+                if (collider.Shape != null)
+                {
+                    ClearAllDirtyFlags(collider);
+                    PostRebuildSync(collider, transform);
+                }
+                else
+                {
+                    collider.IsBulletDirty = false;
+                }
+
+                continue;
+            }
+
+            if (collider.IsFilterDirty)
             {
                 if (B2.BodyIsValid(collider.BodyId))
                     ApplyFilter(collider);
                 collider.IsFilterDirty = false;
             }
-            else if (collider.IsBodyTypeDirty)
+            if (collider.IsBodyTypeDirty)
             {
                 if (B2.BodyIsValid(collider.BodyId))
                     ApplyBodyType(collider, transform);
                 collider.IsBodyTypeDirty = false;
             }
-            else if (collider.IsMassDirty)
+            if (collider.IsMassDirty)
             {
                 if (B2.BodyIsValid(collider.BodyId))
                     ApplyMass(collider, collider.BodyId);
                 collider.IsMassDirty = false;
             }
-            else if (collider.IsMaterialDirty)
+            if (collider.IsMaterialDirty)
             {
                 if (B2.BodyIsValid(collider.BodyId))
                     ApplyMaterial(collider);
                 collider.IsMaterialDirty = false;
+            }
+            if (collider.IsSubShapeTriggerDirty)
+            {
+                if (B2.BodyIsValid(collider.BodyId))
+                    ApplySubShapeTrigger(collider);
+                collider.IsSubShapeTriggerDirty = false;
+            }
+            if (collider.IsSubShapeGeometryDirty)
+            {
+                if (B2.BodyIsValid(collider.BodyId))
+                    ApplySubShapeGeometry(collider);
+                collider.IsSubShapeGeometryDirty = false;
+            }
+            if (collider.IsOneWayPlatformDirty && B2.BodyIsValid(collider.BodyId))
+            {
+                bool wasRegistered = _registeredOneWayPlatform.TryGetValue(collider.BodyId.index1, out var prev) && prev;
+                bool isNow = collider.IsOneWayPlatform;
+                if (wasRegistered != isNow)
+                    _oneWayPlatformCount += isNow ? 1 : -1;
+                _registeredOneWayPlatform[collider.BodyId.index1] = isNow;
+                collider.IsOneWayPlatformDirty = false;
             }
 
             // Apply per-body gravity override as a manual force each tick.
@@ -223,13 +396,16 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                 && B2.BodyIsValid(collider.BodyId)
                 && collider.IsSimulationEnabled)
             {
-                var massData = B2.BodyGetMassData(collider.BodyId);
-                if (massData.mass > 0f)
+                var g = collider.GravityOverride.Value;
+                if (g != Vector2.Zero)
                 {
-                    var g = collider.GravityOverride.Value;
-                    B2.BodyApplyForceToCenter(collider.BodyId,
-                        new B2.Vec2 { x = g.X * massData.mass, y = g.Y * massData.mass },
-                        true);
+                    var massData = B2.BodyGetMassData(collider.BodyId);
+                    if (massData.mass > 0f)
+                    {
+                        B2.BodyApplyForceToCenter(collider.BodyId,
+                            new B2.Vec2 { x = g.X * massData.mass, y = g.Y * massData.mass },
+                            true);
+                    }
                 }
             }
 
@@ -240,6 +416,17 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             {
                 var pos = transform.Position + collider.Offset;
                 var rot = transform.Rotation;
+
+                // Zero any frozen axes on pos before deriving velocity so the
+                // position delta on a frozen axis is always exactly zero.
+                if (collider.FreezePositionX || collider.FreezePositionY)
+                {
+                    var bodyPos = B2.BodyGetPosition(collider.BodyId);
+                    if (collider.FreezePositionX) pos.X = bodyPos.x;
+                    if (collider.FreezePositionY) pos.Y = bodyPos.y;
+                    // Also snap the transform so it stays consistent.
+                    transform.Position = pos - collider.Offset;
+                }
 
                 if (collider.IsTeleporting)
                 {
@@ -256,33 +443,152 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                             var velocity = (pos - prevPos) / dt;
                             B2.BodySetLinearVelocity(collider.BodyId, new B2.Vec2 { x = velocity.X, y = velocity.Y });
                         }
+                        else
+                        {
+                            B2.BodySetLinearVelocity(collider.BodyId, default);
+                        }
 
                         if (_prevKinematicRotations.TryGetValue(collider.BodyId.index1, out var prevRot))
                         {
                             var angularVelocity = (rot - prevRot) / dt;
                             B2.BodySetAngularVelocity(collider.BodyId, angularVelocity);
                         }
+                        else
+                        {
+                            B2.BodySetAngularVelocity(collider.BodyId, 0f);
+                        }
                     }
 
                     _prevKinematicPositions[collider.BodyId.index1] = pos;
                     _prevKinematicRotations[collider.BodyId.index1] = rot;
-                    B2.BodySetTransform(collider.BodyId, new B2.Vec2 { x = pos.X, y = pos.Y },
-                        B2.MakeRot(rot));
                 }
             }
             else if (collider.BodyType != PhysicsBodyType.Kinematic && collider.IsTeleporting)
             {
                 collider.IsTeleporting = false;
             }
+            else if (collider.BodyType == PhysicsBodyType.Static
+                     && B2.BodyIsValid(collider.BodyId)
+                     && !collider.IsDirty)
+            {
+                var bodyPos = B2.BodyGetPosition(collider.BodyId);
+                var expectedPos = transform.Position + collider.Offset;
+                float dx = bodyPos.x - expectedPos.X;
+                float dy = bodyPos.y - expectedPos.Y;
+                if (dx * dx + dy * dy > 0.01f)
+                {
+                    Trace.TraceWarning(
+                        $"[Brine2D] Static body on entity '{entity.Name}' has a TransformComponent position " +
+                        $"that differs from its Box2D body position by ({dx:F1}, {dy:F1}) pixels. " +
+                        "Setting transform.Position on a static body has no effect once the body is live. " +
+                        "Use Teleport() to reposition a static body at runtime.");
+                }
+            }
         }
+    }
+
+    private static void ClearAllDirtyFlags(PhysicsBodyComponent collider)
+    {
+        collider.IsDirty = false;
+        collider.IsFilterDirty = false;
+        collider.IsBodyTypeDirty = false;
+        collider.IsMassDirty = false;
+        collider.IsMaterialDirty = false;
+        collider.IsSubShapeTriggerDirty = false;
+        collider.IsSubShapeGeometryDirty = false;
+        collider.IsBulletDirty = false;
+        collider.IsOneWayPlatformDirty = false;
+    }
+
+    private void PostRebuildSync(PhysicsBodyComponent collider, TransformComponent transform)
+    {
+        if (!B2.BodyIsValid(collider.BodyId)) return;
+
+        bool wasRegistered = _registeredOneWayPlatform.TryGetValue(collider.BodyId.index1, out var prev) && prev;
+        bool isNow = collider.IsOneWayPlatform;
+        if (wasRegistered != isNow)
+            _oneWayPlatformCount += isNow ? 1 : -1;
+        _registeredOneWayPlatform[collider.BodyId.index1] = isNow;
+
+        if (collider.BodyType == PhysicsBodyType.Kinematic)
+        {
+            _prevKinematicPositions[collider.BodyId.index1] = transform.Position + collider.Offset;
+            _prevKinematicRotations[collider.BodyId.index1] = transform.Rotation;
+        }
+    }
+
+    private void ApplySubShapeGeometry(PhysicsBodyComponent collider)
+    {
+        foreach (var sub in collider.SubShapes)
+        {
+            if (!B2.ShapeIsValid(sub.ShapeId)) continue;
+
+            switch (sub.Definition)
+            {
+                case CircleShape circle:
+                    {
+                        var b2Circle = new B2.Circle
+                        {
+                            center = new B2.Vec2 { x = circle.Offset.X, y = circle.Offset.Y },
+                            radius = circle.Radius
+                        };
+                        B2.ShapeSetCircle(sub.ShapeId, &b2Circle);
+                        break;
+                    }
+                case BoxShape box:
+                    {
+                        var center = new B2.Vec2 { x = box.Offset.X, y = box.Offset.Y };
+                        var polygon = B2.MakeOffsetBox(box.Width / 2f, box.Height / 2f, center, B2.MakeRot(box.Angle));
+                        B2.ShapeSetPolygon(sub.ShapeId, &polygon);
+                        break;
+                    }
+                case CapsuleShape capsule:
+                    {
+                        var b2Capsule = new B2.Capsule
+                        {
+                            center1 = new B2.Vec2 { x = capsule.Center1.X + capsule.Offset.X, y = capsule.Center1.Y + capsule.Offset.Y },
+                            center2 = new B2.Vec2 { x = capsule.Center2.X + capsule.Offset.X, y = capsule.Center2.Y + capsule.Offset.Y },
+                            radius = capsule.Radius
+                        };
+                        B2.ShapeSetCapsule(sub.ShapeId, &b2Capsule);
+                        break;
+                    }
+                case PolygonShape polygon:
+                {
+                    if (polygon.Vertices.Count < 3 || polygon.Vertices.Count > ShapeDefinition.MaxPolygonVertices)
+                        throw new InvalidOperationException(
+                            $"PolygonShape has {polygon.Vertices.Count} vertices; Box2D requires 3–{ShapeDefinition.MaxPolygonVertices}.");
+                    var b2Verts = stackalloc B2.Vec2[polygon.Vertices.Count];
+                    for (int i = 0; i < polygon.Vertices.Count; i++)
+                        b2Verts[i] = new B2.Vec2 { x = polygon.Vertices[i].X + polygon.Offset.X, y = polygon.Vertices[i].Y + polygon.Offset.Y };
+                    var hull = B2.ComputeHull(b2Verts, polygon.Vertices.Count);
+                    var b2Polygon = B2.MakePolygon(&hull, polygon.Radius);
+                    B2.ShapeSetPolygon(sub.ShapeId, &b2Polygon);
+                    break;
+                }
+                case SegmentShape segment:
+                    {
+                        var b2Segment = new B2.Segment
+                        {
+                            point1 = new B2.Vec2 { x = segment.Point1.X + segment.Offset.X, y = segment.Point1.Y + segment.Offset.Y },
+                            point2 = new B2.Vec2 { x = segment.Point2.X + segment.Offset.X, y = segment.Point2.Y + segment.Offset.Y }
+                        };
+                        B2.ShapeSetSegment(sub.ShapeId, &b2Segment);
+                        break;
+                    }
+            }
+        }
+
+        ApplyMass(collider, collider.BodyId);
     }
 
     private static void ApplyFilter(PhysicsBodyComponent collider)
     {
         var bodyFilter = new B2.Filter
         {
-            categoryBits = 1UL << collider.Layer,
-            maskBits = collider.CollisionMask
+            categoryBits = collider.CategoryBits != 0 ? collider.CategoryBits : 1UL << collider.Layer,
+            maskBits = collider.CollisionMask,
+            groupIndex = collider.GroupIndex
         };
 
         if (B2.ShapeIsValid(collider.ShapeId))
@@ -293,8 +599,9 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             if (!B2.ShapeIsValid(sub.ShapeId)) continue;
             var subFilter = new B2.Filter
             {
-                categoryBits = 1UL << (sub.Layer ?? collider.Layer),
-                maskBits = sub.CollisionMask ?? collider.CollisionMask
+                categoryBits = sub.CategoryBits is { } subCat && subCat != 0 ? subCat : 1UL << (sub.Layer ?? collider.Layer),
+                maskBits = sub.CollisionMask ?? collider.CollisionMask,
+                groupIndex = sub.GroupIndex != 0 ? sub.GroupIndex : collider.GroupIndex
             };
             B2.ShapeSetFilter(sub.ShapeId, subFilter);
         }
@@ -318,6 +625,22 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                 }
             }
         }
+    }
+
+    private void ApplySubShapeTrigger(PhysicsBodyComponent collider)
+    {
+        foreach (var sub in collider.SubShapes)
+        {
+            if (!B2.ShapeIsValid(sub.ShapeId)) continue;
+            B2.ShapeEnableSensorEvents(sub.ShapeId, sub.IsTrigger);
+            B2.ShapeEnableContactEvents(sub.ShapeId, !sub.IsTrigger);
+            B2.ShapeSetDensity(sub.ShapeId, sub.IsTrigger ? 0f : 1f, false);
+        }
+
+        ApplyMass(collider, collider.BodyId);
+
+        // Flush any stale contact/sensor pairs that were tracked under the previous mode.
+        FlushStalePairs(collider, collider.BodyId.index1);
     }
 
     private static void ApplyMaterial(PhysicsBodyComponent collider)
@@ -385,6 +708,9 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
 
         B2.BodySetType(collider.BodyId, b2Type);
 
+        if (collider.SleepThreshold > 0f)
+            B2.BodySetSleepThreshold(collider.BodyId, collider.SleepThreshold);
+
         if (collider.BodyType == PhysicsBodyType.Kinematic)
         {
             _prevKinematicPositions[collider.BodyId.index1] = transform.Position + collider.Offset;
@@ -398,6 +724,12 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             if (collider.BodyType == PhysicsBodyType.Dynamic)
                 ApplyMass(collider, collider.BodyId);
         }
+
+        // A body type change causes Box2D to temporarily remove and re-insert the body
+        // in the broad phase. This can fire EndTouch events without matching BeginTouch
+        // events (or vice versa), leaving the C# contact/sensor pair state stale.
+        // Flush here so exit events fire cleanly from the known C# state.
+        FlushStalePairs(collider, collider.BodyId.index1);
     }
 
     private void SyncJoints(IEntityWorld world)
@@ -428,8 +760,9 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                 // Joint was destroyed externally (connected body destroyed, etc.).
                 if (joint.ConnectedBody != null)
                     _physicsWorld.UnregisterJoint(joint, bodyIdA.index1, joint.ConnectedBody.BodyId.index1);
+                joint.ConnectedBody = null;
                 joint.JointId = default;
-                joint.IsDirty = true;
+                joint.IsDirty = false;
                 joint.RaiseBreak();
             }
             else
@@ -442,7 +775,9 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         {
             if (B2.JointIsValid(joint.JointId))
             {
-                _physicsWorld.UnregisterJoint(joint, bodyIdA.index1, joint.ConnectedBody?.BodyId.index1 ?? default);
+                // ConnectedBody is null so we have no bodyB index to recover.
+                // Only clean up bodyA's registry entry to avoid stomping body-slot 0.
+                _physicsWorld.UnregisterJoint(joint, bodyIdA.index1, bodyIdA.index1);
                 _physicsWorld.DestroyJoint(joint.JointId);
                 joint.JointId = default;
             }
@@ -450,7 +785,22 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             return;
         }
 
-        if (!B2.BodyIsValid(bodyIdA) || !B2.BodyIsValid(joint.ConnectedBody.BodyId)) return;
+        // Connected body exists but its Box2D body is gone — treat as a broken joint.
+        if (!B2.BodyIsValid(joint.ConnectedBody.BodyId))
+        {
+            if (B2.JointIsValid(joint.JointId))
+            {
+                _physicsWorld.UnregisterJoint(joint, bodyIdA.index1, joint.ConnectedBody.BodyId.index1);
+                _physicsWorld.DestroyJoint(joint.JointId);
+            }
+            joint.ConnectedBody = null;
+            joint.JointId = default;
+            joint.IsDirty = false;
+            joint.RaiseBreak();
+            return;
+        }
+
+        if (!B2.BodyIsValid(bodyIdA)) return;
 
         if (B2.JointIsValid(joint.JointId))
         {
@@ -459,6 +809,16 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         }
 
         joint.JointId = joint.Build(_physicsWorld, bodyIdA);
+
+        var capturedBodyIdA = bodyIdA;
+        joint.OnUnregister = () =>
+        {
+            if (joint.ConnectedBody != null)
+                _physicsWorld.UnregisterJoint(joint, capturedBodyIdA.index1, joint.ConnectedBody.BodyId.index1);
+            else
+                _physicsWorld.UnregisterJoint(joint, capturedBodyIdA.index1, capturedBodyIdA.index1);
+        };
+
         _physicsWorld.RegisterJoint(joint, bodyIdA.index1, joint.ConnectedBody.BodyId.index1);
         joint.IsDirty = false;
     }
@@ -484,6 +844,15 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             if (!joint.IsLive) continue;
             if (joint.BreakForce == float.PositiveInfinity && joint.BreakTorque == float.PositiveInfinity) continue;
 
+            if (joint is WeldJointComponent weld && weld.LinearHertz == 0f && joint.BreakForce != float.PositiveInfinity)
+            {
+                Trace.TraceWarning(
+                    $"[Brine2D] WeldJointComponent on entity '{body.Entity?.Name}' has BreakForce set but LinearHertz=0 " +
+                    "(rigid weld). Box2D 3.x does not report constraint force for rigid joints — BreakForce has no effect. " +
+                    "Set LinearHertz > 0 to enable soft-weld break detection.");
+                continue;
+            }
+
             var force = joint.GetReactionForce();
             var torque = joint.GetReactionTorque();
 
@@ -494,7 +863,8 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
 
             B2.DestroyJoint(joint.JointId);
             joint.JointId = default;
-            joint.IsDirty = true;
+            if (joint.RebuildAfterBreak)
+                joint.IsDirty = true;
             joint.RaiseBreak();
         }
     }
@@ -504,14 +874,22 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         if (collider.Shape == null)
             return;
 
+        if (collider.Shape is SegmentShape && collider.BodyType != PhysicsBodyType.Static)
+            throw new InvalidOperationException(
+                $"Entity '{entity.Name}' has a SegmentShape with BodyType={collider.BodyType}. " +
+                "SegmentShape is one-sided and intended for static geometry only. " +
+                "Set BodyType = Static or use a CapsuleShape / BoxShape for dynamic/kinematic bodies.");
+
         var linearVelocity = collider.InitialLinearVelocity;
         var angularVelocity = collider.InitialAngularVelocity;
-        if (B2.BodyIsValid(collider.BodyId))
+        bool wasLive = B2.BodyIsValid(collider.BodyId);
+        if (wasLive)
         {
             var lv = B2.BodyGetLinearVelocity(collider.BodyId);
             linearVelocity = new Vector2(lv.x, lv.y);
             angularVelocity = B2.BodyGetAngularVelocity(collider.BodyId);
-            DestroyBody(collider);
+            var oldIndex = collider.BodyId.index1;
+            DestroyBody(collider, deferPairFlush: true, deferredBodyIndex: oldIndex);
         }
 
         var pos = transform.Position + collider.Offset;
@@ -527,19 +905,34 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         bodyDef.rotation = B2.MakeRot(transform.Rotation);
         bodyDef.isBullet = collider.IsBullet;
         bodyDef.fixedRotation = collider.FixedRotation;
-        // Pin B2 gravity scale to 0 when an override is active; the force is applied manually.
         bodyDef.gravityScale = collider.GravityOverride.HasValue ? 0f : collider.GravityScale;
         bodyDef.linearDamping = collider.LinearDamping;
         bodyDef.angularDamping = collider.AngularDamping;
         bodyDef.linearVelocity = new B2.Vec2 { x = linearVelocity.X, y = linearVelocity.Y };
         bodyDef.angularVelocity = angularVelocity;
         bodyDef.isEnabled = collider.IsSimulationEnabled;
+        if (collider.SleepThreshold > 0f)
+            bodyDef.sleepThreshold = collider.SleepThreshold;
 
         var bodyId = _physicsWorld.CreateBody(&bodyDef);
         collider.BodyId = bodyId;
+        collider.World = _physicsWorld;
+
+        _physicsWorld.FlushPendingIgnoredPairs(collider);
+
+        if (!wasLive)
+        {
+            collider.InitialLinearVelocity = Vector2.Zero;
+            collider.InitialAngularVelocity = 0f;
+        }
         _handleToCollider[bodyId.index1] = collider;
         _handleToTransform[bodyId.index1] = transform;
         _prevAwakeState[bodyId.index1] = true;
+
+        if (collider.IsOneWayPlatform)
+            _oneWayPlatformCount++;
+
+        _registeredOneWayPlatform[bodyId.index1] = collider.IsOneWayPlatform;
 
         if (collider.ShouldCollide != null)
             _shouldCollideCount++;
@@ -563,11 +956,19 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             _prevKinematicPositions.Remove(handle);
             _prevKinematicRotations.Remove(handle);
             _prevAwakeState.Remove(handle);
+            _physicsWorld.PurgeIgnoredPairsForBody(handle);
+            _physicsWorld.PurgePendingIgnoredPairsForComponent(collider);
             _physicsWorld.UnregisterJointsForBody(handle);
+
+            if (_registeredOneWayPlatform.TryGetValue(handle, out bool wasOWP) && wasOWP)
+                _oneWayPlatformCount--;
+            _registeredOneWayPlatform.Remove(handle);
+
             _physicsWorld.UntrackBody(collider);
-            FlushStalePairs(collider);
+            FlushStalePairs(collider, handle);
             _handleToCollider.Remove(handle);
             _handleToTransform.Remove(handle);
+            collider.World = null;
         };
 
         if (collider.Shape is ChainShape chain)
@@ -575,12 +976,12 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             if (collider.IsTrigger)
                 throw new InvalidOperationException(
                     $"PhysicsBodyComponent on entity '{entity.Name}' has a ChainShape with IsTrigger=true. " +
-                    $"Chain shapes do not support trigger/sensor mode.");
+                    "Chain shapes do not support trigger/sensor mode.");
 
             if (collider.IsBullet)
                 throw new InvalidOperationException(
                     $"PhysicsBodyComponent on entity '{entity.Name}' has a ChainShape with IsBullet=true. " +
-                    $"Chain shapes do not support bullet (continuous collision detection) mode.");
+                    "Chain shapes do not support bullet (continuous collision detection) mode.");
 
             if (collider.BodyType != PhysicsBodyType.Static)
                 throw new InvalidOperationException(
@@ -593,12 +994,15 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
 
         var shapeDef = B2.DefaultShapeDef();
         shapeDef.isSensor = collider.IsTrigger;
+        shapeDef.density = collider.IsTrigger ? 0f : 1f;
         shapeDef.material.friction = collider.SurfaceFriction;
         shapeDef.material.restitution = collider.Restitution;
-        shapeDef.filter.categoryBits = 1UL << collider.Layer;
+        shapeDef.filter.categoryBits = collider.CategoryBits != 0 ? collider.CategoryBits : 1UL << collider.Layer;
         shapeDef.filter.maskBits = collider.CollisionMask;
+        shapeDef.filter.groupIndex = collider.GroupIndex;
         shapeDef.enableContactEvents = !collider.IsTrigger;
-        shapeDef.enableSensorEvents = collider.IsTrigger;
+        shapeDef.enableSensorEvents = true;
+        shapeDef.enablePreSolveEvents = true;
         shapeDef.enableHitEvents = collider.EnableHitEvents;
 
         collider.ShapeId = BuildShape(entity.Name, collider.Shape, bodyId, &shapeDef);
@@ -607,17 +1011,90 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         {
             var subDef = shapeDef;
             subDef.isSensor = sub.IsTrigger;
+            subDef.density = sub.IsTrigger ? 0f : 1f;
             subDef.material.friction = sub.Friction ?? collider.SurfaceFriction;
             subDef.material.restitution = sub.Restitution ?? collider.Restitution;
-            subDef.filter.categoryBits = 1UL << (sub.Layer ?? collider.Layer);
+            subDef.filter.categoryBits = sub.CategoryBits is { } subCat && subCat != 0 ? subCat : 1UL << (sub.Layer ?? collider.Layer);
             subDef.filter.maskBits = sub.CollisionMask ?? collider.CollisionMask;
+            subDef.filter.groupIndex = sub.GroupIndex != 0 ? sub.GroupIndex : collider.GroupIndex;
             subDef.enableContactEvents = !sub.IsTrigger;
-            subDef.enableSensorEvents = sub.IsTrigger;
+            subDef.enableSensorEvents = true;
+            subDef.enablePreSolveEvents = true;
             subDef.enableHitEvents = sub.EnableHitEvents ?? collider.EnableHitEvents;
             sub.ShapeId = BuildShape(entity.Name, sub.Definition, bodyId, &subDef);
         }
 
         ApplyMass(collider, bodyId);
+    }
+
+    private unsafe B2.ShapeId BuildShape(string entityName, ShapeDefinition? shape, B2.BodyId bodyId, B2.ShapeDef* shapeDef)
+    {
+        return shape switch
+        {
+            CircleShape circle => BuildCircleShape(bodyId, shapeDef, circle),
+            BoxShape box => BuildBoxShape(bodyId, shapeDef, box),
+            CapsuleShape capsule => BuildCapsuleShape(bodyId, shapeDef, capsule),
+            PolygonShape polygon => BuildPolygonShape(bodyId, shapeDef, polygon),
+            SegmentShape segment => BuildSegmentShape(bodyId, shapeDef, segment),
+            null => throw new InvalidOperationException(
+                $"PhysicsBodyComponent on entity '{entityName}' has a null Shape."),
+            _ => throw new NotSupportedException(
+                $"PhysicsBodyComponent on entity '{entityName}' uses unsupported shape type '{shape.GetType().Name}'.")
+        };
+    }
+
+    private B2.ShapeId BuildSegmentShape(B2.BodyId bodyId, B2.ShapeDef* shapeDef, SegmentShape shape)
+    {
+        var segment = new B2.Segment
+        {
+            point1 = new B2.Vec2 { x = shape.Point1.X + shape.Offset.X, y = shape.Point1.Y + shape.Offset.Y },
+            point2 = new B2.Vec2 { x = shape.Point2.X + shape.Offset.X, y = shape.Point2.Y + shape.Offset.Y }
+        };
+        return _physicsWorld.CreateSegmentShape(bodyId, shapeDef, &segment);
+    }
+
+    private B2.ShapeId BuildCircleShape(B2.BodyId bodyId, B2.ShapeDef* shapeDef, CircleShape shape)
+    {
+        var circle = new B2.Circle
+        {
+            center = new B2.Vec2 { x = shape.Offset.X, y = shape.Offset.Y },
+            radius = shape.Radius
+        };
+        return _physicsWorld.CreateCircleShape(bodyId, shapeDef, &circle);
+    }
+
+    private B2.ShapeId BuildBoxShape(B2.BodyId bodyId, B2.ShapeDef* shapeDef, BoxShape shape)
+    {
+        var center = new B2.Vec2 { x = shape.Offset.X, y = shape.Offset.Y };
+        var polygon = B2.MakeOffsetBox(shape.Width / 2f, shape.Height / 2f, center, B2.MakeRot(shape.Angle));
+        return _physicsWorld.CreatePolygonShape(bodyId, shapeDef, &polygon);
+    }
+
+    private B2.ShapeId BuildCapsuleShape(B2.BodyId bodyId, B2.ShapeDef* shapeDef, CapsuleShape shape)
+    {
+        var capsule = new B2.Capsule
+        {
+            center1 = new B2.Vec2 { x = shape.Center1.X + shape.Offset.X, y = shape.Center1.Y + shape.Offset.Y },
+            center2 = new B2.Vec2 { x = shape.Center2.X + shape.Offset.X, y = shape.Center2.Y + shape.Offset.Y },
+            radius = shape.Radius
+        };
+        return _physicsWorld.CreateCapsuleShape(bodyId, shapeDef, &capsule);
+    }
+
+    private B2.ShapeId BuildPolygonShape(B2.BodyId bodyId, B2.ShapeDef* shapeDef, PolygonShape shape)
+    {
+        if (shape.Vertices.Count < 3 || shape.Vertices.Count > ShapeDefinition.MaxPolygonVertices)
+            throw new InvalidOperationException(
+                $"PolygonShape has {shape.Vertices.Count} vertices; Box2D requires 3–{ShapeDefinition.MaxPolygonVertices}.");
+
+        var span = shape.VerticesSpan;
+        var b2Verts = stackalloc B2.Vec2[span.Length];
+        for (int i = 0; i < span.Length; i++)
+            b2Verts[i] = new B2.Vec2 { x = span[i].X + shape.Offset.X, y = span[i].Y + shape.Offset.Y };
+
+        var hull = B2.ComputeHull(b2Verts, span.Length);
+        var polygon = B2.MakePolygon(&hull, shape.Radius);
+        return _physicsWorld.CreatePolygonShape(bodyId, shapeDef, &polygon);
     }
 
     private void BuildChainShape(PhysicsBodyComponent collider, B2.BodyId bodyId, ChainShape chain)
@@ -633,32 +1110,27 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         for (int i = 0; i < chain.Points.Length; i++)
             b2pts[i] = new B2.Vec2 { x = chain.Points[i].X, y = chain.Points[i].Y };
 
-        var materials = stackalloc B2.SurfaceMaterial[segmentCount];
-        for (int i = 0; i < segmentCount; i++)
-        {
-            if (chain.SegmentMaterials != null)
-            {
-                materials[i].friction = chain.SegmentMaterials[i].Friction;
-                materials[i].restitution = chain.SegmentMaterials[i].Restitution;
-            }
-            else
-            {
-                materials[i].friction = collider.SurfaceFriction;
-                materials[i].restitution = collider.Restitution;
-            }
-        }
+        // Avoid stackalloc for large chains — use a rented array and pin it instead.
+        const int StackAllocThreshold = 256;
+        B2.SurfaceMaterial[]? rentedMaterials = null;
+        B2.SurfaceMaterial* materials;
 
-        fixed (B2.Vec2* ptsPtr = b2pts)
+        if (segmentCount <= StackAllocThreshold)
         {
-            var chainDef = B2.DefaultChainDef();
-            chainDef.points = ptsPtr;
-            chainDef.count = chain.Points.Length;
-            chainDef.materials = materials;
-            chainDef.materialCount = segmentCount;
-            chainDef.isLoop = chain.IsLoop;
-            chainDef.filter.categoryBits = 1UL << collider.Layer;
-            chainDef.filter.maskBits = collider.CollisionMask;
-            collider.ChainId = _physicsWorld.CreateChain(bodyId, &chainDef);
+            var stackMaterials = stackalloc B2.SurfaceMaterial[segmentCount];
+            FillChainMaterials(stackMaterials, segmentCount, chain, collider);
+            materials = stackMaterials;
+            SubmitChain(collider, bodyId, chain, b2pts, materials, segmentCount);
+        }
+        else
+        {
+            rentedMaterials = ArrayPool<B2.SurfaceMaterial>.Shared.Rent(segmentCount);
+            fixed (B2.SurfaceMaterial* ptr = rentedMaterials)
+            {
+                FillChainMaterials(ptr, segmentCount, chain, collider);
+                SubmitChain(collider, bodyId, chain, b2pts, ptr, segmentCount);
+            }
+            ArrayPool<B2.SurfaceMaterial>.Shared.Return(rentedMaterials);
         }
 
         int shapeCount = B2.BodyGetShapeCount(bodyId);
@@ -682,49 +1154,39 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         }
     }
 
-    private static B2.ShapeId BuildShape(string entityName, ShapeDefinition shape, B2.BodyId bodyId, B2.ShapeDef* shapeDef)
+    private static void FillChainMaterials(B2.SurfaceMaterial* materials, int segmentCount,
+        ChainShape chain, PhysicsBodyComponent collider)
     {
-        switch (shape)
+        for (int i = 0; i < segmentCount; i++)
         {
-            case CircleShape circle:
-                {
-                    var b2 = new B2.Circle
-                    {
-                        center = new B2.Vec2 { x = circle.Offset.X, y = circle.Offset.Y },
-                        radius = circle.Radius
-                    };
-                    return B2.CreateCircleShape(bodyId, shapeDef, &b2);
-                }
-            case BoxShape box:
-                {
-                    var offset = new B2.Vec2 { x = box.Offset.X, y = box.Offset.Y };
-                    var b2 = B2.MakeOffsetBox(box.Width * 0.5f, box.Height * 0.5f, offset, B2.MakeRot(box.Angle));
-                    return B2.CreatePolygonShape(bodyId, shapeDef, &b2);
-                }
-            case CapsuleShape capsule:
-                {
-                    var b2 = new B2.Capsule
-                    {
-                        center1 = new B2.Vec2 { x = capsule.Center1.X, y = capsule.Center1.Y },
-                        center2 = new B2.Vec2 { x = capsule.Center2.X, y = capsule.Center2.Y },
-                        radius = capsule.Radius
-                    };
-                    return B2.CreateCapsuleShape(bodyId, shapeDef, &b2);
-                }
-            case PolygonShape poly:
-                {
-                    var verts = poly.Vertices;
-                    var b2Verts = stackalloc B2.Vec2[verts.Length];
-                    for (int i = 0; i < verts.Length; i++)
-                        b2Verts[i] = new B2.Vec2 { x = verts[i].X, y = verts[i].Y };
+            if (chain.SegmentMaterials != null)
+            {
+                materials[i].friction = chain.SegmentMaterials[i].Friction;
+                materials[i].restitution = chain.SegmentMaterials[i].Restitution;
+            }
+            else
+            {
+                materials[i].friction = collider.SurfaceFriction;
+                materials[i].restitution = collider.Restitution;
+            }
+        }
+    }
 
-                    var hull = B2.ComputeHull(b2Verts, verts.Length);
-                    var polygon = B2.MakePolygon(&hull, poly.Radius);
-                    return B2.CreatePolygonShape(bodyId, shapeDef, &polygon);
-                }
-            default:
-                throw new InvalidOperationException(
-                    $"Unsupported ShapeDefinition type '{shape.GetType().Name}' on entity '{entityName}'.");
+    private void SubmitChain(PhysicsBodyComponent collider, B2.BodyId bodyId, ChainShape chain,
+        B2.Vec2[] b2pts, B2.SurfaceMaterial* materials, int segmentCount)
+    {
+        fixed (B2.Vec2* ptsPtr = b2pts)
+        {
+            var chainDef = B2.DefaultChainDef();
+            chainDef.points = ptsPtr;
+            chainDef.count = chain.Points.Length;
+            chainDef.materials = materials;
+            chainDef.materialCount = segmentCount;
+            chainDef.isLoop = chain.IsLoop;
+            chainDef.filter.categoryBits = collider.CategoryBits != 0 ? collider.CategoryBits : 1UL << collider.Layer;
+            chainDef.filter.maskBits = collider.CollisionMask;
+            chainDef.filter.groupIndex = collider.GroupIndex;
+            collider.ChainId = _physicsWorld.CreateChain(bodyId, &chainDef);
         }
     }
 
@@ -733,17 +1195,32 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         if (collider.BodyType != PhysicsBodyType.Dynamic || collider.Mass <= 0f)
             return;
 
+        if (!collider.IsTrigger && B2.ShapeIsValid(collider.ShapeId))
+            B2.ShapeSetDensity(collider.ShapeId, 1f, false);
+
+        foreach (var sub in collider.SubShapes)
+            if (!sub.IsTrigger && B2.ShapeIsValid(sub.ShapeId))
+                B2.ShapeSetDensity(sub.ShapeId, 1f, false);
+
+        B2.BodyApplyMassFromShapes(bodyId);
+
         var massData = B2.BodyGetMassData(bodyId);
         if (massData.mass <= 0f)
         {
-            // Box2D does not compute mass for sensor-only shapes. When a Dynamic body has
-            // no non-sensor shapes (e.g. an all-trigger body), set the mass data directly
-            // so gravity, impulses, and forces still work as expected.
+            // All shapes are sensors — Box2D computed zero mass. Set mass data explicitly.
+            // Rotational inertia defaults to mass * 1000 (≈ a disc of radius ~45px at 100 px/m).
+            // Set RotationalInertiaOverride on the component for accurate rotational simulation.
+            Debug.WriteLineIf(collider.RotationalInertiaOverride == null,
+                $"[Brine2D] Dynamic body '{collider.Entity?.Name}' has all-trigger shapes and no " +
+                "RotationalInertiaOverride. Using Mass×1000 as rotational inertia. " +
+                "Set RotationalInertiaOverride for correct rotational behavior.");
             B2.BodySetMassData(bodyId, new B2.MassData
             {
                 mass = collider.Mass,
-                center = default,
-                rotationalInertia = collider.Mass
+                center = collider.CenterOfMassOverride.HasValue
+                    ? new B2.Vec2 { x = collider.CenterOfMassOverride.Value.X, y = collider.CenterOfMassOverride.Value.Y }
+                    : default,
+                rotationalInertia = collider.RotationalInertiaOverride ?? (collider.Mass * 1000f)
             });
             return;
         }
@@ -758,9 +1235,22 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                 B2.ShapeSetDensity(sub.ShapeId, density, false);
 
         B2.BodyApplyMassFromShapes(bodyId);
+
+        if (collider.CenterOfMassOverride.HasValue || collider.RotationalInertiaOverride.HasValue)
+        {
+            var current = B2.BodyGetMassData(bodyId);
+            B2.BodySetMassData(bodyId, new B2.MassData
+            {
+                mass = current.mass,
+                center = collider.CenterOfMassOverride.HasValue
+                    ? new B2.Vec2 { x = collider.CenterOfMassOverride.Value.X, y = collider.CenterOfMassOverride.Value.Y }
+                    : current.center,
+                rotationalInertia = collider.RotationalInertiaOverride ?? current.rotationalInertia
+            });
+        }
     }
 
-    private void DestroyBody(PhysicsBodyComponent collider)
+    private void DestroyBody(PhysicsBodyComponent collider, bool deferPairFlush = false, nint deferredBodyIndex = 0)
     {
         collider.ShouldCollideChanged -= OnShouldCollideChanged;
         if (collider.ShouldCollide != null)
@@ -771,29 +1261,44 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                 _shouldCollideCount--;
         }
 
-        _prevKinematicPositions.Remove(collider.BodyId.index1);
-        _prevKinematicRotations.Remove(collider.BodyId.index1);
-        _prevAwakeState.Remove(collider.BodyId.index1);
-        _physicsWorld.UnregisterJointsForBody(collider.BodyId.index1);
+        var bodyIndex = collider.BodyId.index1;
+
+        if (_registeredOneWayPlatform.TryGetValue(bodyIndex, out bool wasOWP) && wasOWP)
+            _oneWayPlatformCount--;
+        _registeredOneWayPlatform.Remove(bodyIndex);
+
+        _prevKinematicPositions.Remove(bodyIndex);
+        _prevKinematicRotations.Remove(bodyIndex);
+        _prevAwakeState.Remove(bodyIndex);
+        _physicsWorld.UnregisterJointsForBody(bodyIndex);
         _physicsWorld.UntrackBody(collider);
-        FlushStalePairs(collider);
-        _handleToCollider.Remove(collider.BodyId.index1);
-        _handleToTransform.Remove(collider.BodyId.index1);
+
+        // Purge ignored pairs immediately — before the Box2D slot is recycled — so a new
+        // body created at the same index1 does not inherit stale collision-ignore state.
+        _physicsWorld.PurgeIgnoredPairsForBody(bodyIndex);
+
+        if (deferPairFlush)
+            _pendingFlushAfterStep.Add((collider, deferredBodyIndex != 0 ? deferredBodyIndex : bodyIndex));
+        else
+            FlushStalePairs(collider, bodyIndex);
+
+        _handleToCollider.Remove(bodyIndex);
+        _handleToTransform.Remove(bodyIndex);
         B2.DestroyBody(collider.BodyId);
         collider.BodyId = default;
         collider.ShapeId = default;
         collider.ChainId = default;
         foreach (var sub in collider.SubShapes)
             sub.ShapeId = default;
+        ClearAllDirtyFlags(collider);
         collider.IsDirty = true;
-        collider.IsFilterDirty = false;
-        collider.IsBodyTypeDirty = false;
-        collider.IsMassDirty = false;
-        collider.IsMaterialDirty = false;
-        collider.IsSimulationEnabledDirty = false;
+        // Prevent OnRemoved re-entry from double-decrementing the counters.
+        collider.OnBodyDestroyed = null;
     }
 
-    private void FlushStalePairs(PhysicsBodyComponent collider)
+    // bodyIndex is passed explicitly so callers that defer the flush (and thus have already
+    // reset collider.BodyId to default) still remove the correct _lastKnownContacts entries.
+    private void FlushStalePairs(PhysicsBodyComponent collider, nint bodyIndex)
     {
         PhysicsBodyComponent[]? contactSnapshot = collider.ActiveContactPairs.Count > 0
             ? [.. collider.ActiveContactPairs]
@@ -804,19 +1309,22 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
 
         collider.ActiveContactPairs.Clear();
         collider.ActiveSensorPairs.Clear();
-        collider.CollidingEntitiesInternal.Clear();
+        collider.ActiveContactSubShapes.Clear();
+        collider.ActiveSensorSubShapes.Clear();
 
         if (contactSnapshot != null)
         {
             foreach (var other in contactSnapshot)
             {
+                nint otherOldIndex = ResolveOtherOldIndex(bodyIndex, other);
                 other.ActiveContactPairs.Remove(collider);
+                other.ActiveContactSubShapes.Remove(bodyIndex);
                 if (collider.Entity != null)
                     other.CollidingEntitiesInternal.Remove(collider.Entity);
 
                 _physicsWorld.UntrackActivePair(collider, other);
-                other.RaiseCollisionExit(collider);
-                collider.RaiseCollisionExit(other);
+                other.RaiseCollisionExit(collider, bodyIndex);
+                collider.RaiseCollisionExit(other, otherOldIndex);
             }
         }
 
@@ -824,15 +1332,60 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         {
             foreach (var other in sensorSnapshot)
             {
+                nint otherOldIndex = ResolveOtherOldIndex(bodyIndex, other);
                 other.ActiveSensorPairs.Remove(collider);
+                other.ActiveSensorSubShapes.Remove(bodyIndex);
                 if (collider.Entity != null)
                     other.CollidingEntitiesInternal.Remove(collider.Entity);
 
                 _physicsWorld.UntrackActivePair(collider, other);
-                other.RaiseTriggerExit(collider);
-                collider.RaiseTriggerExit(other);
+                other.RaiseTriggerExit(collider, bodyIndex);
+                collider.RaiseTriggerExit(other, otherOldIndex);
             }
         }
+
+        collider.CollidingEntitiesInternal.Clear();
+
+        PurgeContactEntriesForBody(bodyIndex);
+        // PurgeIgnoredPairsForBody was already called in DestroyBody before slot recycling.
+    }
+
+    /// <summary>
+    /// Resolves the old body index for `other` as seen from `bodyIndex`'s pair-key set.
+    /// When both bodies are rebuilt in the same tick other.BodyId is already default(0),
+    /// so we cannot use other.BodyId.index1. The pair key in _contactKeysByBody always
+    /// encodes both old indices, so we extract the correct one from there.
+    /// </summary>
+    private nint ResolveOtherOldIndex(nint bodyIndex, PhysicsBodyComponent other)
+    {
+        if (_contactKeysByBody.TryGetValue(bodyIndex, out var keys))
+        {
+            foreach (var key in keys)
+            {
+                nint candidate = key.Item1 == bodyIndex ? key.Item2 : key.Item1;
+                if (_handleToCollider.TryGetValue(candidate, out var mapped) && mapped == other)
+                    return candidate;
+            }
+        }
+
+        // Fallback: other's BodyId hasn't been reset yet (normal single-destroy path).
+        return other.BodyId.index1;
+    }
+
+    private void PurgeContactEntriesForBody(nint bodyIndex)
+    {
+        if (!_contactKeysByBody.TryGetValue(bodyIndex, out var keys))
+            return;
+
+        foreach (var key in keys)
+        {
+            _lastKnownContacts.Remove(key);
+            var other = key.Item1 == bodyIndex ? key.Item2 : key.Item1;
+            if (_contactKeysByBody.TryGetValue(other, out var otherKeys))
+                otherKeys.Remove(key);
+        }
+
+        _contactKeysByBody.Remove(bodyIndex);
     }
 
     private void SyncFromBox2D()
@@ -851,25 +1404,53 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             if (collider.Entity is not { IsActive: true })
                 continue;
 
-            var p = move.transform.p;
-            transform.Position = new Vector2(p.x, p.y) - collider.Offset;
-            transform.Rotation = MathF.Atan2(move.transform.q.s, move.transform.q.c);
+            if (collider.BodyType != PhysicsBodyType.Kinematic)
+            {
+                var p = move.transform.p;
+                transform.Position = new Vector2(p.x, p.y) - collider.Offset;
+                transform.Rotation = MathF.Atan2(move.transform.q.s, move.transform.q.c);
+            }
 
             if (move.fellAsleep)
             {
                 _prevAwakeState[move.bodyId.index1] = false;
                 collider.NotifyBodySleep();
             }
-            else
-            {
-                // Fire OnBodyWake on the first move event after the body was sleeping.
-                if (_prevAwakeState.TryGetValue(move.bodyId.index1, out bool wasAwake) && !wasAwake)
-                {
-                    _prevAwakeState[move.bodyId.index1] = true;
-                    collider.NotifyBodyWake();
-                }
-            }
         }
+    }
+
+    /// <summary>
+    /// Polls awake state for all bodies that were sleeping after the previous step.
+    /// Box2D only fires body move events for bodies that actually moved, so OnBodyWake
+    /// would be delayed by one tick if we relied solely on move events to detect waking.
+    /// Polling here ensures the event fires the same tick the body transitions to awake.
+    /// </summary>
+    private void DispatchSleepWakeEvents()
+    {
+        foreach (var (index, wasAwake) in _prevAwakeState)
+        {
+            if (wasAwake) continue;
+            if (!_handleToCollider.TryGetValue(index, out var collider)) continue;
+            if (!B2.BodyIsValid(collider.BodyId)) continue;
+            if (!B2.BodyIsAwake(collider.BodyId)) continue;
+            _wakeBuffer.Add(index);
+        }
+
+        foreach (var index in _wakeBuffer)
+        {
+            _prevAwakeState[index] = true;
+            if (_handleToCollider.TryGetValue(index, out var collider))
+                collider.NotifyBodyWake();
+        }
+
+        _wakeBuffer.Clear();
+    }
+
+    private HashSet<(nint, nint)> GetOrCreateContactKeySet(nint bodyIndex)
+    {
+        if (!_contactKeysByBody.TryGetValue(bodyIndex, out var set))
+            _contactKeysByBody[bodyIndex] = set = new HashSet<(nint, nint)>();
+        return set;
     }
 
     private void DispatchContactEvents()
@@ -890,7 +1471,13 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             var subB = ResolveSubShape(b, e.shapeIdB);
 
             _physicsWorld.TrackActivePair(a, b);
-            var contact = MakeContact(e.manifold);
+            var contact = CollisionContact.FromManifoldEnter(e.manifold);
+            if (!contact.IsEmpty)
+            {
+                _lastKnownContacts[key] = contact;
+                GetOrCreateContactKeySet(a.BodyId.index1).Add(key);
+                GetOrCreateContactKeySet(b.BodyId.index1).Add(key);
+            }
             a.NotifyCollisionEnter(b, contact, subA, subB);
             b.NotifyCollisionEnter(a, contact with { Normal = -contact.Normal }, subB, subA);
         }
@@ -904,6 +1491,18 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
             if (!a.ActiveContactPairs.Contains(b))
                 continue;
 
+            var key = MakePairKey(a.BodyId.index1, b.BodyId.index1);
+            _lastKnownContacts.Remove(key);
+            if (_contactKeysByBody.TryGetValue(a.BodyId.index1, out var setA))
+            {
+                setA.Remove(key);
+                if (setA.Count == 0) _contactKeysByBody.Remove(a.BodyId.index1);
+            }
+            if (_contactKeysByBody.TryGetValue(b.BodyId.index1, out var setB))
+            {
+                setB.Remove(key);
+                if (setB.Count == 0) _contactKeysByBody.Remove(b.BodyId.index1);
+            }
             a.NotifyCollisionExit(b);
             b.NotifyCollisionExit(a);
             _physicsWorld.UntrackActivePair(a, b);
@@ -965,8 +1564,14 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
 
     private void DispatchStayEvents()
     {
+        var activeBodies = _physicsWorld.ActiveBodies;
+
+        // Ensure the snapshot list has enough capacity to avoid reallocation mid-frame.
+        if (_activeBodySnapshot.Capacity < activeBodies.Count)
+            _activeBodySnapshot.Capacity = activeBodies.Count + 16;
+
         _activeBodySnapshot.Clear();
-        _activeBodySnapshot.AddRange(_physicsWorld.ActiveBodies);
+        _activeBodySnapshot.AddRange(activeBodies);
 
         foreach (var collider in _activeBodySnapshot)
         {
@@ -986,7 +1591,22 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
                 if (collider.BodyId.index1 > other.BodyId.index1) continue;
                 if (_newContactPairsThisStep.Contains(MakePairKey(collider.BodyId.index1, other.BodyId.index1))) continue;
 
-                var contact = GetLiveContact(collider, other);
+                var key = MakePairKey(collider.BodyId.index1, other.BodyId.index1);
+
+                CollisionContact contact;
+                bool needsLiveContact = collider.HasCollisionStaySubscribers || other.HasCollisionStaySubscribers;
+                if (needsLiveContact)
+                {
+                    contact = GetLiveContact(collider, other);
+                    if (contact.IsEmpty)
+                        _lastKnownContacts.TryGetValue(key, out contact);
+                    else
+                        _lastKnownContacts[key] = contact;
+                }
+                else
+                {
+                    _lastKnownContacts.TryGetValue(key, out contact);
+                }
 
                 collider.ActiveContactSubShapes.TryGetValue(other.BodyId.index1, out var pairAB);
                 collider.NotifyCollisionStay(other, contact, pairAB.Self, pairAB.Other);
@@ -1012,55 +1632,126 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         if (!B2.BodyIsValid(a.BodyId) || !B2.BodyIsValid(b.BodyId))
             return CollisionContact.Empty;
 
-        const int maxContacts = 128;
-        var contacts = ArrayPool<B2.ContactData>.Shared.Rent(maxContacts);
-        try
+        const int maxCapacity = 4096;
+        int initialCapacity = Math.Max(B2.BodyGetShapeCount(a.BodyId) + B2.BodyGetShapeCount(b.BodyId), 16);
+
+        for (int capacity = initialCapacity; capacity <= maxCapacity; capacity *= 2)
         {
-            fixed (B2.ContactData* ptr = contacts)
+            var contacts = ArrayPool<B2.ContactData>.Shared.Rent(capacity);
+            CollisionContact? found = null;
+            bool needsRetry = false;
+
+            try
             {
-                if (a.Shape is ChainShape || b.Shape is ChainShape)
+                fixed (B2.ContactData* ptr = contacts)
                 {
-                    int count = B2.BodyGetContactData(a.BodyId, ptr, maxContacts);
-                    return FindContactWithBodyId(ptr, count, b.BodyId.index1) ?? CollisionContact.Empty;
-                }
+                    if (a.Shape is ChainShape || b.Shape is ChainShape)
+                    {
+                        bool aIsChain = a.Shape is ChainShape;
+                        var chainBodyId = aIsChain ? a.BodyId : b.BodyId;
+                        var otherBodyIndex = aIsChain ? b.BodyId.index1 : a.BodyId.index1;
+                        int count = B2.BodyGetContactData(chainBodyId, ptr, capacity);
+                        if (count >= capacity) { needsRetry = true; }
+                        else
+                        {
+                            var r = FindContactWithBodyId(ptr, count, chainBodyId.index1, otherBodyIndex);
+                            if (r.HasValue)
+                            {
+                                // r.Value.Contact has normal in B2's shapeA→shapeB direction.
+                                // r.Value.ChainIsShapeA tells us whether the chain body is shapeA.
+                                // Normalise to chain→other:
+                                var chainToOther = r.Value.ChainIsShapeA
+                                    ? r.Value.Contact
+                                    : r.Value.Contact with { Normal = -r.Value.Contact.Normal };
+                                // GetLiveContact convention: result normal points from a→b.
+                                found = aIsChain ? chainToOther : chainToOther with { Normal = -chainToOther.Normal };
+                            }
+                            else
+                            {
+                                found = CollisionContact.Empty;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (!needsRetry && B2.ShapeIsValid(a.ShapeId))
+                        {
+                            int count = B2.ShapeGetContactData(a.ShapeId, ptr, capacity);
+                            if (count >= capacity) needsRetry = true;
+                            else
+                            {
+                                var r = FindContactWithBody(ptr, count, a.ShapeId, b.BodyId.index1);
+                                if (r.HasValue) found = r.Value;
+                            }
+                        }
 
-                if (B2.ShapeIsValid(a.ShapeId))
-                {
-                    int count = B2.ShapeGetContactData(a.ShapeId, ptr, maxContacts);
-                    var result = FindContactWithBody(ptr, count, a.ShapeId, b.BodyId.index1);
-                    if (result.HasValue) return result.Value;
-                }
+                        if (!needsRetry && !found.HasValue)
+                        {
+                            foreach (var sub in a.SubShapes)
+                            {
+                                if (!B2.ShapeIsValid(sub.ShapeId)) continue;
+                                int count = B2.ShapeGetContactData(sub.ShapeId, ptr, capacity);
+                                if (count >= capacity) { needsRetry = true; break; }
+                                var r = FindContactWithBody(ptr, count, sub.ShapeId, b.BodyId.index1);
+                                if (r.HasValue) { found = r.Value; break; }
+                            }
+                        }
 
-                foreach (var sub in a.SubShapes)
-                {
-                    if (!B2.ShapeIsValid(sub.ShapeId)) continue;
-                    int count = B2.ShapeGetContactData(sub.ShapeId, ptr, maxContacts);
-                    var result = FindContactWithBody(ptr, count, sub.ShapeId, b.BodyId.index1);
-                    if (result.HasValue) return result.Value;
-                }
+                        if (!needsRetry && !found.HasValue && B2.ShapeIsValid(b.ShapeId))
+                        {
+                            int count = B2.ShapeGetContactData(b.ShapeId, ptr, capacity);
+                            if (count >= capacity) needsRetry = true;
+                            else
+                            {
+                                var r = FindContactWithBody(ptr, count, b.ShapeId, a.BodyId.index1);
+                                if (r.HasValue) found = r.Value with { Normal = -r.Value.Normal };
+                            }
+                        }
 
-                if (B2.ShapeIsValid(b.ShapeId))
-                {
-                    int count = B2.ShapeGetContactData(b.ShapeId, ptr, maxContacts);
-                    var result = FindContactWithBody(ptr, count, b.ShapeId, a.BodyId.index1);
-                    if (result.HasValue) return result.Value with { Normal = -result.Value.Normal };
-                }
-
-                foreach (var sub in b.SubShapes)
-                {
-                    if (!B2.ShapeIsValid(sub.ShapeId)) continue;
-                    int count = B2.ShapeGetContactData(sub.ShapeId, ptr, maxContacts);
-                    var result = FindContactWithBody(ptr, count, sub.ShapeId, a.BodyId.index1);
-                    if (result.HasValue) return result.Value with { Normal = -result.Value.Normal };
+                        if (!needsRetry && !found.HasValue)
+                        {
+                            foreach (var sub in b.SubShapes)
+                            {
+                                if (!B2.ShapeIsValid(sub.ShapeId)) continue;
+                                int count = B2.ShapeGetContactData(sub.ShapeId, ptr, capacity);
+                                if (count >= capacity) { needsRetry = true; break; }
+                                var r = FindContactWithBody(ptr, count, sub.ShapeId, a.BodyId.index1);
+                                if (r.HasValue) { found = r.Value with { Normal = -r.Value.Normal }; break; }
+                            }
+                        }
+                    }
                 }
             }
-        }
-        finally
-        {
-            ArrayPool<B2.ContactData>.Shared.Return(contacts);
+            finally
+            {
+                ArrayPool<B2.ContactData>.Shared.Return(contacts);
+            }
+
+            if (!needsRetry)
+                return found ?? CollisionContact.Empty;
         }
 
+        System.Diagnostics.Debug.Fail(
+            $"GetLiveContact: contact buffer capacity exceeded {maxCapacity}. Returning Empty.");
         return CollisionContact.Empty;
+    }
+
+    private readonly record struct ChainContactResult(CollisionContact Contact, bool ChainIsShapeA);
+
+    private static ChainContactResult? FindContactWithBodyId(B2.ContactData* contacts, int count,
+        nint chainBodyIndex, nint targetBodyIndex)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            ref var c = ref contacts[i];
+            bool chainIsA = B2.ShapeGetBody(c.shapeIdA).index1 == chainBodyIndex;
+            nint otherIdx = chainIsA
+                ? B2.ShapeGetBody(c.shapeIdB).index1
+                : B2.ShapeGetBody(c.shapeIdA).index1;
+            if (otherIdx == targetBodyIndex)
+                return new ChainContactResult(MakeContact(c.manifold), chainIsA);
+        }
+        return null;
     }
 
     private static CollisionContact? FindContactWithBody(B2.ContactData* contacts, int count,
@@ -1104,6 +1795,14 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
 
     public void Dispose()
     {
+        _physicsWorld.SetSystemCollisionFilter(null);
+        _physicsWorld.SetSystemPreSolveFilter(null);
+        _systemFilterInstalled = false;
+        _oneWayPlatformFilterInstalled = false;
+
+        _physicsWorld.ComponentResolver = null;
+        _physicsWorld.AllBodiesResolver = null;
+
         _colliderQuery?.Dispose();
         _revoluteQuery?.Dispose();
         _distanceQuery?.Dispose();
@@ -1119,9 +1818,12 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         _prevAwakeState.Clear();
         _newContactPairsThisStep.Clear();
         _newSensorPairsThisStep.Clear();
+        _lastKnownContacts.Clear();
+        _contactKeysByBody.Clear();
         _teardownBuffer.Clear();
         _stayContactBuffer.Clear();
         _staySensorBuffer.Clear();
         _activeBodySnapshot.Clear();
+        _wakeBuffer.Clear();
     }
 }

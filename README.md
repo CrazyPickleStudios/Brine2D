@@ -18,7 +18,7 @@ If you've built web applications with ASP.NET Core, Brine2D will feel immediatel
 
 ## Why Brine2D?
 
-Brine2D is a **full engine**, not just a rendering library. Scene management, an entity system, audio, input, collision, particles, UI, and a DI container all work together out of the box. Everything you'd otherwise build yourself in the first few weeks is already there.
+Brine2D is a **full engine**, not just a rendering library. Scene management, an entity system, audio, input, Box2D physics, particles, UI, and a DI container all work together out of the box. Everything you'd otherwise build yourself in the first few weeks is already there.
 
 ~~~csharp
 var builder = GameApplication.CreateBuilder(args);
@@ -139,7 +139,7 @@ dotnet run
 | ASP.NET Core | Brine2D |
 |---|---|
 | `WebApplication.CreateBuilder()` | `GameApplication.CreateBuilder()` |
-| `builder.Services.AddDbContext<T>()` | `builder.Services.AddCollisionSystem()` |
+| `builder.Services.AddDbContext<T>()` | `builder.Services.AddPhysics()` |
 | `ControllerBase` properties | `Scene` properties (`Input`, `Audio`, `Renderer`) |
 | Request-scoped `DbContext` | Scene-scoped `IEntityWorld` (auto-disposed on exit) |
 | `ILogger<T>` | `ILogger<T>` (same interface, same DI container) |
@@ -230,11 +230,11 @@ public class GameScene : Scene
 |---|---|---|---|
 | `SpriteRenderingSystem` | Render | 0 | Sprite batching and frustum culling |
 | `AudioSystem` | Update | 0 | Spatial audio processing |
-| `VelocitySystem` | Update | 100 | Position integration |
-| `CollisionDetectionSystem` | Update | 200 | AABB and circle colliders |
 | `ParticleSystem` | Both | 250 / 100 | Particle effects with object pooling |
 | `CameraSystem` | Update | 500 | Camera follow and zoom |
 | `DebugRenderer` | Render | 1000 | Debug visualization (disabled by default) |
+
+> **Physics systems are opt-in.** Call `builder.Services.AddPhysics()` and then `World.AddSystem<Box2DPhysicsSystem>()` in your scene's `OnEnter`. See the [Physics](#physics) section below.
 
 ---
 
@@ -474,6 +474,196 @@ _camera.Shake(duration: 0.3f, intensity: 8f);
 
 ---
 
+---
+
+### Physics
+
+Brine2D integrates [Box2D 3.x](https://box2d.org/) for rigid-body physics. Register physics services once at startup, then add the system to any scene that needs it.
+
+**Registration (Program.cs):**
+~~~csharp
+builder.Services.AddPhysics(options =>
+{
+    options.Gravity        = new Vector2(0, 980); // pixels/s² — Y-down screen space
+    options.PixelsPerMeter = 100f;                // process-wide; all AddPhysics calls must match
+    options.SubStepCount   = 4;                   // higher = more accurate, more CPU
+});
+
+// Optional: named layers for readable collision filtering
+builder.Services.AddPhysicsLayers(layers =>
+{
+    layers.Register("Default",  0);
+    layers.Register("Player",   1);
+    layers.Register("Enemies",  2);
+    layers.Register("Terrain",  3);
+    layers.Register("Triggers", 4);
+});
+~~~
+
+**Scene setup:**
+~~~csharp
+protected override void OnEnter()
+{
+    World.AddSystem<Box2DPhysicsSystem>();
+
+    // Optional: kinematic character controller (two instances required)
+    World.AddSystem<PrePhysicsKinematicCharacterSystem>();
+    World.AddSystem<PostPhysicsKinematicCharacterSystem>();
+
+    // Optional: debug overlay (visualizes shapes, contacts, AABBs)
+    World.AddSystem<Box2DDebugDrawSystem>();
+}
+~~~
+
+**Adding a physics body to an entity:**
+~~~csharp
+World.CreateEntity("Crate")
+    .AddComponent<TransformComponent>(t => t.Position = new Vector2(400, 100))
+    .AddComponent<SpriteComponent>()
+    .AddComponent<PhysicsBodyComponent>(b =>
+    {
+        b.Shape         = new BoxShape(48, 48);
+        b.BodyType      = PhysicsBodyType.Dynamic;
+        b.Mass          = 1f;
+        b.SurfaceFriction = 0.5f;
+        b.Restitution   = 0.2f;
+        b.Layer         = 0;
+        b.CollisionMask = ulong.MaxValue;
+    });
+~~~
+
+**Body types:**
+
+| Type | Description |
+|---|---|
+| `Dynamic` | Fully simulated; affected by gravity, forces, and collisions |
+| `Static` | Never moves; other bodies push off it (terrain, walls) |
+| `Kinematic` | Moved by code, not forces; pushes dynamic bodies out |
+
+**Shape types:** `CircleShape`, `BoxShape`, `CapsuleShape`, `PolygonShape`, `ChainShape`, `SegmentShape`
+
+**Collision events:**
+~~~csharp
+var body = entity.GetComponent<PhysicsBodyComponent>()!;
+
+body.OnCollisionEnter += (other, contact) =>
+{
+    Debug.WriteLine($"Hit {other.Entity?.Name} at speed {contact.ImpactSpeed:F1}");
+};
+
+body.OnCollisionExit  += other => { };
+body.OnCollisionStay  += (other, contact) => { };
+
+// Trigger (sensor) events
+body.IsTrigger        = true;
+body.OnTriggerEnter   += other => { };
+body.OnTriggerExit    += other => { };
+~~~
+
+**Applying forces and impulses (from FixedUpdate):**
+~~~csharp
+body.ApplyLinearImpulse(new Vector2(0, -500)); // jump
+body.ApplyForce(new Vector2(200, 0));           // wind
+body.ApplyTorque(50f);
+~~~
+
+**Queries (raycasts and shape overlaps):**
+~~~csharp
+// Inject PhysicsWorld via constructor
+private readonly PhysicsWorld _physics;
+
+// Raycast
+var hit = _physics.RaycastClosest(origin, direction, maxDistance,
+    new PhysicsQueryFilter { ExcludeSensors = true });
+
+// Shape cast (sweep a circle)
+var hit = _physics.ShapeCastClosest(origin, radius: 24f, direction, maxDistance);
+
+// Overlap check
+Span<OverlapHit> results = stackalloc OverlapHit[16];
+int count = _physics.OverlapCircle(center, radius: 100f, results);
+
+// Filter helpers
+PhysicsQueryFilter.SolidOnly              // excludes sensors
+PhysicsQueryFilter.ForLayer(layerIndex)   // single layer
+PhysicsQueryFilter.SolidLayer(layerIndex) // solid shapes on one layer
+~~~
+
+**Kinematic character controller:**
+~~~csharp
+World.CreateEntity("Player")
+    .AddComponent<TransformComponent>(t => t.Position = new Vector2(400, 300))
+    .AddComponent<PhysicsBodyComponent>(b =>
+    {
+        b.Shape         = new CapsuleShape(center1: new Vector2(0, -16), center2: new Vector2(0, 16), radius: 16f);
+        b.BodyType      = PhysicsBodyType.Kinematic;
+        b.CollisionMask = ulong.MaxValue;
+    })
+    .AddComponent<KinematicCharacterBody>(c =>
+    {
+        c.FloorAngleLimit = 0.8f;    // ~46° — steeper slopes count as walls
+        c.SnapDistance    = 8f;      // snap-to-floor on steps and slopes
+        c.MaxSpeed        = 400f;
+    })
+    .AddBehavior<PlayerMovementBehavior>();
+~~~
+
+~~~csharp
+public class PlayerMovementBehavior : Behavior
+{
+    private readonly IInputContext _input;
+    private KinematicCharacterBody _character = null!;
+    private const float Speed  = 300f;
+    private const float JumpVY = -600f;
+
+    public PlayerMovementBehavior(IInputContext input) => _input = input;
+
+    protected override void OnAttached()
+        => _character = Entity.GetRequiredComponent<KinematicCharacterBody>();
+
+    public override void FixedUpdate(GameTime fixedTime)
+    {
+        var vel = _character.Velocity;
+
+        vel.X = _input.IsKeyDown(Key.Right) ? Speed
+              : _input.IsKeyDown(Key.Left)  ? -Speed
+              : 0f;
+
+        if (_input.IsKeyPressed(Key.Space) && _character.IsGrounded)
+            vel.Y = JumpVY;
+        else
+            vel.Y += 980f * (float)fixedTime.DeltaTime; // manual gravity
+
+        _character.MoveAndSlide(vel);
+    }
+}
+~~~
+
+**One-way platforms:**
+~~~csharp
+platform.AddComponent<PhysicsBodyComponent>(b =>
+{
+    b.Shape                 = new BoxShape(200, 16);
+    b.BodyType              = PhysicsBodyType.Static;
+    b.IsOneWayPlatform      = true;
+    b.PlatformNormalDirection = new Vector2(0, -1); // solid from above
+});
+~~~
+
+**Ignoring collisions between two bodies:**
+~~~csharp
+_physicsWorld.IgnoreCollision(bodyA, bodyB);
+_physicsWorld.RestoreCollision(bodyA, bodyB);
+~~~
+
+**Teleporting a body without a velocity spike:**
+~~~csharp
+body.Teleport(new Vector2(100, 200));
+body.Teleport(new Vector2(100, 200), rotation: 0f);
+~~~
+
+---
+
 ### Configuration
 
 ~~~csharp
@@ -664,10 +854,11 @@ builder.Services.AddSingleton<ISaveSystem, LocalSaveSystem>();
 
 // Optional features
 builder.ConfigureBrine2D(b => b.UseInputLayers()); // context-sensitive input routing
+builder.Services.AddPhysics();                      // Box2D rigid-body physics
+builder.Services.AddPhysicsLayers(layers => { ... }); // named layer registry
 builder.Services.AddPostProcessing();
 builder.Services.AddTextureAtlasing();
 builder.Services.AddTilemapServices();
-builder.Services.AddCollisionSystem();
 builder.Services.AddUICanvas();
 builder.Services.AddPerformanceMonitoring();
 ~~~
@@ -770,7 +961,8 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 **Tips:**
 - Use `CreateCachedQuery` for any query that runs every frame
 - Use `.WithinRadius` or `.WithinBounds` to narrow spatial queries instead of filtering manually
-- Disable default systems you don't use (`ParticleSystem`, `CollisionDetectionSystem`) in scenes that don't need them
+- Disable default systems you don't use (`ParticleSystem`) in scenes that don't need them
+- Don't add `Box2DPhysicsSystem` to scenes that have no physics bodies — it has near-zero overhead when idle, but the intent is clearer
 - `options.ECS.EnableMultiThreading = true` for large scenes on multi-core hardware
 
 ---
@@ -814,7 +1006,13 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 - Text input mode with full Unicode/IME support
 
 ### Gameplay
-- AABB and circle collision detection
+- Box2D 3.x rigid-body physics: dynamic, static, and kinematic bodies
+- Five shape types: circle, box, capsule, polygon, chain
+- Collision and sensor events with sub-shape detail (`OnCollisionEnter`, `OnTriggerEnter`, etc.)
+- Raycasts, shape casts, and overlap queries with layer filtering
+- Kinematic character controller: `MoveAndSlide`, `MoveAndCollide`, grounded state, snap-to-floor, moving platforms
+- One-way platforms, collision groups, per-body gravity overrides
+- Joints: revolute, distance, weld, prismatic, motor, wheel, mouse
 - Particle system with object pooling
 - Frame-based sprite animation
 - Tilemap support: Tiled (`.tmj`) integration
@@ -851,7 +1049,7 @@ cd samples/FeatureDemos && dotnet run
 - ECS query system: fluent queries, spatial indexing, caching
 - Particles: GPU-accelerated effects
 - Texture atlasing: runtime sprite packing
-- Collision: AABB and circle demos
+- Physics: Box2D rigid bodies, character controller, joints, raycasts
 - Spatial audio: 2D positional sound
 - Post-processing: real-time shader effects
 - Scissor rectangles: UI clipping and scroll views
@@ -918,7 +1116,7 @@ SDL3 provides the cross-platform layer. macOS and Linux should work. Community t
 - Rich text with BBCode
 - Post-processing, render targets, scissor rects
 - Spatial audio
-- Collision detection
+- Box2D 3.x physics (rigid bodies, character controller, joints, raycasts, sensors)
 - Particle system
 - UI framework
 - Tilemap support

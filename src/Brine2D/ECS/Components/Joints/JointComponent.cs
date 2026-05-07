@@ -23,10 +23,12 @@ public abstract class JointComponent : Component
     ///             was removed, causing Box2D to implicitly destroy the joint.
     ///         </item>
     ///     </list>
-    ///     After this fires, <see cref="IsLive" /> is <c>false</c> and the joint rebuilds
-    ///     automatically on the next step if <see cref="ConnectedBody" /> still has a valid body.
+    ///     After this fires, <see cref="IsLive" /> is <c>false</c>. The joint will only rebuild
+    ///     automatically on the next step when <see cref="RebuildAfterBreak" /> is <c>true</c>.
     /// </summary>
     public event Action<JointComponent>? OnBreak;
+
+    internal Action? OnUnregister { get; set; }
 
     /// <summary>
     ///     Maximum constraint force magnitude (in simulation force units: mass × pixels/s²) before
@@ -72,6 +74,17 @@ public abstract class JointComponent : Component
     }
 
     /// <summary>
+    ///     When <c>true</c>, a broken joint will be rebuilt automatically on the next physics step
+    ///     (if <see cref="ConnectedBody" /> is still valid). Default is <c>false</c> — the break is
+    ///     permanent unless the caller explicitly sets <c>ConnectedBody</c> again or sets this flag.
+    ///     <para>
+    ///         To permanently break a joint at runtime, set <see cref="ConnectedBody" /> = <c>null</c>
+    ///         inside your <see cref="OnBreak" /> handler regardless of this flag.
+    ///     </para>
+    /// </summary>
+    public bool RebuildAfterBreak { get; set; }
+
+    /// <summary>
     ///     Returns <c>true</c> if the underlying Box2D joint has been created and is still valid.
     /// </summary>
     public bool IsLive => B2.JointIsValid(JointId);
@@ -114,12 +127,9 @@ public abstract class JointComponent : Component
     public Vector2 GetReactionForce()
     {
         if (!B2.JointIsValid(JointId))
-        {
             return Vector2.Zero;
-        }
 
         var f = B2.JointGetConstraintForce(JointId);
-
         return new Vector2(f.x, f.y);
     }
 
@@ -130,9 +140,7 @@ public abstract class JointComponent : Component
     public float GetReactionTorque()
     {
         if (!B2.JointIsValid(JointId))
-        {
             return 0f;
-        }
 
         return B2.JointGetConstraintTorque(JointId);
     }
@@ -149,10 +157,11 @@ public abstract class JointComponent : Component
 
     protected internal override void OnRemoved()
     {
+        OnUnregister?.Invoke();
+        OnUnregister = null;
+
         if (B2.JointIsValid(JointId))
-        {
             B2.DestroyJoint(JointId);
-        }
 
         JointId = default;
         ConnectedBody = null;

@@ -9,24 +9,26 @@ using Brine2D.Rendering;
 
 namespace Brine2D.Systems.Physics;
 
-public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase
+public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
 {
     private readonly PhysicsWorld _physicsWorld;
     private B2.DebugDraw _debugDraw;
     private bool _initialized;
 
-    // SDL3 requires all GPU/render commands to be issued on the main thread.
-    // [ThreadStatic] is intentional here: the fields are only ever written and read
-    // on that same main thread, so no cross-thread visibility issues arise.
-    [ThreadStatic]
-    private static IRenderer? _activeRenderer;
+    private readonly DrawContext _drawContext = new();
+    private readonly GCHandle _contextHandle;
 
-    [ThreadStatic]
-    private static ICamera? _activeCamera;
+    private sealed class DrawContext
+    {
+        public IRenderer Renderer { get; set; } = null!;
+        public ICamera? Camera { get; set; }
+        public bool DrawStrings { get; set; }
+    }
 
     public Box2DDebugDrawSystem(PhysicsWorld physicsWorld)
     {
-        _physicsWorld = physicsWorld; 
+        _physicsWorld = physicsWorld;
+        _contextHandle = GCHandle.Alloc(_drawContext);
     }
 
     public override int RenderOrder => SystemRenderOrder.Debug + 1;
@@ -52,8 +54,18 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase
     public bool DrawFrictionImpulses { get; set; }
     public bool DrawIslands { get; set; }
 
+    /// <summary>
+    /// When <c>true</c>, Box2D debug string annotations (body names, mass centers, etc.) are
+    /// forwarded to <see cref="IRenderer.DrawText"/>. Defaults to <c>false</c> because most
+    /// renderers do not have a debug font loaded and the call would silently fail or throw.
+    /// </summary>
+    public bool DrawStrings { get; set; }
+
     public override void Render(IEntityWorld world, IRenderer renderer)
     {
+        if (!_physicsWorld.IsValid)
+            return;
+
         if (!_initialized)
         {
             InitializeDebugDraw();
@@ -74,18 +86,19 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase
         _debugDraw.drawFrictionImpulses = DrawFrictionImpulses;
         _debugDraw.drawIslands = DrawIslands;
 
-        _activeRenderer = renderer;
-        _activeCamera = Camera;
-        try
-        {
-            fixed (B2.DebugDraw* drawPtr = &_debugDraw)
-                B2.WorldDraw(_physicsWorld.WorldId, drawPtr);
-        }
-        finally
-        {
-            _activeRenderer = null;
-            _activeCamera = null;
-        }
+        _drawContext.Renderer = renderer;
+        _drawContext.Camera = Camera;
+        _drawContext.DrawStrings = DrawStrings;
+        _debugDraw.context = (void*)GCHandle.ToIntPtr(_contextHandle);
+
+        fixed (B2.DebugDraw* drawPtr = &_debugDraw)
+            B2.WorldDraw(_physicsWorld.WorldId, drawPtr);
+    }
+
+    public void Dispose()
+    {
+        if (_contextHandle.IsAllocated)
+            _contextHandle.Free();
     }
 
     private void InitializeDebugDraw()
@@ -102,6 +115,9 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase
         _debugDraw.DrawStringFcn = &DrawStringCallback;
     }
 
+    private static DrawContext GetContext(void* context)
+        => (DrawContext)GCHandle.FromIntPtr((nint)context).Target!;
+
     private static Color ToColor(B2.HexColor hex)
     {
         uint c = (uint)hex;
@@ -111,39 +127,33 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase
         return new Color(r, g, b, 200);
     }
 
-    // Converts a world-space point to screen space when a camera is active.
-    private static Vector2 W2S(float wx, float wy)
-    {
-        var cam = _activeCamera;
-        return cam != null ? cam.WorldToScreen(new Vector2(wx, wy)) : new Vector2(wx, wy);
-    }
+    private static Vector2 W2S(DrawContext ctx, float wx, float wy)
+        => ctx.Camera != null ? ctx.Camera.WorldToScreen(new Vector2(wx, wy)) : new Vector2(wx, wy);
 
-    // Scales a world-space length (radius, axis length, point size) by camera zoom.
-    private static float WScale(float worldLength)
-    {
-        var cam = _activeCamera;
-        return cam != null ? worldLength * cam.Zoom : worldLength;
-    }
+    private static float WScale(DrawContext ctx, float worldLength)
+        => ctx.Camera != null ? worldLength * ctx.Camera.Zoom : worldLength;
 
     [UnmanagedCallersOnly]
     private static void DrawPolygonCallback(B2.Vec2* vertices, int vertexCount, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer || vertexCount < 2) return;
+        var ctx = GetContext(context);
+        if (vertexCount < 2) return;
         var c = ToColor(color);
 
         for (int i = 0; i < vertexCount; i++)
         {
             int next = (i + 1) % vertexCount;
-            var a = W2S(vertices[i].x, vertices[i].y);
-            var b = W2S(vertices[next].x, vertices[next].y);
-            renderer.DrawLine(a.X, a.Y, b.X, b.Y, c, 1f);
+            var a = W2S(ctx, vertices[i].x, vertices[i].y);
+            var b = W2S(ctx, vertices[next].x, vertices[next].y);
+            ctx.Renderer.DrawLine(a.X, a.Y, b.X, b.Y, c, 1f);
         }
     }
 
     [UnmanagedCallersOnly]
     private static void DrawSolidPolygonCallback(B2.Transform xf, B2.Vec2* vertices, int vertexCount, float radius, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer || vertexCount < 2) return;
+        var ctx = GetContext(context);
+        if (vertexCount < 2) return;
         var c = ToColor(color);
 
         for (int i = 0; i < vertexCount; i++)
@@ -151,85 +161,120 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase
             var world = B2.TransformPoint(xf, vertices[i]);
             int next = (i + 1) % vertexCount;
             var worldNext = B2.TransformPoint(xf, vertices[next]);
-            var a = W2S(world.x, world.y);
-            var b = W2S(worldNext.x, worldNext.y);
-            renderer.DrawLine(a.X, a.Y, b.X, b.Y, c, 2f);
+            var a = W2S(ctx, world.x, world.y);
+            var b = W2S(ctx, worldNext.x, worldNext.y);
+            ctx.Renderer.DrawLine(a.X, a.Y, b.X, b.Y, c, 2f);
         }
     }
 
     [UnmanagedCallersOnly]
     private static void DrawCircleCallback(B2.Vec2 center, float radius, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer) return;
-        var s = W2S(center.x, center.y);
-        renderer.DrawCircleOutline(s.X, s.Y, WScale(radius), ToColor(color), 1f);
+        var ctx = GetContext(context);
+        var s = W2S(ctx, center.x, center.y);
+        ctx.Renderer.DrawCircleOutline(s.X, s.Y, WScale(ctx, radius), ToColor(color), 1f);
     }
 
     [UnmanagedCallersOnly]
     private static void DrawSolidCircleCallback(B2.Transform xf, float radius, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer) return;
+        var ctx = GetContext(context);
         var c = ToColor(color);
-        var s = W2S(xf.p.x, xf.p.y);
-        var sr = WScale(radius);
-        renderer.DrawCircleOutline(s.X, s.Y, sr, c, 2f);
+        var s = W2S(ctx, xf.p.x, xf.p.y);
+        var sr = WScale(ctx, radius);
+        ctx.Renderer.DrawCircleOutline(s.X, s.Y, sr, c, 2f);
 
         var xAxis = B2.RotGetXAxis(xf.q);
-        var tip = W2S(xf.p.x + xAxis.x * radius, xf.p.y + xAxis.y * radius);
-        renderer.DrawLine(s.X, s.Y, tip.X, tip.Y, c, 1.5f);
+        var tip = W2S(ctx, xf.p.x + xAxis.x * radius, xf.p.y + xAxis.y * radius);
+        ctx.Renderer.DrawLine(s.X, s.Y, tip.X, tip.Y, c, 1.5f);
     }
 
     [UnmanagedCallersOnly]
     private static void DrawSolidCapsuleCallback(B2.Vec2 p1, B2.Vec2 p2, float radius, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer) return;
+        var ctx = GetContext(context);
         var c = ToColor(color);
-        var s1 = W2S(p1.x, p1.y);
-        var s2 = W2S(p2.x, p2.y);
-        var sr = WScale(radius);
-
-        renderer.DrawCircleOutline(s1.X, s1.Y, sr, c, 2f);
-        renderer.DrawCircleOutline(s2.X, s2.Y, sr, c, 2f);
+        var sr = WScale(ctx, radius);
 
         float dx = p2.x - p1.x;
         float dy = p2.y - p1.y;
         float len = MathF.Sqrt(dx * dx + dy * dy);
-        if (len > 0f)
+
+        if (len < float.Epsilon)
         {
-            float px = -dy / len * radius;
-            float py = dx / len * radius;
-            var la = W2S(p1.x + px, p1.y + py);
-            var lb = W2S(p2.x + px, p2.y + py);
-            var ra = W2S(p1.x - px, p1.y - py);
-            var rb = W2S(p2.x - px, p2.y - py);
-            renderer.DrawLine(la.X, la.Y, lb.X, lb.Y, c, 2f);
-            renderer.DrawLine(ra.X, ra.Y, rb.X, rb.Y, c, 2f);
+            // Degenerate capsule — draw as a single circle.
+            var s = W2S(ctx, p1.x, p1.y);
+            ctx.Renderer.DrawCircleOutline(s.X, s.Y, sr, c, 2f);
+            return;
+        }
+
+        // Perpendicular (outward) unit vector.
+        float px = -dy / len;
+        float py = dx / len;
+
+        // Barrel side lines.
+        var la = W2S(ctx, p1.x + px * radius, p1.y + py * radius);
+        var lb = W2S(ctx, p2.x + px * radius, p2.y + py * radius);
+        var ra = W2S(ctx, p1.x - px * radius, p1.y - py * radius);
+        var rb = W2S(ctx, p2.x - px * radius, p2.y - py * radius);
+        ctx.Renderer.DrawLine(la.X, la.Y, lb.X, lb.Y, c, 2f);
+        ctx.Renderer.DrawLine(ra.X, ra.Y, rb.X, rb.Y, c, 2f);
+
+        // Semicircular end-caps as polyline approximations (16 segments per half-circle).
+        const int segments = 16;
+        const float step = MathF.PI / segments;
+
+        // Angle of the axis from p1 toward p2.
+        float axisAngle = MathF.Atan2(dy, dx);
+
+        // Cap at p1: the outward half faces away from p2 (axisAngle + PI/2 → axisAngle + 3*PI/2).
+        float startAngle1 = axisAngle + MathF.PI / 2f;
+        var prev1 = W2S(ctx,
+            p1.x + MathF.Cos(startAngle1) * radius,
+            p1.y + MathF.Sin(startAngle1) * radius);
+        for (int i = 1; i <= segments; i++)
+        {
+            float a = startAngle1 + step * i;
+            var next = W2S(ctx, p1.x + MathF.Cos(a) * radius, p1.y + MathF.Sin(a) * radius);
+            ctx.Renderer.DrawLine(prev1.X, prev1.Y, next.X, next.Y, c, 2f);
+            prev1 = next;
+        }
+
+        // Cap at p2: the outward half faces away from p1 (axisAngle - PI/2 → axisAngle + PI/2).
+        float startAngle2 = axisAngle - MathF.PI / 2f;
+        var prev2 = W2S(ctx,
+            p2.x + MathF.Cos(startAngle2) * radius,
+            p2.y + MathF.Sin(startAngle2) * radius);
+        for (int i = 1; i <= segments; i++)
+        {
+            float a = startAngle2 + step * i;
+            var next = W2S(ctx, p2.x + MathF.Cos(a) * radius, p2.y + MathF.Sin(a) * radius);
+            ctx.Renderer.DrawLine(prev2.X, prev2.Y, next.X, next.Y, c, 2f);
+            prev2 = next;
         }
     }
 
     [UnmanagedCallersOnly]
     private static void DrawSegmentCallback(B2.Vec2 p1, B2.Vec2 p2, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer) return;
-        var a = W2S(p1.x, p1.y);
-        var b = W2S(p2.x, p2.y);
-        renderer.DrawLine(a.X, a.Y, b.X, b.Y, ToColor(color), 1f);
+        var ctx = GetContext(context);
+        var a = W2S(ctx, p1.x, p1.y);
+        var b = W2S(ctx, p2.x, p2.y);
+        ctx.Renderer.DrawLine(a.X, a.Y, b.X, b.Y, ToColor(color), 1f);
     }
 
     [UnmanagedCallersOnly]
     private static void DrawTransformCallback(B2.Transform xf, void* context)
     {
-        if (_activeRenderer is not { } renderer) return;
+        var ctx = GetContext(context);
         const float axisScreenLength = 20f;
 
         var xAxis = B2.RotGetXAxis(xf.q);
         var yAxis = B2.RotGetYAxis(xf.q);
-        var origin = W2S(xf.p.x, xf.p.y);
+        var origin = W2S(ctx, xf.p.x, xf.p.y);
 
-        // Project a unit step along each axis into screen space, then extend to a fixed
-        // screen-pixel length so the gizmo stays visible at any zoom level.
-        var xScreenDir = W2S(xf.p.x + xAxis.x, xf.p.y + xAxis.y) - origin;
-        var yScreenDir = W2S(xf.p.x + yAxis.x, xf.p.y + yAxis.y) - origin;
+        var xScreenDir = W2S(ctx, xf.p.x + xAxis.x, xf.p.y + xAxis.y) - origin;
+        var yScreenDir = W2S(ctx, xf.p.x + yAxis.x, xf.p.y + yAxis.y) - origin;
 
         float xLen = xScreenDir.Length();
         float yLen = yScreenDir.Length();
@@ -237,24 +282,25 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase
         var xTip = xLen > 0f ? origin + xScreenDir / xLen * axisScreenLength : origin;
         var yTip = yLen > 0f ? origin + yScreenDir / yLen * axisScreenLength : origin;
 
-        renderer.DrawLine(origin.X, origin.Y, xTip.X, xTip.Y, new Color(255, 0, 0, 200), 2f);
-        renderer.DrawLine(origin.X, origin.Y, yTip.X, yTip.Y, new Color(0, 255, 0, 200), 2f);
+        ctx.Renderer.DrawLine(origin.X, origin.Y, xTip.X, xTip.Y, new Color(255, 0, 0, 200), 2f);
+        ctx.Renderer.DrawLine(origin.X, origin.Y, yTip.X, yTip.Y, new Color(0, 255, 0, 200), 2f);
     }
 
     [UnmanagedCallersOnly]
     private static void DrawPointCallback(B2.Vec2 p, float size, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer) return;
-        var s = W2S(p.x, p.y);
-        renderer.DrawCircleFilled(s.X, s.Y, WScale(size * 0.5f), ToColor(color));
+        var ctx = GetContext(context);
+        var s = W2S(ctx, p.x, p.y);
+        ctx.Renderer.DrawCircleFilled(s.X, s.Y, WScale(ctx, size * 0.5f), ToColor(color));
     }
 
     [UnmanagedCallersOnly]
     private static void DrawStringCallback(B2.Vec2 p, byte* str, B2.HexColor color, void* context)
     {
-        if (_activeRenderer is not { } renderer || str == null) return;
+        var ctx = GetContext(context);
+        if (!ctx.DrawStrings || str == null) return;
         string text = Marshal.PtrToStringUTF8((nint)str) ?? string.Empty;
-        var s = W2S(p.x, p.y);
-        renderer.DrawText(text, s.X, s.Y, ToColor(color));
+        var s = W2S(ctx, p.x, p.y);
+        ctx.Renderer.DrawText(text, s.X, s.Y, ToColor(color));
     }
 }

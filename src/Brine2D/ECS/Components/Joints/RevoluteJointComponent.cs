@@ -18,41 +18,53 @@ public sealed class RevoluteJointComponent : JointComponent
 
     public float DampingRatio
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointSetSpringDampingRatio(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
     public bool EnableLimit
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointEnableLimit(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
     public bool EnableMotor
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointEnableMotor(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
     public bool EnableSpring
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointEnableSpring(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -61,11 +73,14 @@ public sealed class RevoluteJointComponent : JointComponent
     /// </summary>
     public float Hertz
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointSetSpringHertz(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -74,11 +89,14 @@ public sealed class RevoluteJointComponent : JointComponent
     /// </summary>
     public float LowerAngle
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointSetLimits(JointId, value, UpperAngle);
+            else
+                IsDirty = true;
         }
     }
 
@@ -87,12 +105,15 @@ public sealed class RevoluteJointComponent : JointComponent
     /// </summary>
     public float MaxMotorTorque
     {
-        get => field;
+        get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointSetMaxMotorTorque(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -101,11 +122,14 @@ public sealed class RevoluteJointComponent : JointComponent
     /// </summary>
     public float MotorSpeed
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointSetMotorSpeed(JointId, value);
+            else
+                IsDirty = true;
         }
     }
 
@@ -116,7 +140,7 @@ public sealed class RevoluteJointComponent : JointComponent
 
     public float ReferenceAngle
     {
-        get => field;
+        get;
         set
         {
             field = value;
@@ -129,11 +153,14 @@ public sealed class RevoluteJointComponent : JointComponent
     /// </summary>
     public float UpperAngle
     {
-        get => field;
+        get;
         set
         {
             field = value;
-            IsDirty = true;
+            if (IsLive)
+                B2.RevoluteJointSetLimits(JointId, LowerAngle, value);
+            else
+                IsDirty = true;
         }
     }
 

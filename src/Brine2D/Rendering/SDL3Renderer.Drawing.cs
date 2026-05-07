@@ -155,18 +155,18 @@ internal sealed partial class SDL3Renderer
             origin: Vector2.Zero);
     }
 
-    public void DrawRectangleFilled(float x, float y, float width, float height, Color color)
+    public void DrawRectangleFilled(float x, float y, float width, float height, Color color, float rotation = 0f)
     {
         ThrowIfNotInitialized();
         if (!_frameManager.HasActiveFrame) return;
-        _batchRenderer.DrawRectangleFilled(x, y, width, height, color, _flushBatchAction);
+        _batchRenderer.DrawRectangleFilled(x, y, width, height, color, rotation, _flushBatchAction);
     }
 
-    public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1)
+    public void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f, float rotation = 0f)
     {
         ThrowIfNotInitialized();
         if (!_frameManager.HasActiveFrame) return;
-        _batchRenderer.DrawRectangleOutline(x, y, width, height, color, thickness, _flushBatchAction);
+        _batchRenderer.DrawRectangleOutline(x, y, width, height, color, thickness, rotation, _flushBatchAction);
     }
 
     public void DrawLine(float x1, float y1, float x2, float y2, Color color, float thickness = 1)
