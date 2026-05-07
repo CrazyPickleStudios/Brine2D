@@ -4,6 +4,7 @@ using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Physics;
 using Brine2D.Systems.Physics;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Brine2D.Tests.Systems.Physics;
 
@@ -19,8 +20,8 @@ public class KinematicCharacterSystemExtendedTests : TestBase, IDisposable
     private (Box2DPhysicsSystem physics, KinematicCharacterSystem pre, KinematicCharacterSystem post) CreateSystems()
     {
         var physics = new Box2DPhysicsSystem(_physicsWorld);
-        var pre = new KinematicCharacterSystem(_physicsWorld, isPostStep: false);
-        var post = new KinematicCharacterSystem(_physicsWorld, isPostStep: true);
+        var pre = new KinematicCharacterSystem(_physicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
+        var post = new KinematicCharacterSystem(_physicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
         return (physics, pre, post);
     }
 
@@ -268,8 +269,8 @@ public class KinematicCharacterSystemExtendedTests : TestBase, IDisposable
         var world = CreateTestWorld();
         using var customWorld = new PhysicsWorld(new Vector2(980f, 0f));
         var physics = new Box2DPhysicsSystem(customWorld);
-        var pre = new KinematicCharacterSystem(customWorld, isPostStep: false);
-        var post = new KinematicCharacterSystem(customWorld, isPostStep: true);
+        var pre = new KinematicCharacterSystem(customWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
+        var post = new KinematicCharacterSystem(customWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
 
         // "Floor" is a vertical wall to the right (X=60, width=20 → left edge X=50).
         world.CreateEntity()

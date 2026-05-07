@@ -1,10 +1,11 @@
-using System.Numerics;
 using Brine2D.Collision;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Physics;
 using Brine2D.Systems.Physics;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Numerics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
@@ -20,8 +21,8 @@ public class KinematicCharacterSystemTests : TestBase, IDisposable
     {
         var world = CreateTestWorld();
         var physics = new Box2DPhysicsSystem(_physicsWorld);
-        var pre = new KinematicCharacterSystem(_physicsWorld, isPostStep: false);
-        var post = new KinematicCharacterSystem(_physicsWorld, isPostStep: true);
+        var pre = new KinematicCharacterSystem(_physicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
+        var post = new KinematicCharacterSystem(_physicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
         return (world, physics, pre, post);
     }
 
