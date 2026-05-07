@@ -6,6 +6,7 @@ using Brine2D.Core;
 
 namespace Brine2D.Tests.Physics;
 
+[Collection("Physics")]
 public class OverlapBodyDeduplicatonTests : TestBase, IDisposable
 {
     private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
