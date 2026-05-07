@@ -42,12 +42,8 @@ public class PhysicsIntegrationTests : PhysicsTestBase
         for (int i = 0; i < count; i++)
             system.FixedUpdate(world, FixedTime);
     }
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
 
-    private readonly PhysicsWorld _physicsWorld = new();
-    
-    // ── Collision events ──────────────────────────────────────────────────────
-
+    // Collision events
     [Fact]
     public void OnCollisionEnter_ThenExit_FiresInOrder()
     {
