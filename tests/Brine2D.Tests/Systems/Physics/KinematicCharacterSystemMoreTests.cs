@@ -32,9 +32,6 @@ public class KinematicCharacterSystemMoreTests : PhysicsTestBase
             post.FixedUpdate(world, FixedTime);
         }
     }
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
 
     // -------------------------------------------------------------------------
     // OnAirborne event

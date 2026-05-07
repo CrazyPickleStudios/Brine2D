@@ -11,16 +11,13 @@ namespace Brine2D.Tests.Systems.Physics;
 [Collection("Physics")]
 public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-    private readonly PhysicsWorld _physicsWorld = new();
-    
     // ── Collision events ──────────────────────────────────────────────────────
 
     [Fact]
     public void OnCollisionEnter_TwoBodiesOverlapping_Fires()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         bool fired = false;
 
         world.CreateEntity()
@@ -47,7 +44,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void OnCollisionExit_AfterBodyRemoved_Fires()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         bool exitFired = false;
 
         var entityA = world.CreateEntity()
@@ -81,7 +78,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void OnTriggerEnter_TriggerAndSolidOverlapping_Fires()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         bool fired = false;
 
         world.CreateEntity()
@@ -109,7 +106,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void OnTriggerExit_AfterBodyRemoved_Fires()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         bool exitFired = false;
 
         var trigger = world.CreateEntity()
@@ -144,7 +141,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void CollidingEntities_AfterBothExitEvents_IsEmpty()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -178,7 +175,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void IgnoreCollision_AfterBodyDestroyed_PairPurged()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -192,14 +189,14 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
 
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
         var bodyB = entityB.GetComponent<PhysicsBodyComponent>()!;
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
-        Assert.True(_physicsWorld.IsCollisionIgnored(bodyA.BodyId.index1, bodyB.BodyId.index1));
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
+        Assert.True(PhysicsWorld.IsCollisionIgnored(bodyA.BodyId.index1, bodyB.BodyId.index1));
 
         entityA.Destroy();
         world.Flush();
         system.FixedUpdate(world, FixedTime);
 
-        Assert.False(_physicsWorld.IsCollisionIgnored(bodyA.BodyId.index1, bodyB.BodyId.index1));
+        Assert.False(PhysicsWorld.IsCollisionIgnored(bodyA.BodyId.index1, bodyB.BodyId.index1));
     }
 
     // ── Live body-type switch ─────────────────────────────────────────────────
@@ -208,7 +205,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void BodyType_LiveSwitch_StaticToDynamic_BodyBecomesAffectedByGravity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -236,7 +233,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void BodyType_LiveSwitch_FlushesContactPairs()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         int exitCount = 0;
 
         var entityA = world.CreateEntity()
@@ -271,7 +268,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void IsBullet_LiveToggle_RebuildPreservesVelocity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -296,7 +293,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void GravityOverride_OppositeToWorldGravity_BodyMovesUp()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 500f))
@@ -318,7 +315,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void GravityOverride_SetToNull_RestoresWorldGravity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -349,7 +346,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void FreezePositionY_Dynamic_YAxisStaysFixed()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
@@ -372,7 +369,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void FreezePositionX_Dynamic_XAxisStaysFixed()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 0f))
@@ -397,7 +394,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void IsOneWayPlatform_BodyFallingFromAbove_Collides()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         // Platform at y=200, solid from above (normal (0,-1) in Y-down space).
         world.CreateEntity()
@@ -428,7 +425,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void ShouldCollide_ReturningFalse_VetoesContact()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         bool enterFired = false;
 
         var entityA = world.CreateEntity()
@@ -462,7 +459,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void ChainShape_StaticBody_CreatesValidBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -506,7 +503,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void RaycastClosest_AgainstStaticBox_ReturnsHit()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
@@ -519,7 +516,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
         world.Flush();
         system.FixedUpdate(world, FixedTime);
 
-        var hit = _physicsWorld.RaycastClosest(new Vector2(0f, 0f), new Vector2(0f, 1f), 500f);
+        var hit = PhysicsWorld.RaycastClosest(new Vector2(0f, 0f), new Vector2(0f, 1f), 500f);
 
         Assert.NotNull(hit);
         Assert.True(hit.Value.Distance > 0f);
@@ -530,7 +527,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void RaycastClosest_NoBodyInPath_ReturnsNull()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(1000f, 1000f))
@@ -543,7 +540,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
         world.Flush();
         system.FixedUpdate(world, FixedTime);
 
-        var hit = _physicsWorld.RaycastClosest(new Vector2(0f, 0f), new Vector2(0f, 1f), 100f);
+        var hit = PhysicsWorld.RaycastClosest(new Vector2(0f, 0f), new Vector2(0f, 1f), 100f);
 
         Assert.Null(hit);
     }
@@ -552,7 +549,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
     public void RaycastAll_MultipleTargets_ReturnsAllHits()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         for (int i = 1; i <= 3; i++)
         {
@@ -569,7 +566,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
         system.FixedUpdate(world, FixedTime);
 
         var results = new RaycastHit[10];
-        int count = _physicsWorld.RaycastAll(new Vector2(0f, 0f), new Vector2(0f, 1f), 500f, results);
+        int count = PhysicsWorld.RaycastAll(new Vector2(0f, 0f), new Vector2(0f, 1f), 500f, results);
 
         Assert.Equal(3, count);
     }

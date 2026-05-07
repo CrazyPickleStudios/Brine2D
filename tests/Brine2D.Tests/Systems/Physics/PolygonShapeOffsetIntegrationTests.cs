@@ -15,15 +15,12 @@ public class PolygonShapeOffsetIntegrationTests : PhysicsTestBase
         new(-halfSize, -halfSize), new(halfSize, -halfSize),
         new(halfSize, halfSize),   new(-halfSize, halfSize)
     ];
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
     
     [Fact]
     public void PolygonShape_WithOffset_BuildsValidLiveBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(500f, 500f))
@@ -44,7 +41,7 @@ public class PolygonShapeOffsetIntegrationTests : PhysicsTestBase
     public void PolygonShape_WithOffset_AabbCenterIsShifted()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         const float offsetX = 100f;
 
         world.CreateEntity()
@@ -83,7 +80,7 @@ public class PolygonShapeOffsetIntegrationTests : PhysicsTestBase
     public void PolygonShape_SubShape_WithOffset_BuildsValidBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(500f, 500f))
@@ -105,7 +102,7 @@ public class PolygonShapeOffsetIntegrationTests : PhysicsTestBase
     public void PolygonShape_ZeroOffset_MatchesNoOffsetShape()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(500f, 500f))

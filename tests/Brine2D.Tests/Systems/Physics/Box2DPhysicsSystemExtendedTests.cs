@@ -23,10 +23,7 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
         for (int i = 0; i < count; i++)
             system.FixedUpdate(world, FixedTime);
     }
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
 
-    private readonly PhysicsWorld _physicsWorld = new();
-    
     // -------------------------------------------------------------------------
     // IgnoreCollision / RestoreCollision
     // -------------------------------------------------------------------------
@@ -64,7 +61,7 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
         bool collisionFired = false;
         bodyB.OnCollisionEnter += (_, _) => collisionFired = true;
 
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
 
         Step(world, system, 5);
 
@@ -99,13 +96,13 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
         var bodyB = entityB.GetComponent<PhysicsBodyComponent>()!;
 
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
         Step(world, system, 5);
 
         bool collisionFired = false;
         bodyB.OnCollisionEnter += (_, _) => collisionFired = true;
 
-        _physicsWorld.RestoreCollision(bodyA, bodyB);
+        PhysicsWorld.RestoreCollision(bodyA, bodyB);
         Step(world, system, 30);
 
         Assert.True(collisionFired, "After RestoreCollision the bodies should collide again.");
@@ -139,14 +136,14 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
         var bodyB = entityB.GetComponent<PhysicsBodyComponent>()!;
 
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
-        Assert.True(_physicsWorld.HasIgnoredPairs);
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
+        Assert.True(PhysicsWorld.HasIgnoredPairs);
 
         entityB.Destroy();
         world.Flush();
         Step(world, system);
 
-        Assert.False(_physicsWorld.HasIgnoredPairs,
+        Assert.False(PhysicsWorld.HasIgnoredPairs,
             "Destroying a body must purge its ignored pairs so the recycled slot starts clean.");
     }
 
@@ -217,17 +214,16 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
 
         world.Flush();
 
-        // Diagnostic: install a user pre-solve filter to observe what Box2D reports.
         var preSolveCalls = new System.Collections.Generic.List<(bool aIsOWP, bool bIsOWP, float normalX, float normalY)>();
-        _physicsWorld.SetPreSolveFilter(c =>
+        PhysicsWorld.SetPreSolveFilter(c =>
         {
             preSolveCalls.Add((c.BodyA.IsOneWayPlatform, c.BodyB.IsOneWayPlatform, c.Normal.X, c.Normal.Y));
-            return true; // don't interfere — just observe
+            return true;
         });
 
         Step(world, system, 15);
 
-        _physicsWorld.SetPreSolveFilter(null);
+        PhysicsWorld.SetPreSolveFilter(null);
 
         var platformBody = platformEntity.GetComponent<PhysicsBodyComponent>()!;
         var finalY = dynEntity.GetComponent<TransformComponent>()!.Position.Y;
@@ -665,8 +661,8 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
     {
         var world = CreateTestWorld();
         var system = CreateSystem();
-        var pre = new KinematicCharacterSystem(_physicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
-        var post = new KinematicCharacterSystem(_physicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
+        var pre = new KinematicCharacterSystem(PhysicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
+        var post = new KinematicCharacterSystem(PhysicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
 
         // Wall at X=100, width=20 → left edge X=90.
         world.CreateEntity()
@@ -738,7 +734,7 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
 
         var body = dynEntity.GetComponent<PhysicsBodyComponent>()!;
         var buffer = new ContactPair[8];
-        int count = _physicsWorld.GetContacts(body, buffer, out _);
+        int count = PhysicsWorld.GetContacts(body, buffer, out _);
 
         Assert.True(count > 0, "GetContacts should return at least one contact when resting on a surface.");
     }
@@ -770,7 +766,7 @@ public class Box2DPhysicsSystemExtendedTests : PhysicsTestBase
 
         var body = dynEntity.GetComponent<PhysicsBodyComponent>()!;
         var results = new List<ContactPair>();
-        _physicsWorld.GetContactsAll(body, results);
+        PhysicsWorld.GetContactsAll(body, results);
 
         Assert.NotEmpty(results);
     }
