@@ -13,6 +13,7 @@ public class PhysicsWorldTests : IDisposable
     {
         foreach (var w in _worlds)
             w.Dispose();
+        PhysicsWorld.ResetForTesting();
     }
 
     private PhysicsWorld Create(Vector2? gravity = null, float ppm = 100f)

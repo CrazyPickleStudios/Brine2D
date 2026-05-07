@@ -10,22 +10,13 @@ using Brine2D.Systems.Physics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class Box2DPhysicsSystemTests : TestBase, IDisposable
+public class Box2DPhysicsSystemTests : PhysicsTestBase, IDisposable
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose()
-    {
-        _physicsWorld.Dispose();
-    }
-
     [Fact]
     public void FixedUpdate_DynamicBody_FallsWithGravity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 0f))
@@ -43,7 +34,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_StaticBody_DoesNotMove()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 200f))
@@ -65,7 +56,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_BodyCreated_MarksNotDirty()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -84,7 +75,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_BoxShape_CreatesBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -102,7 +93,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_CollisionBetweenTwoBodies_DispatchesEvents()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         bool collisionDetected = false;
 
@@ -130,7 +121,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_DynamicBody_AcquiresDownwardVelocityFromGravity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 0f))
@@ -147,7 +138,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_TriggerSensor_DispatchesSensorEvents()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         bool triggerDetected = false;
 
@@ -176,7 +167,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_ColliderWithOffset_AppliesOffset()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 100f))
@@ -198,7 +189,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_PolygonShape_CreatesBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -224,7 +215,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_BulletAndFixedRotation_AppliedToBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -248,7 +239,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void FixedUpdate_Restitution_AppliedToShape()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -272,7 +263,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void ApplyMass_MixedSolidAndTriggerSubShapes_MassMatchesConfigured()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         const float targetMass = 5f;
 
@@ -298,7 +289,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void ApplyMass_AllTriggerBody_MassMatchesConfigured()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         const float targetMass = 3f;
 
@@ -326,7 +317,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void GetAllBodies_AfterFixedUpdate_ReturnsAllRegisteredBodies()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         for (int i = 0; i < 3; i++)
         {
@@ -341,7 +332,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
         world.Flush();
         system.FixedUpdate(world, FixedTime);
 
-        var bodies = _physicsWorld.GetAllBodies().ToList();
+        var bodies = PhysicsWorld.GetAllBodies().ToList();
 
         Assert.Equal(3, bodies.Count);
     }
@@ -349,7 +340,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     [Fact]
     public void GetAllBodies_BeforeSystemInitialized_ReturnsEmpty()
     {
-        var bodies = _physicsWorld.GetAllBodies().ToList();
+        var bodies = PhysicsWorld.GetAllBodies().ToList();
 
         Assert.Empty(bodies);
     }
@@ -358,7 +349,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void GetSleepingBodies_AllBodiesAwake_ReturnsEmpty()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -371,7 +362,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
         system.FixedUpdate(world, FixedTime);
 
         // Body just started moving under gravity — it is awake.
-        var sleeping = _physicsWorld.GetSleepingBodies().ToList();
+        var sleeping = PhysicsWorld.GetSleepingBodies().ToList();
 
         Assert.Empty(sleeping);
     }
@@ -379,7 +370,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     [Fact]
     public void GetSleepingBodies_BeforeSystemInitialized_ReturnsEmpty()
     {
-        var sleeping = _physicsWorld.GetSleepingBodies().ToList();
+        var sleeping = PhysicsWorld.GetSleepingBodies().ToList();
 
         Assert.Empty(sleeping);
     }
@@ -390,7 +381,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void DispatchStayEvents_TwoBodiesInContact_FiresCollisionStay()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         bool stayFired = false;
 
@@ -423,7 +414,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void OverlapBody_OverlappingBodies_ReturnsOtherBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         // Two boxes placed so their AABBs overlap.
         world.CreateEntity()
@@ -447,7 +438,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
 
         var bodyA = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
         var results = new List<OverlapHit>();
-        _physicsWorld.OverlapBodyAll(bodyA, results);
+        PhysicsWorld.OverlapBodyAll(bodyA, results);
 
         Assert.Single(results);
         Assert.NotEqual(bodyA, results[0].Component);
@@ -457,7 +448,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void OverlapBodyFirst_NonOverlappingBodies_ReturnsNull()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -479,7 +470,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
         system.FixedUpdate(world, FixedTime);
 
         var bodyA = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        var result = _physicsWorld.OverlapBodyFirst(bodyA);
+        var result = PhysicsWorld.OverlapBodyFirst(bodyA);
 
         Assert.Null(result);
     }
@@ -488,7 +479,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
     public void UnregisterJointsForBody_AfterBodyDestroyed_NoStaleJointsOnOtherBody()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -523,7 +514,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
 
         // Verify the joint is live from both sides before destroying.
         var jointsOnB = new JointComponent[4];
-        int countBefore = _physicsWorld.GetJoints(bodyB, jointsOnB);
+        int countBefore = PhysicsWorld.GetJoints(bodyB, jointsOnB);
         Assert.Equal(1, countBefore);
 
         // Destroy entity A — this triggers UnregisterJointsForBody for body A's index.
@@ -532,7 +523,7 @@ public class Box2DPhysicsSystemTests : TestBase, IDisposable
         system.FixedUpdate(world, FixedTime);
 
         // Body B's joint registry must now be empty — no stale dead joint.
-        int countAfter = _physicsWorld.GetJoints(bodyB, jointsOnB);
+        int countAfter = PhysicsWorld.GetJoints(bodyB, jointsOnB);
         Assert.Equal(0, countAfter);
     }
 }

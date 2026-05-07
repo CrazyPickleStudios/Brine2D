@@ -9,8 +9,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class KinematicCharacterSystemExtendedTests : TestBase
+public class KinematicCharacterSystemExtendedTests : TestBase, IDisposable
 {
+    public void Dispose()
+    {
+        PhysicsWorld.ResetForTesting();
+    }
+
     private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
 
     private (PhysicsWorld physicsWorld, Box2DPhysicsSystem physics, KinematicCharacterSystem pre, KinematicCharacterSystem post) CreateSystems()
