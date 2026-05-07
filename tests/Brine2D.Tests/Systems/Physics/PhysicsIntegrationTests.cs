@@ -236,7 +236,7 @@ public class PhysicsIntegrationTests : PhysicsTestBase
     // throws InvalidProgramException due to non-blittable bool return. These tests
     // are skipped until the upstream binding is updated.
 
-    [Fact]
+    [Fact(Skip = "ShouldCollide uses [UnmanagedCallersOnly] with non-blittable bool return - crashes JIT in CI")]
     public void ShouldCollide_ReturnsFalse_SuppressesContact()
     {
         var world = CreateTestWorld();
@@ -263,7 +263,7 @@ public class PhysicsIntegrationTests : PhysicsTestBase
         Assert.False(collisionFired);
     }
 
-    [Fact]
+    [Fact(Skip = "SetCustomCollisionFilter uses [UnmanagedCallersOnly] with non-blittable bool return - crashes JIT in CI")]
     public void SetCustomCollisionFilter_AffectsAllPairs()
     {
         var world = CreateTestWorld();
