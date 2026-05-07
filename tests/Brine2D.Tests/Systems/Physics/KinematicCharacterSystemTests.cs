@@ -10,19 +10,16 @@ using System.Numerics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class KinematicCharacterSystemTests : TestBase, IDisposable
+public class KinematicCharacterSystemTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-    private readonly PhysicsWorld _physicsWorld = new(new Vector2(0f, 0f));
-
-    public void Dispose() => _physicsWorld.Dispose();
+    public KinematicCharacterSystemTests() : base(gravity: Vector2.Zero) { }
 
     private (IEntityWorld world, Box2DPhysicsSystem physics, KinematicCharacterSystem preStep, KinematicCharacterSystem postStep) CreateSystems()
     {
         var world = CreateTestWorld();
-        var physics = new Box2DPhysicsSystem(_physicsWorld);
-        var pre = new KinematicCharacterSystem(_physicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
-        var post = new KinematicCharacterSystem(_physicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
+        var physics = new Box2DPhysicsSystem(PhysicsWorld);
+        var pre = new KinematicCharacterSystem(PhysicsWorld, isPostStep: false, NullLogger<KinematicCharacterSystem>.Instance);
+        var post = new KinematicCharacterSystem(PhysicsWorld, isPostStep: true, NullLogger<KinematicCharacterSystem>.Instance);
         return (world, physics, pre, post);
     }
 
