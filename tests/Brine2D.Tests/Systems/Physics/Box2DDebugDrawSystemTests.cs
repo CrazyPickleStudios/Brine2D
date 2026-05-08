@@ -1,30 +1,22 @@
 ﻿using Brine2D.ECS.Systems;
-using Brine2D.Physics;
 using Brine2D.Systems.Physics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class Box2DDebugDrawSystemTests : IDisposable
+public class Box2DDebugDrawSystemTests : PhysicsTestBase
 {
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose()
-    {
-        _physicsWorld.Dispose();
-    }
-
     [Fact]
     public void RenderOrder_IsDebugPlusOne()
     {
-        var system = new Box2DDebugDrawSystem(_physicsWorld);
+        var system = new Box2DDebugDrawSystem(PhysicsWorld);
         Assert.Equal(SystemRenderOrder.Debug + 1, system.RenderOrder);
     }
 
     [Fact]
     public void DefaultProperties_AreCorrect()
     {
-        var system = new Box2DDebugDrawSystem(_physicsWorld);
+        var system = new Box2DDebugDrawSystem(PhysicsWorld);
 
         Assert.True(system.DrawShapes);
         Assert.True(system.DrawJoints);
@@ -37,7 +29,7 @@ public class Box2DDebugDrawSystemTests : IDisposable
     [Fact]
     public void Properties_CanBeToggled()
     {
-        var system = new Box2DDebugDrawSystem(_physicsWorld);
+        var system = new Box2DDebugDrawSystem(PhysicsWorld);
 
         system.DrawShapes = false;
         system.DrawBounds = true;
@@ -55,14 +47,14 @@ public class Box2DDebugDrawSystemTests : IDisposable
     [Fact]
     public void IsEnabled_DefaultTrue()
     {
-        var system = new Box2DDebugDrawSystem(_physicsWorld);
+        var system = new Box2DDebugDrawSystem(PhysicsWorld);
         Assert.True(system.IsEnabled);
     }
 
     [Fact]
     public void IsEnabled_CanBeDisabled()
     {
-        var system = new Box2DDebugDrawSystem(_physicsWorld);
+        var system = new Box2DDebugDrawSystem(PhysicsWorld);
         system.IsEnabled = false;
         Assert.False(system.IsEnabled);
     }
