@@ -25,7 +25,7 @@ jobs:
       run: dotnet build --no-restore --configuration Release
 
     - name: Diagnose PhysicsEngineAdvancedTests
-      run: dotnet test tests/Brine2D.Tests --no-build --configuration Release --filter "FullyQualifiedName~Brine2D.Tests.Systems.Physics.PhysicsEngineAdvancedTests" --verbosity detailed
+      run: dotnet test tests/Brine2D.Tests --no-build --configuration Release --filter "FullyQualifiedName=Brine2D.Tests.Systems.Physics.PhysicsEngineAdvancedTests.GetSleepingBodies_SettledDynamicBody_AppearsInList" --verbosity normal
       
     - name: Test
       run: dotnet test tests/Brine2D.Tests --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
