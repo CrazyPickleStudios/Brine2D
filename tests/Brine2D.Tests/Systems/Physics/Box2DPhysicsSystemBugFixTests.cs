@@ -1,6 +1,5 @@
 using System.Numerics;
 using Box2D.NET.Bindings;
-using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Physics;
@@ -9,22 +8,13 @@ using Brine2D.Systems.Physics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
+public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
-    // -------------------------------------------------------------------------
-    // Fix 1 – ChainShape double-offset
-    // -------------------------------------------------------------------------
-
     [Fact]
     public void ChainShape_WithColliderOffset_BodyPositionMatchesTransformPlusOffset()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var offset = new Vector2(50f, 0f);
         var origin = new Vector2(100f, 200f);
@@ -46,7 +36,6 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
         var body = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
         var bodyPos = B2.BodyGetPosition(body.BodyId);
 
-        // The Box2D body origin must be at transform.Position + collider.Offset — not double that.
         Assert.Equal(origin.X + offset.X, bodyPos.x, 0.1f);
         Assert.Equal(origin.Y + offset.Y, bodyPos.y, 0.1f);
     }
@@ -55,7 +44,7 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
     public void ChainShape_ZeroOffset_BodyPositionMatchesTransform()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var origin = new Vector2(80f, 120f);
 
@@ -79,15 +68,11 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
         Assert.Equal(origin.Y, bodyPos.y, 0.1f);
     }
 
-    // -------------------------------------------------------------------------
-    // Fix 2 – Kinematic FreezePosition axes: velocity must be zero on frozen axis
-    // -------------------------------------------------------------------------
-
     [Fact]
     public void KinematicBody_FreezePositionX_VelocityXIsZeroAfterSync()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 100f))
@@ -103,7 +88,6 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
         var transform = entity.GetComponent<TransformComponent>()!;
         var body = entity.GetComponent<PhysicsBodyComponent>()!;
 
-        // Move along both axes next tick.
         transform.Position = new Vector2(200f, 200f);
         system.FixedUpdate(world, FixedTime);
 
@@ -116,7 +100,7 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
     public void KinematicBody_FreezePositionY_VelocityYIsZeroAfterSync()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 100f))
@@ -140,17 +124,12 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
         Assert.True(vel.x != 0f, "X velocity must be non-zero because X is not frozen.");
     }
 
-    // -------------------------------------------------------------------------
-    // Fix 3 – No double-decrement of _shouldCollideCount on component removal
-    // -------------------------------------------------------------------------
-
     [Fact]
     public void RemovingBodyComponent_WithShouldCollide_DoesNotBreakFilterForNewBodies()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
-        // Create a body with ShouldCollide so _shouldCollideCount becomes 1.
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -162,14 +141,10 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
         world.Flush();
         system.FixedUpdate(world, FixedTime);
 
-        // Remove the component — the system's DestroyBody runs, then OnRemoved fires.
-        // Before fix-3, OnBodyDestroyed could fire twice, decrementing _shouldCollideCount to -1.
         entity.RemoveComponent<PhysicsBodyComponent>();
         world.Flush();
         system.FixedUpdate(world, FixedTime);
 
-        // Now add a second body with ShouldCollide.  The filter callback must be installed
-        // (the count must be 1, not 0 from underflow masking a -1 + 2 = 1 coincidence).
         bool filterCalled = false;
         world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -199,7 +174,7 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
     public void RemovingBodyComponent_WithShouldCollide_CountNeverGoesNegative()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -215,9 +190,6 @@ public class Box2DPhysicsSystemBugFixTests : TestBase, IDisposable
         entity.RemoveComponent<PhysicsBodyComponent>();
         world.Flush();
 
-        // If the double-decrement bug is present, the next FixedUpdate would have thrown
-        // a Debug.Fail / Trace.TraceWarning for count-below-zero.
-        // Running without exception confirms the count stayed at 0 (not -1).
         var ex = Record.Exception(() => system.FixedUpdate(world, FixedTime));
         Assert.Null(ex);
     }

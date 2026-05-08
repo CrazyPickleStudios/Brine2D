@@ -1,5 +1,4 @@
 using System.Numerics;
-using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Physics;
@@ -9,15 +8,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class KinematicCharacterSystemExtendedTests : TestBase, IDisposable
+public class KinematicCharacterSystemExtendedTests : PhysicsTestBase
 {
-    public void Dispose()
-    {
-        PhysicsWorld.ResetForTesting();
-    }
-
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
     private (PhysicsWorld physicsWorld, Box2DPhysicsSystem physics, KinematicCharacterSystem pre, KinematicCharacterSystem post) CreateSystems()
     {
         var physicsWorld = new PhysicsWorld();
