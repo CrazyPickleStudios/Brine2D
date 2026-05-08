@@ -9,19 +9,13 @@ using Brine2D.Systems.Physics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class Box2DPhysicsSystemKinematicTests : TestBase, IDisposable
+public class Box2DPhysicsSystemKinematicTests : PhysicsTestBase, IDisposable
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
     [Fact]
     public void KinematicBody_AfterSimulationDisableAndReEnable_HasZeroLinearVelocity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -60,7 +54,7 @@ public class Box2DPhysicsSystemKinematicTests : TestBase, IDisposable
     public void KinematicBody_AfterSimulationDisableAndReEnable_HasZeroAngularVelocity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -93,7 +87,7 @@ public class Box2DPhysicsSystemKinematicTests : TestBase, IDisposable
     public void KinematicBody_NormalMovement_DrivesExpectedLinearVelocity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -122,7 +116,7 @@ public class Box2DPhysicsSystemKinematicTests : TestBase, IDisposable
     public void KinematicBody_Teleport_DoesNotProducePhantomVelocity()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))

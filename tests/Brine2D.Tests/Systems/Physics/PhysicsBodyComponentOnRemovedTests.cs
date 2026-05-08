@@ -9,18 +9,13 @@ using Brine2D.Systems.Physics;
 namespace Brine2D.Tests.Systems.Physics;
 
 [Collection("Physics")]
-public class PhysicsBodyComponentOnRemovedTests : TestBase, IDisposable
+public class PhysicsBodyComponentOnRemovedTests : PhysicsTestBase, IDisposable
 {
-    private static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
-    private readonly PhysicsWorld _physicsWorld = new();
-
-    public void Dispose() => _physicsWorld.Dispose();
-
     private (IEntityWorld world, Box2DPhysicsSystem system, Entity entity, PhysicsBodyComponent body) CreateLiveBody(
         Action<PhysicsBodyComponent>? configure = null)
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
         var entity = world.CreateEntity()
             .AddComponent<TransformComponent>()
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -221,7 +216,7 @@ public class PhysicsBodyComponentOnRemovedTests : TestBase, IDisposable
     public void OnRemoved_Events_HandlersNotFiredAfterRemoval()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -268,7 +263,7 @@ public class PhysicsBodyComponentOnRemovedTests : TestBase, IDisposable
     public void OnRemoved_CollidingEntities_Cleared()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
@@ -314,7 +309,7 @@ public class PhysicsBodyComponentOnRemovedTests : TestBase, IDisposable
     public void OnRemoved_IgnoredPairs_PurgedOnRecycle()
     {
         var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(_physicsWorld);
+        var system = new Box2DPhysicsSystem(PhysicsWorld);
 
         var entityA = world.CreateEntity()
             .AddComponent<TransformComponent>()
@@ -328,13 +323,13 @@ public class PhysicsBodyComponentOnRemovedTests : TestBase, IDisposable
 
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
         var bodyB = entityB.GetComponent<PhysicsBodyComponent>()!;
-        _physicsWorld.IgnoreCollision(bodyA, bodyB);
-        Assert.True(_physicsWorld.IsCollisionIgnored(bodyA.BodyId.index1, bodyB.BodyId.index1));
+        PhysicsWorld.IgnoreCollision(bodyA, bodyB);
+        Assert.True(PhysicsWorld.IsCollisionIgnored(bodyA.BodyId.index1, bodyB.BodyId.index1));
 
         entityA.Destroy();
         world.Flush();
         system.FixedUpdate(world, FixedTime);
 
-        Assert.False(_physicsWorld.IsCollisionIgnored(0, bodyB.BodyId.index1));
+        Assert.False(PhysicsWorld.IsCollisionIgnored(0, bodyB.BodyId.index1));
     }
 }
