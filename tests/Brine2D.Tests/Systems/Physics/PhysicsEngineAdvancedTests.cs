@@ -56,7 +56,6 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 c.Shape = new CircleShape(10f);
                 c.BodyType = PhysicsBodyType.Dynamic;
                 c.EnableHitEvents = true;
-                c.IsBullet = true;
                 c.InitialLinearVelocity = new Vector2(0f, 500f);
             });
 
