@@ -908,8 +908,6 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         bodyDef.gravityScale = collider.GravityOverride.HasValue ? 0f : collider.GravityScale;
         bodyDef.linearDamping = collider.LinearDamping;
         bodyDef.angularDamping = collider.AngularDamping;
-        bodyDef.linearVelocity = new B2.Vec2 { x = linearVelocity.X, y = linearVelocity.Y };
-        bodyDef.angularVelocity = angularVelocity;
         bodyDef.isEnabled = collider.IsSimulationEnabled;
         if (collider.SleepThreshold > 0f)
             bodyDef.sleepThreshold = collider.SleepThreshold;
@@ -917,6 +915,14 @@ public sealed unsafe class Box2DPhysicsSystem : FixedUpdateSystemBase, IDisposab
         var bodyId = _physicsWorld.CreateBody(&bodyDef);
         collider.BodyId = bodyId;
         collider.World = _physicsWorld;
+
+        // Apply velocity after creation so the body is registered in the broad-phase
+        // before Box2D's TOI/CCD solver sees it moving. Baking velocity into the bodyDef
+        // causes a native abort on Linux when a bullet body is born already at high speed.
+        if (linearVelocity != Vector2.Zero)
+            B2.BodySetLinearVelocity(bodyId, new B2.Vec2 { x = linearVelocity.X, y = linearVelocity.Y });
+        if (angularVelocity != 0f)
+            B2.BodySetAngularVelocity(bodyId, angularVelocity);
 
         _physicsWorld.FlushPendingIgnoredPairs(collider);
 
