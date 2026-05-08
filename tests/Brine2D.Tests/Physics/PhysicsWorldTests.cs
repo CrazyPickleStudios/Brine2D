@@ -23,6 +23,13 @@ public class PhysicsWorldTests : IDisposable
         return w;
     }
 
+    private PhysicsWorld CreateDispose()
+    {
+        var w = new PhysicsWorld();
+        _worlds.Add(w);
+        return w;
+    }
+
     [Fact]
     public void Constructor_Default_UsesDownwardGravityAndDefaultPPM()
     {
@@ -54,7 +61,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void Dispose_ThenAccessWorldId_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => _ = world.WorldId);
@@ -63,7 +70,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void Dispose_CalledTwice_DoesNotThrow()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         world.Dispose();
     }
@@ -71,7 +78,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void Step_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => world.Step(1f / 60f));
@@ -202,7 +209,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void RaycastClosest_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => world.RaycastClosest(Vector2.Zero, Vector2.UnitX, 100f));
@@ -211,7 +218,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void RaycastAll_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() =>
@@ -224,7 +231,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void ShapeCastClosest_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => world.ShapeCastClosest(Vector2.Zero, 10f, Vector2.UnitX, 100f));
@@ -233,7 +240,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapAABBFirst_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => world.OverlapAABBFirst(new Vector2(-100, -100), new Vector2(100, 100)));
@@ -242,7 +249,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void SetCustomCollisionFilter_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => world.SetCustomCollisionFilter((_, _) => true));
@@ -306,7 +313,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapPolygonFirstHit_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() =>
@@ -344,7 +351,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapPolygonAll_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var results = new List<OverlapHit>();
 
@@ -393,7 +400,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapPoint_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() =>
@@ -440,7 +447,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapPointAll_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var results = new List<OverlapHit>();
 
@@ -474,7 +481,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapBodyFirstHit_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var body = new PhysicsBodyComponent { Shape = new CircleShape(10f) };
 
@@ -508,7 +515,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapBodyShapes_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var body = new PhysicsBodyComponent { Shape = new CircleShape(10f) };
 
@@ -535,7 +542,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapBodyAllShapes_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var body = new PhysicsBodyComponent { Shape = new CircleShape(10f) };
         var results = new List<OverlapHit>();
@@ -558,7 +565,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapBodyExactFirstHit_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var body = new PhysicsBodyComponent { Shape = new CircleShape(10f) };
 
@@ -592,7 +599,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapBodyExactShapes_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var body = new PhysicsBodyComponent { Shape = new CircleShape(10f) };
 
@@ -619,7 +626,7 @@ public class PhysicsWorldTests : IDisposable
     [Fact]
     public void OverlapBodyExactAllShapes_AfterDispose_ThrowsObjectDisposed()
     {
-        var world = new PhysicsWorld();
+        var world = CreateDispose();
         world.Dispose();
         var body = new PhysicsBodyComponent { Shape = new CircleShape(10f) };
         var results = new List<OverlapHit>();
