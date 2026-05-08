@@ -61,6 +61,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             });
 
         world.Flush();
+        PhysicsWorld.SetContactHitEventThreshold(0f);
 
         bool hitFired = false;
         dynEntity.GetComponent<PhysicsBodyComponent>()!.OnCollisionHit += (_, contact) =>
