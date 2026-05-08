@@ -428,89 +428,89 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
     //    Assert.False(breakFired, "OnBreak must not fire when BreakForce is PositiveInfinity.");
     //}
 
-    //[Fact]
-    //public void Joint_RebuildAfterBreak_True_JointRebuildsOnNextStep()
-    //{
-    //    var world = CreateTestWorld();
-    //    var system = CreateSystem();
+    [Fact]
+    public void Joint_RebuildAfterBreak_True_JointRebuildsOnNextStep()
+    {
+        var world = CreateTestWorld();
+        var system = CreateSystem();
 
-    //    var entityA = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Dynamic;
-    //            c.GravityScale = 0f;
-    //        });
+        var entityA = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
+            });
 
-    //    var entityB = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(30f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Static;
-    //        });
+        var entityB = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(30f, 0f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Static;
+            });
 
-    //    world.Flush();
-    //    Step(world, system, 2);
+        world.Flush();
+        Step(world, system, 2);
 
-    //    var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
+        var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
 
-    //    int breakCount = 0;
-    //    entityA.AddComponent<WeldJointComponent>(j =>
-    //    {
-    //        j.ConnectedBody = entityB.GetComponent<PhysicsBodyComponent>()!;
-    //        j.LinearHertz = 60f;
-    //        j.LinearDampingRatio = 0f;
-    //        j.BreakForce = 1f;
-    //        j.RebuildAfterBreak = true;
-    //        j.OnBreak += _ => breakCount++;
-    //    });
+        int breakCount = 0;
+        entityA.AddComponent<WeldJointComponent>(j =>
+        {
+            j.ConnectedBody = entityB.GetComponent<PhysicsBodyComponent>()!;
+            j.LinearHertz = 60f;
+            j.LinearDampingRatio = 0f;
+            j.BreakForce = 1f;
+            j.RebuildAfterBreak = true;
+            j.OnBreak += _ => breakCount++;
+        });
 
-    //    world.Flush();
-    //    Step(world, system, 2);
+        world.Flush();
+        Step(world, system, 2);
 
-    //    bodyA.ApplyLinearImpulse(new Vector2(100000f, 0f));
+        bodyA.ApplyLinearImpulse(new Vector2(100000f, 0f));
 
-    //    Step(world, system, 1);
-    //    Assert.True(breakCount >= 1, $"Joint should have broken on step 1. breakCount={breakCount}");
+        Step(world, system, 1);
+        Assert.True(breakCount >= 1, $"Joint should have broken on step 1. breakCount={breakCount}");
 
-    //    Step(world, system, 1);
-    //    Assert.True(breakCount >= 2,
-    //        $"RebuildAfterBreak=true should have rebuilt the joint causing it to break again. breakCount={breakCount}");
-    //}
+        Step(world, system, 1);
+        Assert.True(breakCount >= 2,
+            $"RebuildAfterBreak=true should have rebuilt the joint causing it to break again. breakCount={breakCount}");
+    }
 
-    //[Fact]
-    //public void GetSleepingBodies_SettledDynamicBody_AppearsInList()
-    //{
-    //    var world = CreateTestWorld();
-    //    var system = CreateSystem();
+    [Fact]
+    public void GetSleepingBodies_SettledDynamicBody_AppearsInList()
+    {
+        var world = CreateTestWorld();
+        var system = CreateSystem();
 
-    //    world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new BoxShape(400f, 20f);
-    //            c.BodyType = PhysicsBodyType.Static;
-    //        });
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new BoxShape(400f, 20f);
+                c.BodyType = PhysicsBodyType.Static;
+            });
 
-    //    var dynEntity = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Dynamic;
-    //        });
+        var dynEntity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Dynamic;
+            });
 
-    //    world.Flush();
+        world.Flush();
 
-    //    Step(world, system, 180);
+        Step(world, system, 180);
 
-    //    var sleeping = PhysicsWorld.GetSleepingBodies().ToList();
-    //    var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
+        var sleeping = PhysicsWorld.GetSleepingBodies().ToList();
+        var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
 
-    //    Assert.Contains(dynBody, sleeping);
-    //}
+        Assert.Contains(dynBody, sleeping);
+    }
 
     [Fact]
     public void GetSleepingBodies_WokenBody_NoLongerInList()
