@@ -34,44 +34,44 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             system.FixedUpdate(world, FixedTime);
     }
 
-    //[Fact]
-    //public void OnCollisionHit_HighSpeedImpact_Fires()
-    //{
-    //    var world = CreateTestWorld();
-    //    var system = CreateSystem();
+    [Fact]
+    public void OnCollisionHit_HighSpeedImpact_Fires()
+    {
+        var world = CreateTestWorld();
+        var system = CreateSystem();
 
-    //    world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new BoxShape(400f, 20f);
-    //            c.BodyType = PhysicsBodyType.Static;
-    //            c.EnableHitEvents = true;
-    //        });
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new BoxShape(400f, 20f);
+                c.BodyType = PhysicsBodyType.Static;
+                c.EnableHitEvents = true;
+            });
 
-    //    var dynEntity = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 150f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Dynamic;
-    //            c.EnableHitEvents = true;
-    //            c.InitialLinearVelocity = new Vector2(0f, 500f);
-    //        });
+        var dynEntity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 150f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Dynamic;
+                c.EnableHitEvents = true;
+                c.InitialLinearVelocity = new Vector2(0f, 500f);
+            });
 
-    //    world.Flush();
+        world.Flush();
 
-    //    bool hitFired = false;
-    //    dynEntity.GetComponent<PhysicsBodyComponent>()!.OnCollisionHit += (_, contact) =>
-    //    {
-    //        if (contact.ImpactSpeed > 0f)
-    //            hitFired = true;
-    //    };
+        bool hitFired = false;
+        dynEntity.GetComponent<PhysicsBodyComponent>()!.OnCollisionHit += (_, contact) =>
+        {
+            if (contact.ImpactSpeed > 0f)
+                hitFired = true;
+        };
 
-    //    Step(world, system, 10);
+        Step(world, system, 10);
 
-    //    Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
-    //}
+        Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
+    }
 
     [Fact]
     public void EnableHitEvents_False_HitEventDoesNotFire()
