@@ -56,7 +56,8 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 c.Shape = new CircleShape(10f);
                 c.BodyType = PhysicsBodyType.Dynamic;
                 c.EnableHitEvents = true;
-                c.InitialLinearVelocity = new Vector2(0f, 5f);
+                c.IsBullet = true;
+                c.InitialLinearVelocity = new Vector2(0f, 500f);
             });
 
         world.Flush();
@@ -70,8 +71,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
 
         Step(world, system, 10);
 
-        //Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
-        Assert.True(true, "Testing");
+        Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
     }
 
     [Fact]
