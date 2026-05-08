@@ -186,72 +186,72 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         Assert.NotNull(exitSelfSub);
     }
 
-    //[Fact]
-    //public void OnTriggerEnterWithShape_SubShapeTrigger_ReportsCorrectSubShape()
-    //{
-    //    var world = CreateTestWorld();
-    //    var system = CreateSystem();
+    [Fact]
+    public void OnTriggerEnterWithShape_SubShapeTrigger_ReportsCorrectSubShape()
+    {
+        var world = CreateTestWorld();
+        var system = CreateSystem();
 
-    //    SubShape? reportedSub = null;
-    //    bool basicTriggerFired = false;
-    //    int triggerEnterWithShapeCallCount = 0;
-    //    SubShape? lastSelfSub = null;
+        SubShape? reportedSub = null;
+        bool basicTriggerFired = false;
+        int triggerEnterWithShapeCallCount = 0;
+        SubShape? lastSelfSub = null;
 
-    //    var sensorEntity = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(1f) { Offset = new Vector2(5000f, 0f) };
-    //            c.BodyType = PhysicsBodyType.Static;
-    //            c.OnTriggerEnter += _ => basicTriggerFired = true;
-    //            c.OnTriggerEnterWithShape += (_, selfSub, otherSub) =>
-    //            {
-    //                triggerEnterWithShapeCallCount++;
-    //                lastSelfSub = selfSub;
-    //                reportedSub = selfSub;
-    //            };
-    //        });
+        var sensorEntity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(1f) { Offset = new Vector2(5000f, 0f) };
+                c.BodyType = PhysicsBodyType.Static;
+                c.OnTriggerEnter += _ => basicTriggerFired = true;
+                c.OnTriggerEnterWithShape += (_, selfSub, otherSub) =>
+                {
+                    triggerEnterWithShapeCallCount++;
+                    lastSelfSub = selfSub;
+                    reportedSub = selfSub;
+                };
+            });
 
-    //    var sensorBody = sensorEntity.GetComponent<PhysicsBodyComponent>()!;
-    //    var triggerSub = sensorBody.AddSubShape(
-    //        new CircleShape(50f) { Offset = new Vector2(0f, 100f) },
-    //        isTrigger: true);
+        var sensorBody = sensorEntity.GetComponent<PhysicsBodyComponent>()!;
+        var triggerSub = sensorBody.AddSubShape(
+            new CircleShape(50f) { Offset = new Vector2(0f, 100f) },
+            isTrigger: true);
 
-    //    var dynEntity = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, -100f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Dynamic;
-    //            c.GravityScale = 0f;
-    //        });
+        var dynEntity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, -100f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
+            });
 
-    //    world.Flush();
-    //    Step(world, system, 1);
+        world.Flush();
+        Step(world, system, 1);
 
-    //    var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
+        var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
 
-    //    bool mainShapeValid = B2.ShapeIsValid(sensorBody.ShapeId);
-    //    bool subShapeValid = B2.ShapeIsValid(triggerSub.ShapeId);
-    //    bool subShapeIsSensor = subShapeValid && B2.ShapeIsSensor(triggerSub.ShapeId);
-    //    bool dynShapeValid = B2.ShapeIsValid(dynBody.ShapeId);
+        bool mainShapeValid = B2.ShapeIsValid(sensorBody.ShapeId);
+        bool subShapeValid = B2.ShapeIsValid(triggerSub.ShapeId);
+        bool subShapeIsSensor = subShapeValid && B2.ShapeIsSensor(triggerSub.ShapeId);
+        bool dynShapeValid = B2.ShapeIsValid(dynBody.ShapeId);
 
-    //    dynBody.LinearVelocity = new Vector2(0f, 5000f);
+        dynBody.LinearVelocity = new Vector2(0f, 5000f);
 
-    //    Step(world, system, 5);
+        Step(world, system, 5);
 
-    //    Assert.True(subShapeValid,
-    //        $"Sub-shape ShapeId is not valid after flush. Main valid={mainShapeValid}, dyn valid={dynShapeValid}");
-    //    Assert.True(subShapeIsSensor,
-    //        "Sub-shape is not registered as a sensor in Box2D");
-    //    Assert.True(basicTriggerFired || triggerEnterWithShapeCallCount > 0,
-    //        $"No trigger event fired at all (OnTriggerEnter or OnTriggerEnterWithShape). " +
-    //        $"subShapeValid={subShapeValid}, subShapeIsSensor={subShapeIsSensor}, dynShapeValid={dynShapeValid}");
-    //    Assert.True(triggerEnterWithShapeCallCount > 0,
-    //        $"OnTriggerEnter fired={basicTriggerFired} but OnTriggerEnterWithShape never called. callCount={triggerEnterWithShapeCallCount}");
-    //    Assert.NotNull(reportedSub);
-    //    Assert.Same(triggerSub, reportedSub);
-    //}
+        Assert.True(subShapeValid,
+            $"Sub-shape ShapeId is not valid after flush. Main valid={mainShapeValid}, dyn valid={dynShapeValid}");
+        Assert.True(subShapeIsSensor,
+            "Sub-shape is not registered as a sensor in Box2D");
+        Assert.True(basicTriggerFired || triggerEnterWithShapeCallCount > 0,
+            $"No trigger event fired at all (OnTriggerEnter or OnTriggerEnterWithShape). " +
+            $"subShapeValid={subShapeValid}, subShapeIsSensor={subShapeIsSensor}, dynShapeValid={dynShapeValid}");
+        Assert.True(triggerEnterWithShapeCallCount > 0,
+            $"OnTriggerEnter fired={basicTriggerFired} but OnTriggerEnterWithShape never called. callCount={triggerEnterWithShapeCallCount}");
+        Assert.NotNull(reportedSub);
+        Assert.Same(triggerSub, reportedSub);
+    }
 
     //[Fact(Skip = "ShouldCollide uses [UnmanagedCallersOnly] with non-blittable bool return - crashes JIT in CI")]
     //public void SubShape_ShouldCollide_ReturnFalse_PreventsThatShapeColliding()
