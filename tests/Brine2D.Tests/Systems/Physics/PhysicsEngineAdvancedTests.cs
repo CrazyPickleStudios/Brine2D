@@ -13,7 +13,20 @@ namespace Brine2D.Tests.Systems.Physics;
 [Collection("Physics")]
 public class PhysicsEngineAdvancedTests : PhysicsTestBase
 {
-    private Box2DPhysicsSystem CreateSystem() => new(PhysicsWorld);
+    private Box2DPhysicsSystem? _system;
+
+    private Box2DPhysicsSystem CreateSystem()
+    {
+        _system = new Box2DPhysicsSystem(PhysicsWorld);
+        return _system;
+    }
+
+    public override void Dispose()
+    {
+        _system?.Dispose();
+        _system = null;
+        base.Dispose();
+    }
 
     private void Step(IEntityWorld world, Box2DPhysicsSystem system, int count = 1)
     {
