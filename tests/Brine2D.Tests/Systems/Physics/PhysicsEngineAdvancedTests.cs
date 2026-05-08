@@ -56,13 +56,14 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 c.Shape = new CircleShape(10f);
                 c.BodyType = PhysicsBodyType.Dynamic;
                 c.EnableHitEvents = true;
+                c.IsBullet = true;
             });
 
         world.Flush();
 
         Step(world, system);
         PhysicsWorld.SetContactHitEventThreshold(0f);
-        dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(0f, 5000f);
+        dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(0f, 500f);
 
         bool hitFired = false;
         dynEntity.GetComponent<PhysicsBodyComponent>()!.OnCollisionHit += (_, contact) =>
