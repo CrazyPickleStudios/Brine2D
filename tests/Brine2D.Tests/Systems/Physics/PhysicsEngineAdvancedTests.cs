@@ -57,7 +57,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 c.BodyType = PhysicsBodyType.Dynamic;
                 c.EnableHitEvents = true;
                 c.IsBullet = true;
-                c.InitialLinearVelocity = new Vector2(0f, 500f);
+                c.InitialLinearVelocity = new Vector2(0f, 50f);
             });
 
         world.Flush();
