@@ -25,12 +25,9 @@ jobs:
       run: dotnet build --no-restore --configuration Release
 
     - name: Diagnose PhysicsEngineAdvancedTests
-      run: dotnet test tests/Brine2D.Tests --no-build --configuration Release `  --filter "FullyQualifiedName=Brine2D.Tests.Systems.Physics.PhysicsEngineAdvancedTests.OnCollisionHit_HighSpeedImpact_Fires" `  --verbosity detailed
+      run: dotnet test tests/Brine2D.Tests --no-build --configuration Release --filter "FullyQualifiedName~Brine2D.Tests.Systems.Physics.PhysicsEngineAdvancedTests" --verbosity detailed
       
     - name: Test
-      run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
-    
-    - name: Run Unit Tests Only
       run: dotnet test tests/Brine2D.Tests --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
     
     - name: Upload coverage reports to Codecov
