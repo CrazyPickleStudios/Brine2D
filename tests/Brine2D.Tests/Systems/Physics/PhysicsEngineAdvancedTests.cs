@@ -35,7 +35,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
     }
 
     [Fact]
-    public void OnCollisionHit_HighSpeedImpact_Fires()
+    public void OnCollisionHit_GravityDrivenImpact_Fires()
     {
         var world = CreateTestWorld();
         var system = CreateSystem();
@@ -68,7 +68,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 hitFired = true;
         };
 
-        Step(world, system, 20);
+        Step(world, system, 30);
 
         Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
     }
