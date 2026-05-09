@@ -23,11 +23,11 @@ public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
             .AddComponent<TransformComponent>(t => t.LocalPosition = origin)
             .AddComponent<PhysicsBodyComponent>(c =>
             {
+                c.BodyType = PhysicsBodyType.Static;
                 c.Shape = new ChainShape([
                     new Vector2(-100f, 0f),
                     new Vector2(100f, 0f)
                 ]);
-                c.BodyType = PhysicsBodyType.Static;
                 c.Offset = offset;
             });
         world.Flush();
@@ -52,11 +52,11 @@ public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
             .AddComponent<TransformComponent>(t => t.LocalPosition = origin)
             .AddComponent<PhysicsBodyComponent>(c =>
             {
+                c.BodyType = PhysicsBodyType.Static;
                 c.Shape = new ChainShape([
                     new Vector2(-50f, 0f),
                     new Vector2(50f, 0f)
                 ]);
-                c.BodyType = PhysicsBodyType.Static;
             });
         world.Flush();
         system.FixedUpdate(world, FixedTime);
