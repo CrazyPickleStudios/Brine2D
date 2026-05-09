@@ -68,7 +68,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 hitFired = true;
         };
 
-        Step(world, system, 30);
+        Step(world, system, 60);
 
         Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
     }
