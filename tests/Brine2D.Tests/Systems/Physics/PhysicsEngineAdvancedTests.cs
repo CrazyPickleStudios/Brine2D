@@ -50,7 +50,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             });
 
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 180f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
@@ -68,7 +68,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 hitFired = true;
         };
 
-        Step(world, system, 60);
+        Step(world, system, 20);
 
         Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
     }
