@@ -109,43 +109,43 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         Assert.False(hitFired, "OnCollisionHit must not fire when EnableHitEvents is false.");
     }
 
-    //[Fact]
-    //public void OnCollisionEnterWithShape_SubShapeHit_ReportsCorrectSubShape()
-    //{
-    //    var world = CreateTestWorld();
-    //    var system = CreateSystem();
+    [Fact]
+    public void OnCollisionEnterWithShape_SubShapeHit_ReportsCorrectSubShape()
+    {
+        var world = CreateTestWorld();
+        var system = CreateSystem();
 
-    //    SubShape? reportedSelfSub = null;
+        SubShape? reportedSelfSub = null;
 
-    //    var compoundEntity = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new BoxShape(20f, 400f);  // primary — tall left wall
-    //            c.BodyType = PhysicsBodyType.Static;
-    //            c.OnCollisionEnterWithShape += (_, _, selfSub, _) => reportedSelfSub = selfSub;
-    //        });
+        var compoundEntity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new BoxShape(20f, 400f);  // primary — tall left wall
+                c.BodyType = PhysicsBodyType.Static;
+                c.OnCollisionEnterWithShape += (_, _, selfSub, _) => reportedSelfSub = selfSub;
+            });
 
-    //    var compoundBody = compoundEntity.GetComponent<PhysicsBodyComponent>()!;
-    //    var subShape = compoundBody.AddSubShape(
-    //        new BoxShape(20f, 400f) { Offset = new Vector2(200f, 0f) });  // sub-shape on right
+        var compoundBody = compoundEntity.GetComponent<PhysicsBodyComponent>()!;
+        var subShape = compoundBody.AddSubShape(
+            new BoxShape(20f, 400f) { Offset = new Vector2(200f, 0f) });  // sub-shape on right
 
-    //    world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(300f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Dynamic;
-    //            c.GravityScale = 0f;
-    //            c.InitialLinearVelocity = new Vector2(-500f, 0f);
-    //        });
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(300f, 0f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
+                c.InitialLinearVelocity = new Vector2(-500f, 0f);
+            });
 
-    //    world.Flush();
-    //    Step(world, system, 20);
+        world.Flush();
+        Step(world, system, 20);
 
-    //    Assert.NotNull(reportedSelfSub);
-    //    Assert.Same(subShape, reportedSelfSub);
-    //}
+        Assert.NotNull(reportedSelfSub);
+        Assert.Same(subShape, reportedSelfSub);
+    }
 
     [Fact]
     public void OnCollisionExitWithShape_SubShapeContact_ReportsCorrectSubShape()
