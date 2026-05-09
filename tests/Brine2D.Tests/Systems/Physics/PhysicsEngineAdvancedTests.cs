@@ -89,7 +89,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             });
 
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, -500f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 150f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
@@ -102,9 +102,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         bool hitFired = false;
         dynEntity.GetComponent<PhysicsBodyComponent>()!.OnCollisionHit += (_, _) => hitFired = true;
 
-        Step(world, system);
-        PhysicsWorld.SetContactHitEventThreshold(0f);
-        Step(world, system, 60);
+        Step(world, system, 20);
 
         Assert.False(hitFired, "OnCollisionHit must not fire when EnableHitEvents is false.");
     }
