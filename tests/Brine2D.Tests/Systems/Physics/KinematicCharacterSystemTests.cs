@@ -193,7 +193,6 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
     {
         var (world, physics, pre, post) = CreateSystems();
 
-        // Floor at y=100
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -209,10 +208,10 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
                 c.Shape = new BoxShape(20f, 20f);
                 c.BodyType = PhysicsBodyType.Kinematic;
             })
-            .AddComponent<KinematicCharacterBody>();
+            .AddComponent<KinematicCharacterBody>(ch => ch.Velocity = new Vector2(0f, 500f));
 
         world.Flush();
-        Step(world, physics, pre, post, steps: 3);
+        Step(world, physics, pre, post, steps: 5);
 
         var charBody = character.GetComponent<KinematicCharacterBody>()!;
         Assert.True(charBody.IsGrounded, "Character should be grounded after landing on floor");
@@ -244,7 +243,6 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
     {
         var (world, physics, pre, post) = CreateSystems();
 
-        // Wall to the right
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(50f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -274,7 +272,6 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
     {
         var (world, physics, pre, post) = CreateSystems();
 
-        // Ceiling directly above at y=-50
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, -50f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -322,7 +319,11 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
                 c.Shape = new BoxShape(20f, 20f);
                 c.BodyType = PhysicsBodyType.Kinematic;
             })
-            .AddComponent<KinematicCharacterBody>(ch => ch.OnLanded += _ => landed = true);
+            .AddComponent<KinematicCharacterBody>(ch =>
+            {
+                ch.Velocity = new Vector2(0f, 500f);
+                ch.OnLanded += _ => landed = true;
+            });
 
         world.Flush();
         Step(world, physics, pre, post, steps: 5);
@@ -351,7 +352,11 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
                 c.Shape = new BoxShape(20f, 20f);
                 c.BodyType = PhysicsBodyType.Kinematic;
             })
-            .AddComponent<KinematicCharacterBody>(ch => ch.OnAirborne += _ => airborne = true);
+            .AddComponent<KinematicCharacterBody>(ch =>
+            {
+                ch.Velocity = new Vector2(0f, 500f);
+                ch.OnAirborne += _ => airborne = true;
+            });
 
         world.Flush();
         Step(world, physics, pre, post, steps: 5);
@@ -359,7 +364,6 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
         var charBody = charEntity.GetComponent<KinematicCharacterBody>()!;
         Assert.True(charBody.IsGrounded);
 
-        // Move character away from floor using velocity (direct Position assignment bypasses the physics body).
         charBody.Velocity = new Vector2(0f, -5000f);
         Step(world, physics, pre, post, steps: 5);
 
@@ -390,13 +394,20 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
             })
             .AddComponent<KinematicCharacterBody>(ch =>
             {
+                ch.Velocity = new Vector2(0f, 500f);
                 ch.SnapDistance = 30f;
             });
 
         world.Flush();
-        Step(world, physics, pre, post, steps: 3);
+        Step(world, physics, pre, post, steps: 5);
 
         var charBody = character.GetComponent<KinematicCharacterBody>()!;
+        Assert.True(charBody.IsGrounded, "Character should have landed");
+
+        character.GetComponent<TransformComponent>()!.Position -= new Vector2(0f, 5f);
+        charBody.Velocity = Vector2.Zero;
+
+        Step(world, physics, pre, post, steps: 2);
         Assert.True(charBody.IsGrounded, "Character should have snapped to floor");
     }
 
@@ -526,17 +537,14 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
                 c.Shape = new BoxShape(20f, 20f);
                 c.BodyType = PhysicsBodyType.Kinematic;
             })
-            .AddComponent<KinematicCharacterBody>();
+            .AddComponent<KinematicCharacterBody>(ch => ch.Velocity = new Vector2(0f, 500f));
 
         world.Flush();
-
-        // Let the character land on the platform first
         Step(world, physics, pre, post, steps: 5);
 
         var charBody = character.GetComponent<KinematicCharacterBody>()!;
         Assert.True(charBody.IsGrounded, "Precondition: character must be grounded before riding test");
 
-        // Now move the platform laterally
         var platformTransform = platformEntity.GetComponent<TransformComponent>()!;
         float xBefore = character.GetComponent<TransformComponent>()!.Position.X;
 
