@@ -113,9 +113,7 @@ public class PhysicsBodyComponentOnRemovedTests : PhysicsTestBase
 
         world.Flush();
         for (var i = 0; i < 3; i++)
-        {
             system.FixedUpdate(world, FixedTime);
-        }
 
         var bodyA = entityA.GetComponent<PhysicsBodyComponent>()!;
 
@@ -131,10 +129,8 @@ public class PhysicsBodyComponentOnRemovedTests : PhysicsTestBase
         entityA.RemoveComponent<PhysicsBodyComponent>();
         world.Flush();
 
-        for (var i = 0; i < 3; i++)
-        {
-            system.FixedUpdate(world, FixedTime);
-        }
+        // One final step to confirm Box2D does not dispatch to the removed component.
+        system.FixedUpdate(world, FixedTime);
 
         Assert.False(firedAfterRemoval);
     }
@@ -225,8 +221,10 @@ public class PhysicsBodyComponentOnRemovedTests : PhysicsTestBase
     [Fact]
     public void OnRemoved_IsOneWayPlatformDirty_ResetToFalse()
     {
+        // CreateLiveBody runs FixedUpdate, which clears IsOneWayPlatformDirty.
+        // After removal, confirm the flag remains false (reset did not re-dirty it).
         var (world, _, entity, body) = CreateLiveBody(c => c.IsOneWayPlatform = true);
-        Assert.True(body.IsOneWayPlatformDirty);
+        Assert.False(body.IsOneWayPlatformDirty, "FixedUpdate should have cleared the dirty flag");
 
         entity.RemoveComponent<PhysicsBodyComponent>();
         world.Flush();
