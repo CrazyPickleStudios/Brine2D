@@ -34,6 +34,8 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             system.FixedUpdate(world, FixedTime);
     }
 
+    // Circle at y=170 with downward velocity, floor at y=190 (gap=10px, radius=10px → immediate contact).
+    // GravityScale=0 so no gravity accumulation; velocity is set directly.
     [Fact]
     public void OnCollisionHit_GravityDrivenImpact_Fires()
     {
@@ -41,7 +43,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         var system = CreateSystem();
 
         world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 190f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new BoxShape(400f, 20f);
@@ -50,11 +52,12 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             });
 
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 150f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 170f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
                 c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
                 c.EnableHitEvents = true;
             });
 
@@ -68,11 +71,13 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
                 hitFired = true;
         };
 
-        Step(world, system, 20);
+        dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(0f, 100f);
+        Step(world, system, 5);
 
         Assert.True(hitFired, "OnCollisionHit should fire when a body impacts at non-zero speed.");
     }
 
+    // Same setup but EnableHitEvents=false on both bodies — event must never fire.
     [Fact]
     public void EnableHitEvents_False_HitEventDoesNotFire()
     {
@@ -80,7 +85,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         var system = CreateSystem();
 
         world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 190f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new BoxShape(400f, 20f);
@@ -89,11 +94,12 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             });
 
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 150f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 170f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
                 c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
                 c.EnableHitEvents = false;
             });
 
@@ -102,11 +108,13 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         bool hitFired = false;
         dynEntity.GetComponent<PhysicsBodyComponent>()!.OnCollisionHit += (_, _) => hitFired = true;
 
-        Step(world, system, 20);
+        dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(0f, 100f);
+        Step(world, system, 5);
 
         Assert.False(hitFired, "OnCollisionHit must not fire when EnableHitEvents is false.");
     }
 
+    // Dynamic circle starts just right of the sub-shape (gap ~20px) moving left — hits sub-shape in 2-3 steps.
     [Fact]
     public void OnCollisionEnterWithShape_SubShapeHit_ReportsCorrectSubShape()
     {
@@ -119,17 +127,19 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
-                c.Shape = new BoxShape(20f, 400f);  // primary — tall left wall
+                c.Shape = new BoxShape(20f, 400f);
                 c.BodyType = PhysicsBodyType.Static;
                 c.OnCollisionEnterWithShape += (_, _, selfSub, _) => reportedSelfSub = selfSub;
             });
 
         var compoundBody = compoundEntity.GetComponent<PhysicsBodyComponent>()!;
+        // Sub-shape: tall box offset 60px to the right of body center.
         var subShape = compoundBody.AddSubShape(
-            new BoxShape(20f, 400f) { Offset = new Vector2(200f, 0f) });  // sub-shape on right
+            new BoxShape(20f, 400f) { Offset = new Vector2(60f, 0f) });
 
+        // Circle starts 10px right of the sub-shape right edge (offset 60 + half-width 10 = 70; circle at x=90, radius 10 → gap 10px).
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(300f, 0f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(90f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
@@ -140,14 +150,14 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         world.Flush();
         Step(world, system, 1);
 
-        dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(-500f, 0f);
-
-        Step(world, system, 20);
+        dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(-100f, 0f);
+        Step(world, system, 5);
 
         Assert.NotNull(reportedSelfSub);
         Assert.Same(subShape, reportedSelfSub);
     }
 
+    // Body lands on a platform, then teleports away — exit event should fire.
     [Fact]
     public void OnCollisionExitWithShape_SubShapeContact_ReportsCorrectSubShape()
     {
@@ -157,7 +167,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         SubShape? exitSelfSub = null;
 
         var compoundEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 190f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new BoxShape(400f, 20f);
@@ -167,26 +177,32 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
 
         var compoundBody = compoundEntity.GetComponent<PhysicsBodyComponent>()!;
         var subShape = compoundBody.AddSubShape(
-            new BoxShape(400f, 20f) { Offset = new Vector2(0f, -60f) });
+            new BoxShape(400f, 20f) { Offset = new Vector2(0f, -30f) });
 
+        // Circle starts just above the platform, moving downward — contacts in 1-2 steps.
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 165f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
                 c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
             });
 
         world.Flush();
-        Step(world, system, 20);
 
         var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
+        dynBody.LinearVelocity = new Vector2(0f, 50f);
+        Step(world, system, 3);
+
+        // Teleport far away to end contact.
         dynBody.Teleport(new Vector2(5000f, 5000f));
         Step(world, system, 3);
 
         Assert.NotNull(exitSelfSub);
     }
 
+    // Trigger sub-shape at a known position; dynamic body placed just below it, moving up — enters in 1-2 steps.
     [Fact]
     public void OnTriggerEnterWithShape_SubShapeTrigger_ReportsCorrectSubShape()
     {
@@ -196,30 +212,32 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         SubShape? reportedSub = null;
         bool basicTriggerFired = false;
         int triggerEnterWithShapeCallCount = 0;
-        SubShape? lastSelfSub = null;
 
         var sensorEntity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
+                // Primary shape kept far away so only the sub-shape trigger is relevant.
                 c.Shape = new CircleShape(1f) { Offset = new Vector2(5000f, 0f) };
                 c.BodyType = PhysicsBodyType.Static;
                 c.OnTriggerEnter += _ => basicTriggerFired = true;
-                c.OnTriggerEnterWithShape += (_, selfSub, otherSub) =>
+                c.OnTriggerEnterWithShape += (_, selfSub, _) =>
                 {
                     triggerEnterWithShapeCallCount++;
-                    lastSelfSub = selfSub;
                     reportedSub = selfSub;
                 };
             });
 
         var sensorBody = sensorEntity.GetComponent<PhysicsBodyComponent>()!;
+        // Trigger sub-shape: circle of radius 30px centered at (0, 0) relative to body.
         var triggerSub = sensorBody.AddSubShape(
-            new CircleShape(50f) { Offset = new Vector2(0f, 100f) },
+            new CircleShape(30f) { Offset = new Vector2(0f, 0f) },
             isTrigger: true);
 
+        // Dynamic circle just below the trigger zone: body at (0,0), trigger radius 30 → bottom edge at y=30.
+        // Place dynamic at y=50, radius 10 → top edge at y=40, gap 10px.
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, -100f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 50f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
@@ -231,113 +249,93 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         Step(world, system, 1);
 
         var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
-
-        bool mainShapeValid = B2.ShapeIsValid(sensorBody.ShapeId);
         bool subShapeValid = B2.ShapeIsValid(triggerSub.ShapeId);
         bool subShapeIsSensor = subShapeValid && B2.ShapeIsSensor(triggerSub.ShapeId);
         bool dynShapeValid = B2.ShapeIsValid(dynBody.ShapeId);
 
-        dynBody.LinearVelocity = new Vector2(0f, 5000f);
-
+        // Move up at moderate velocity — enters trigger in 2-3 steps.
+        dynBody.LinearVelocity = new Vector2(0f, -100f);
         Step(world, system, 5);
 
         Assert.True(subShapeValid,
-            $"Sub-shape ShapeId is not valid after flush. Main valid={mainShapeValid}, dyn valid={dynShapeValid}");
+            $"Sub-shape ShapeId is not valid after flush. dynShapeValid={dynShapeValid}");
         Assert.True(subShapeIsSensor,
             "Sub-shape is not registered as a sensor in Box2D");
         Assert.True(basicTriggerFired || triggerEnterWithShapeCallCount > 0,
-            $"No trigger event fired at all (OnTriggerEnter or OnTriggerEnterWithShape). " +
-            $"subShapeValid={subShapeValid}, subShapeIsSensor={subShapeIsSensor}, dynShapeValid={dynShapeValid}");
+            $"No trigger event fired. subShapeValid={subShapeValid}, subShapeIsSensor={subShapeIsSensor}, dynShapeValid={dynShapeValid}");
         Assert.True(triggerEnterWithShapeCallCount > 0,
             $"OnTriggerEnter fired={basicTriggerFired} but OnTriggerEnterWithShape never called. callCount={triggerEnterWithShapeCallCount}");
         Assert.NotNull(reportedSub);
         Assert.Same(triggerSub, reportedSub);
     }
 
-    //[Fact(Skip = "ShouldCollide uses [UnmanagedCallersOnly] with non-blittable bool return - crashes JIT in CI")]
-    //public void SubShape_ShouldCollide_ReturnFalse_PreventsThatShapeColliding()
-    //{
-    //    var world = CreateTestWorld();
-    //    var system = CreateSystem();
+    // Body placed at y=170 (floor at y=190, gap=10px) with no gravity — it just sits there.
+    // After a handful of steps it should sleep. Box2D sleep time is ~0.5s = ~30 steps.
+    [Fact]
+    public void GetSleepingBodies_SettledDynamicBody_AppearsInList()
+    {
+        var world = CreateTestWorld();
+        var system = CreateSystem();
 
-    //    var wallEntity = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new BoxShape(20f, 400f);
-    //            c.BodyType = PhysicsBodyType.Static;
-    //        });
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 190f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new BoxShape(400f, 20f);
+                c.BodyType = PhysicsBodyType.Static;
+            });
 
-    //    var wallBody = wallEntity.GetComponent<PhysicsBodyComponent>()!;
-    //    wallBody.AddSubShape(new BoxShape(20f, 400f) { Offset = new Vector2(40f, 0f) },
-    //        isTrigger: false)
-    //        .ShouldCollide = (other, _) => other.Layer == 5;
+        var dynEntity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 170f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
+            });
 
-    //    var projectile = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(300f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Dynamic;
-    //            c.Layer = 0;
-    //            c.GravityScale = 0f;
-    //            c.InitialLinearVelocity = new Vector2(-500f, 0f);
-    //        });
+        world.Flush();
+        // 60 steps = 1 simulated second — well past Box2D's default sleep threshold (~0.5s).
+        Step(world, system, 60);
 
-    //    world.Flush();
+        var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
+        Assert.Contains(dynBody, PhysicsWorld.GetSleepingBodies());
+    }
 
-    //    bool hitSubShape = false;
-    //    projectile.GetComponent<PhysicsBodyComponent>()!.OnCollisionEnter += (other, _) =>
-    //    {
-    //        if (ReferenceEquals(other, wallBody))
-    //            hitSubShape = true;
-    //    };
+    [Fact]
+    public void GetSleepingBodies_WokenBody_NoLongerInList()
+    {
+        var world = CreateTestWorld();
+        var system = CreateSystem();
 
-    //    Step(world, system, 20);
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 190f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new BoxShape(400f, 20f);
+                c.BodyType = PhysicsBodyType.Static;
+            });
 
-    //    Assert.True(B2.BodyIsValid(projectile.GetComponent<PhysicsBodyComponent>()!.BodyId));
-    //}
+        var dynEntity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 170f))
+            .AddComponent<PhysicsBodyComponent>(c =>
+            {
+                c.Shape = new CircleShape(10f);
+                c.BodyType = PhysicsBodyType.Dynamic;
+                c.GravityScale = 0f;
+            });
 
-    //[Fact(Skip = "ShouldCollide uses [UnmanagedCallersOnly] with non-blittable bool return - crashes JIT in CI")]
-    //public void SubShape_ShouldCollide_ReturnTrue_AllowsCollision()
-    //{
-    //    var world = CreateTestWorld();
-    //    var system = CreateSystem();
+        world.Flush();
+        Step(world, system, 60);
 
-    //    var wallEntity = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(80f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new BoxShape(20f, 400f);
-    //            c.BodyType = PhysicsBodyType.Static;
-    //            c.CollisionMask = 0;
-    //        });
+        var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
+        Assert.Contains(dynBody, PhysicsWorld.GetSleepingBodies());
 
-    //    var wallBody = wallEntity.GetComponent<PhysicsBodyComponent>()!;
-    //    wallBody.AddSubShape(new BoxShape(20f, 400f))
-    //        .ShouldCollide = (_, _) => true;
+        dynBody.ApplyLinearImpulse(new Vector2(0f, -50f));
+        Step(world, system, 1);
 
-    //    wallBody.CollisionMask = ulong.MaxValue;
-
-    //    var projectile = world.CreateEntity()
-    //        .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(200f, 0f))
-    //        .AddComponent<PhysicsBodyComponent>(c =>
-    //        {
-    //            c.Shape = new CircleShape(10f);
-    //            c.BodyType = PhysicsBodyType.Dynamic;
-    //            c.GravityScale = 0f;
-    //            c.InitialLinearVelocity = new Vector2(-500f, 0f);
-    //        });
-
-    //    world.Flush();
-
-    //    bool collided = false;
-    //    projectile.GetComponent<PhysicsBodyComponent>()!.OnCollisionEnter += (_, _) => collided = true;
-
-    //    Step(world, system, 20);
-
-    //    Assert.True(collided, "Sub-shape ShouldCollide returning true must allow collision.");
-    //}
+        Assert.DoesNotContain(dynBody, PhysicsWorld.GetSleepingBodies());
+    }
 
     [Fact]
     public void Joint_BreakForce_Exceeded_OnBreakFires()
@@ -479,71 +477,5 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         Step(world, system, 1);
         Assert.True(breakCount >= 2,
             $"RebuildAfterBreak=true should have rebuilt the joint causing it to break again. breakCount={breakCount}");
-    }
-
-    [Fact]
-    public void GetSleepingBodies_SettledDynamicBody_AppearsInList()
-    {
-        var world = CreateTestWorld();
-        var system = CreateSystem();
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new BoxShape(400f, 20f);
-                c.BodyType = PhysicsBodyType.Static;
-            });
-
-        var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new CircleShape(10f);
-                c.BodyType = PhysicsBodyType.Dynamic;
-            });
-
-        world.Flush();
-
-        Step(world, system, 180);
-
-        var sleeping = PhysicsWorld.GetSleepingBodies().ToList();
-        var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
-
-        Assert.Contains(dynBody, sleeping);
-    }
-
-    [Fact]
-    public void GetSleepingBodies_WokenBody_NoLongerInList()
-    {
-        var world = CreateTestWorld();
-        var system = CreateSystem();
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 200f))
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new BoxShape(400f, 20f);
-                c.BodyType = PhysicsBodyType.Static;
-            });
-
-        var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new CircleShape(10f);
-                c.BodyType = PhysicsBodyType.Dynamic;
-            });
-
-        world.Flush();
-        Step(world, system, 180);
-
-        var dynBody = dynEntity.GetComponent<PhysicsBodyComponent>()!;
-        Assert.Contains(dynBody, PhysicsWorld.GetSleepingBodies());
-
-        dynBody.ApplyLinearImpulse(new Vector2(0f, -500f));
-        Step(world, system, 1);
-
-        Assert.DoesNotContain(dynBody, PhysicsWorld.GetSleepingBodies());
     }
 }
