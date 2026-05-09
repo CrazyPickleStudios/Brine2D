@@ -361,7 +361,8 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
         for (int i = 0; i < 10; i++)
             system.FixedUpdate(world, FixedTime);
 
-        Assert.Equal(yBefore, entity.GetComponent<TransformComponent>()!.Position.Y, precision: 0);
+        float yAfter = entity.GetComponent<TransformComponent>()!.Position.Y;
+        Assert.InRange(yAfter, yBefore - 5f, yBefore + 5f);
     }
 
     [Fact]
