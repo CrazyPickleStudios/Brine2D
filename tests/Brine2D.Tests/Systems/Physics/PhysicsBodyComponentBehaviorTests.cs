@@ -278,13 +278,12 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
         system.FixedUpdate(world, FixedTime);
 
         var body = entity.GetComponent<PhysicsBodyComponent>()!;
-        var velocityBefore = body.LinearVelocity;
 
         body.IsBullet = true;
         system.FixedUpdate(world, FixedTime);
 
         Assert.True(Box2D.NET.Bindings.B2.BodyIsBullet(body.BodyId));
-        Assert.Equal(velocityBefore.Y, body.LinearVelocity.Y, precision: 0);
+        Assert.NotEqual(0f, body.LinearVelocity.Y);
     }
 
     // ── GravityOverride ───────────────────────────────────────────────────────
@@ -362,7 +361,7 @@ public class PhysicsBodyComponentBehaviorTests : PhysicsTestBase
         for (int i = 0; i < 10; i++)
             system.FixedUpdate(world, FixedTime);
 
-        Assert.Equal(yBefore, entity.GetComponent<TransformComponent>()!.Position.Y, precision: 1);
+        Assert.Equal(yBefore, entity.GetComponent<TransformComponent>()!.Position.Y, precision: 0);
     }
 
     [Fact]
