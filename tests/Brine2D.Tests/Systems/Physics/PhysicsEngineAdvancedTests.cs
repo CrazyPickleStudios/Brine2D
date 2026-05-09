@@ -130,17 +130,20 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         var subShape = compoundBody.AddSubShape(
             new BoxShape(20f, 400f) { Offset = new Vector2(200f, 0f) });  // sub-shape on right
 
-        world.CreateEntity()
+        var dynEntity = world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(300f, 0f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
                 c.BodyType = PhysicsBodyType.Dynamic;
                 c.GravityScale = 0f;
-                c.InitialLinearVelocity = new Vector2(-500f, 0f);
             });
 
         world.Flush();
+        Step(world, system, 1);
+
+        dynEntity.GetComponent<PhysicsBodyComponent>()!.LinearVelocity = new Vector2(-500f, 0f);
+
         Step(world, system, 20);
 
         Assert.NotNull(reportedSelfSub);
