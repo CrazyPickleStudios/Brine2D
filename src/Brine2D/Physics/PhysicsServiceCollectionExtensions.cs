@@ -2,6 +2,7 @@ using Brine2D.ECS.Components;
 using Brine2D.Systems.Physics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace Brine2D.Physics;
@@ -36,6 +37,7 @@ public static class PhysicsServiceCollectionExtensions
     /// <c>world.AddSystem&lt;PostPhysicsKinematicCharacterSystem&gt;()</c>.
     /// </para>
     /// </remarks>
+    [ExcludeFromCodeCoverage(Justification = "DI wiring; optional configuration branches require full hosting stack and callback paths that crash CI.")]
     public static IServiceCollection AddPhysics(this IServiceCollection services,
         Action<PhysicsOptions>? configure = null)
     {

@@ -1,11 +1,12 @@
-using System.Numerics;
-using System.Runtime.InteropServices;
 using Box2D.NET.Bindings;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Systems;
 using Brine2D.Physics;
 using Brine2D.Rendering;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Brine2D.Systems.Physics;
 
@@ -133,6 +134,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
     private static float WScale(DrawContext ctx, float worldLength)
         => ctx.Camera != null ? worldLength * ctx.Camera.Zoom : worldLength;
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawPolygonCallback(B2.Vec2* vertices, int vertexCount, B2.HexColor color, void* context)
     {
@@ -149,6 +151,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         }
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawSolidPolygonCallback(B2.Transform xf, B2.Vec2* vertices, int vertexCount, float radius, B2.HexColor color, void* context)
     {
@@ -167,6 +170,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         }
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawCircleCallback(B2.Vec2 center, float radius, B2.HexColor color, void* context)
     {
@@ -175,6 +179,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         ctx.Renderer.DrawCircleOutline(s.X, s.Y, WScale(ctx, radius), ToColor(color), 1f);
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawSolidCircleCallback(B2.Transform xf, float radius, B2.HexColor color, void* context)
     {
@@ -189,6 +194,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         ctx.Renderer.DrawLine(s.X, s.Y, tip.X, tip.Y, c, 1.5f);
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawSolidCapsuleCallback(B2.Vec2 p1, B2.Vec2 p2, float radius, B2.HexColor color, void* context)
     {
@@ -254,6 +260,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         }
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawSegmentCallback(B2.Vec2 p1, B2.Vec2 p2, B2.HexColor color, void* context)
     {
@@ -263,6 +270,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         ctx.Renderer.DrawLine(a.X, a.Y, b.X, b.Y, ToColor(color), 1f);
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawTransformCallback(B2.Transform xf, void* context)
     {
@@ -286,6 +294,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         ctx.Renderer.DrawLine(origin.X, origin.Y, yTip.X, yTip.Y, new Color(0, 255, 0, 200), 2f);
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawPointCallback(B2.Vec2 p, float size, B2.HexColor color, void* context)
     {
@@ -294,6 +303,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
         ctx.Renderer.DrawCircleFilled(s.X, s.Y, WScale(ctx, size * 0.5f), ToColor(color));
     }
 
+    [ExcludeFromCodeCoverage(Justification = "All draw callbacks are invoked by Box2D native debug draw; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static void DrawStringCallback(B2.Vec2 p, byte* str, B2.HexColor color, void* context)
     {

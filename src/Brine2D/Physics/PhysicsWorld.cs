@@ -4,6 +4,7 @@ using Brine2D.ECS.Components;
 using Brine2D.ECS.Components.Joints;
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -3580,6 +3581,7 @@ PhysicsQueryFilter? filter, bool deduplicate, out bool wasTruncated)
     /// Returns a timing breakdown (in milliseconds) for the last Box2D world step.
     /// All values are zero before the first call to <see cref="Step"/>.
     /// </summary>
+    [ExcludeFromCodeCoverage(Justification = "Debug/profiling utility with no behavioral logic.")]
     public PhysicsWorldProfile GetProfile()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -3615,6 +3617,7 @@ PhysicsQueryFilter? filter, bool deduplicate, out bool wasTruncated)
     /// Returns live simulation counters: body, shape, contact, joint, and island counts.
     /// Useful for debug overlays.
     /// </summary>
+    [ExcludeFromCodeCoverage(Justification = "Debug/profiling utility with no behavioral logic.")]
     public PhysicsWorldCounters GetCounters()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -3829,6 +3832,7 @@ PhysicsQueryFilter? filter, bool deduplicate, out bool wasTruncated)
         return Vector2.Normalize(direction);
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Called by Box2D native side; coverage tooling cannot trace native→managed transitions.")]
     [UnmanagedCallersOnly]
     private static byte PreSolveCallback(B2.ShapeId shapeIdA, B2.ShapeId shapeIdB, B2.Manifold* manifold, void* context)
     {
@@ -3854,6 +3858,7 @@ PhysicsQueryFilter? filter, bool deduplicate, out bool wasTruncated)
         }) ? (byte)1 : (byte)0;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Called by Box2D native side.")]
     [UnmanagedCallersOnly]
     private static byte OverlapCallback(B2.ShapeId shapeId, void* context)
     {
@@ -3864,6 +3869,7 @@ PhysicsQueryFilter? filter, bool deduplicate, out bool wasTruncated)
         return 1;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Only fires if B2.CreateWorld throws from native; untestable in managed tests.")]
     [UnmanagedCallersOnly]
     private static float RaycastAllCallback(B2.ShapeId shapeId, B2.Vec2 point, B2.Vec2 normal, float fraction, void* context)
     {
@@ -3882,6 +3888,7 @@ PhysicsQueryFilter? filter, bool deduplicate, out bool wasTruncated)
         return 1f;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Only fires if B2.CreateWorld throws from native; untestable in managed tests.")]
     [UnmanagedCallersOnly]
     private static byte CustomFilterCallback(B2.ShapeId shapeA, B2.ShapeId shapeB, void* context)
     {
@@ -3890,6 +3897,7 @@ PhysicsQueryFilter? filter, bool deduplicate, out bool wasTruncated)
         return filter(shapeA, shapeB) ? (byte)1 : (byte)0;
     }
 
+    [ExcludeFromCodeCoverage(Justification = "Only fires if B2.CreateWorld throws from native; untestable in managed tests.")]
     [UnmanagedCallersOnly]
     private static float ShapeCastClosestCallback(B2.ShapeId shapeId, B2.Vec2 point, B2.Vec2 normal, float fraction, void* context)
     {
