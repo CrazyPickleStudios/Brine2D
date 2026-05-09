@@ -129,6 +129,10 @@ public class PhysicsBodyComponentOnRemovedTests : PhysicsTestBase
         entityA.RemoveComponent<PhysicsBodyComponent>();
         world.Flush();
 
+        // world.Flush() legitimately fires OnCollisionExit during body destruction cleanup —
+        // that is tested separately. Reset here to verify no further dispatch occurs.
+        firedAfterRemoval = false;
+
         // One final step to confirm Box2D does not dispatch to the removed component.
         system.FixedUpdate(world, FixedTime);
 

@@ -11,7 +11,7 @@ namespace Brine2D.Tests.Systems.Physics;
 
 public class KinematicCharacterSystemTests : PhysicsTestBase
 {
-    public KinematicCharacterSystemTests() : base(gravity: Vector2.Zero) { }
+    public KinematicCharacterSystemTests() : base(gravity: new Vector2(0f, 980f)) { }
 
     private (IEntityWorld world, Box2DPhysicsSystem physics, KinematicCharacterSystem preStep, KinematicCharacterSystem postStep) CreateSystems()
     {
@@ -49,7 +49,8 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
             .AddComponent<KinematicCharacterBody>(ch => ch.Velocity = new Vector2(300f, 0f));
 
         world.Flush();
-        Step(world, physics, pre, post);
+        Step(world, physics, pre, post);      // warm-up: creates the body
+        Step(world, physics, pre, post);      // measurement step
 
         var transform = entity.GetComponent<TransformComponent>()!;
         float dt = (float)FixedTime.DeltaTime;
@@ -335,7 +336,6 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
         var (world, physics, pre, post) = CreateSystems();
         bool airborne = false;
 
-        // Floor
         world.CreateEntity()
             .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 100f))
             .AddComponent<PhysicsBodyComponent>(c =>
@@ -359,12 +359,9 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
         var charBody = charEntity.GetComponent<KinematicCharacterBody>()!;
         Assert.True(charBody.IsGrounded);
 
-        // Move character away from floor
-        var transform = charEntity.GetComponent<TransformComponent>()!;
-        transform.Position = new Vector2(0f, -500f);
-        charBody.Velocity = Vector2.Zero;
-
-        Step(world, physics, pre, post, steps: 3);
+        // Move character away from floor using velocity (direct Position assignment bypasses the physics body).
+        charBody.Velocity = new Vector2(0f, -5000f);
+        Step(world, physics, pre, post, steps: 5);
 
         Assert.True(airborne, "OnAirborne should fire when character leaves the floor");
     }
@@ -497,7 +494,8 @@ public class KinematicCharacterSystemTests : PhysicsTestBase
             .AddComponent<KinematicCharacterBody>(ch => ch.Velocity = new Vector2(200f, 0f));
 
         world.Flush();
-        Step(world, physics, pre, post);
+        Step(world, physics, pre, post);      // warm-up: creates the body
+        Step(world, physics, pre, post);      // measurement step
 
         var charBody = world.Entities
             .Select(e => e.GetComponent<KinematicCharacterBody>())
