@@ -1,5 +1,4 @@
 using System.Numerics;
-using Box2D.NET.Bindings;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Physics;
@@ -7,7 +6,6 @@ using Brine2D.Systems.Physics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
-[Collection("Physics")]
 public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
 {
     [Fact]
@@ -34,10 +32,10 @@ public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
         system.FixedUpdate(world, FixedTime);
 
         var body = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        var bodyPos = B2.BodyGetPosition(body.BodyId);
+        var bodyPos = body.GetWorldPosition();
 
-        Assert.Equal(origin.X + offset.X, bodyPos.x, 0.1f);
-        Assert.Equal(origin.Y + offset.Y, bodyPos.y, 0.1f);
+        Assert.Equal(origin.X + offset.X, bodyPos.X, 0.1f);
+        Assert.Equal(origin.Y + offset.Y, bodyPos.Y, 0.1f);
     }
 
     [Fact]
@@ -62,10 +60,10 @@ public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
         system.FixedUpdate(world, FixedTime);
 
         var body = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        var bodyPos = B2.BodyGetPosition(body.BodyId);
+        var bodyPos = body.GetWorldPosition();
 
-        Assert.Equal(origin.X, bodyPos.x, 0.1f);
-        Assert.Equal(origin.Y, bodyPos.y, 0.1f);
+        Assert.Equal(origin.X, bodyPos.X, 0.1f);
+        Assert.Equal(origin.Y, bodyPos.Y, 0.1f);
     }
 
     [Fact]
@@ -91,9 +89,8 @@ public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
         transform.Position = new Vector2(200f, 200f);
         system.FixedUpdate(world, FixedTime);
 
-        var vel = B2.BodyGetLinearVelocity(body.BodyId);
-        Assert.Equal(0f, vel.x, 0.01f);
-        Assert.True(vel.y != 0f, "Y velocity must be non-zero because Y is not frozen.");
+        Assert.Equal(0f, body.LinearVelocity.X, 0.01f);
+        Assert.True(body.LinearVelocity.Y != 0f, "Y velocity must be non-zero because Y is not frozen.");
     }
 
     [Fact]
@@ -119,9 +116,8 @@ public class Box2DPhysicsSystemBugFixTests : PhysicsTestBase
         transform.Position = new Vector2(200f, 200f);
         system.FixedUpdate(world, FixedTime);
 
-        var vel = B2.BodyGetLinearVelocity(body.BodyId);
-        Assert.Equal(0f, vel.y, 0.01f);
-        Assert.True(vel.x != 0f, "X velocity must be non-zero because X is not frozen.");
+        Assert.Equal(0f, body.LinearVelocity.Y, 0.01f);
+        Assert.True(body.LinearVelocity.X != 0f, "X velocity must be non-zero because X is not frozen.");
     }
 
     [Fact(Skip = "ShouldCollide uses [UnmanagedCallersOnly] with non-blittable bool return - crashes JIT in CI")]

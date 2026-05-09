@@ -4,9 +4,8 @@ using Brine2D.ECS.Components;
 using Brine2D.Physics;
 using Brine2D.Systems.Physics;
 
-namespace Brine2D.Tests.Physics;
+namespace Brine2D.Tests.Systems.Physics;
 
-[Collection("Physics")]
 public class PhysicsIgnoreCollisionTests : PhysicsTestBase
 {
     private const string SkipReason =

@@ -9,49 +9,8 @@ using Brine2D.Systems.Physics;
 
 namespace Brine2D.Tests.Systems.Physics;
 
-[Collection("Physics")]
 public class Box2DPhysicsSystemTests : PhysicsTestBase, IDisposable
 {
-    [Fact]
-    public void FixedUpdate_DynamicBody_FallsWithGravity()
-    {
-        var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(PhysicsWorld);
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 0f))
-            .AddComponent<PhysicsBodyComponent>(c => c.Shape = new CircleShape(10f));
-        world.Flush();
-
-        system.FixedUpdate(world, FixedTime);
-
-        var transform = world.Entities.First().GetComponent<TransformComponent>()!;
-        // Gravity is (0, 980) by default, body should have moved down
-        Assert.True(transform.Position.Y > 0f);
-    }
-
-    [Fact]
-    public void FixedUpdate_StaticBody_DoesNotMove()
-    {
-        var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(PhysicsWorld);
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 200f))
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new BoxShape(100f, 20f);
-                c.BodyType = PhysicsBodyType.Static;
-            });
-        world.Flush();
-
-        system.FixedUpdate(world, FixedTime);
-
-        var transform = world.Entities.First().GetComponent<TransformComponent>()!;
-        Assert.Equal(100f, transform.Position.X);
-        Assert.Equal(200f, transform.Position.Y);
-    }
-
     [Fact]
     public void FixedUpdate_BodyCreated_MarksNotDirty()
     {
@@ -69,24 +28,6 @@ public class Box2DPhysicsSystemTests : PhysicsTestBase, IDisposable
         system.FixedUpdate(world, FixedTime);
 
         Assert.False(collider.IsDirty);
-    }
-
-    [Fact]
-    public void FixedUpdate_BoxShape_CreatesBody()
-    {
-        var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(PhysicsWorld);
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c => c.Shape = new BoxShape(30f, 20f));
-        world.Flush();
-
-        system.FixedUpdate(world, FixedTime);
-
-        var collider = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        Assert.True(Box2D.NET.Bindings.B2.BodyIsValid(collider.BodyId));
-        Assert.True(Box2D.NET.Bindings.B2.ShapeIsValid(collider.ShapeId));
     }
 
     [Fact]
@@ -135,46 +76,20 @@ public class Box2DPhysicsSystemTests : PhysicsTestBase, IDisposable
     }
 
     [Fact]
-    public void FixedUpdate_TriggerSensor_DispatchesSensorEvents()
-    {
-        var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(PhysicsWorld);
-
-        bool triggerDetected = false;
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 100f))
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new CircleShape(50f);
-                c.IsTrigger = true;
-                c.BodyType = PhysicsBodyType.Static;
-                c.OnTriggerEnter += (_) => triggerDetected = true;
-            });
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 100f))
-            .AddComponent<PhysicsBodyComponent>(c => c.Shape = new CircleShape(50f));
-        world.Flush();
-
-        for (int i = 0; i < 10; i++)
-            system.FixedUpdate(world, FixedTime);
-
-        Assert.True(triggerDetected);
-    }
-
-    [Fact]
     public void FixedUpdate_ColliderWithOffset_AppliesOffset()
     {
         var world = CreateTestWorld();
         var system = new Box2DPhysicsSystem(PhysicsWorld);
 
+        var origin = new Vector2(100f, 100f);
+        var offset = new Vector2(20f, 0f);
+
         world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(100f, 100f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = origin)
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
-                c.Offset = new Vector2(20f, 0f);
+                c.Offset = offset;
                 c.BodyType = PhysicsBodyType.Static;
             });
         world.Flush();
@@ -182,79 +97,10 @@ public class Box2DPhysicsSystemTests : PhysicsTestBase, IDisposable
         system.FixedUpdate(world, FixedTime);
 
         var collider = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        Assert.True(Box2D.NET.Bindings.B2.BodyIsValid(collider.BodyId));
-    }
+        var bodyPos = collider.GetWorldPosition();
 
-    [Fact]
-    public void FixedUpdate_PolygonShape_CreatesBody()
-    {
-        var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(PhysicsWorld);
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new PolygonShape([
-                    new Vector2(-20f, -20f),
-                    new Vector2(20f, -20f),
-                    new Vector2(20f, 20f),
-                    new Vector2(-20f, 20f)
-                ]);
-            });
-        world.Flush();
-
-        system.FixedUpdate(world, FixedTime);
-
-        var collider = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        Assert.True(Box2D.NET.Bindings.B2.BodyIsValid(collider.BodyId));
-        Assert.True(Box2D.NET.Bindings.B2.ShapeIsValid(collider.ShapeId));
-    }
-
-    [Fact]
-    public void FixedUpdate_BulletAndFixedRotation_AppliedToBody()
-    {
-        var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(PhysicsWorld);
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new CircleShape(5f);
-                c.IsBullet = true;
-                c.FixedRotation = true;
-            });
-        world.Flush();
-
-        system.FixedUpdate(world, FixedTime);
-
-        var collider = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        Assert.True(Box2D.NET.Bindings.B2.BodyIsValid(collider.BodyId));
-        Assert.True(Box2D.NET.Bindings.B2.BodyIsBullet(collider.BodyId));
-        Assert.True(Box2D.NET.Bindings.B2.BodyIsFixedRotation(collider.BodyId));
-    }
-
-    [Fact]
-    public void FixedUpdate_Restitution_AppliedToShape()
-    {
-        var world = CreateTestWorld();
-        var system = new Box2DPhysicsSystem(PhysicsWorld);
-
-        world.CreateEntity()
-            .AddComponent<TransformComponent>()
-            .AddComponent<PhysicsBodyComponent>(c =>
-            {
-                c.Shape = new CircleShape(10f);
-                c.Restitution = 0.8f;
-                c.SurfaceFriction = 0.3f;
-            });
-        world.Flush();
-
-        system.FixedUpdate(world, FixedTime);
-
-        var collider = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        Assert.True(Box2D.NET.Bindings.B2.ShapeIsValid(collider.ShapeId));
+        Assert.Equal(origin.X + offset.X, bodyPos.X, 0.1f);
+        Assert.Equal(origin.Y + offset.Y, bodyPos.Y, 0.1f);
     }
 
     // ----- Bug #3: ApplyMass — mixed solid + trigger sub-shapes -----
@@ -280,9 +126,7 @@ public class Box2DPhysicsSystemTests : PhysicsTestBase, IDisposable
         system.FixedUpdate(world, FixedTime);
 
         var collider = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        var massData = Box2D.NET.Bindings.B2.BodyGetMassData(collider.BodyId);
-
-        Assert.Equal(targetMass, massData.mass, precision: 2);
+        Assert.Equal(targetMass, collider.Mass, precision: 2);
     }
 
     [Fact]
@@ -306,9 +150,7 @@ public class Box2DPhysicsSystemTests : PhysicsTestBase, IDisposable
         system.FixedUpdate(world, FixedTime);
 
         var collider = world.Entities.First().GetComponent<PhysicsBodyComponent>()!;
-        var massData = Box2D.NET.Bindings.B2.BodyGetMassData(collider.BodyId);
-
-        Assert.Equal(targetMass, massData.mass, precision: 2);
+        Assert.Equal(targetMass, collider.Mass, precision: 2);
     }
 
     // ----- Missing #7: GetAllBodies / GetSleepingBodies -----

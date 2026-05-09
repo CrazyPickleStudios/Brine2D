@@ -4,7 +4,6 @@ using System.Numerics;
 
 namespace Brine2D.Tests.Physics;
 
-[Collection("Physics")]
 public class PhysicsWorldTests : IDisposable
 {
     private readonly List<PhysicsWorld> _worlds = [];
@@ -82,6 +81,33 @@ public class PhysicsWorldTests : IDisposable
         world.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => world.Step(1f / 60f));
+    }
+
+    [Fact]
+    public void GetContactEvents_AfterDispose_ThrowsObjectDisposed()
+    {
+        var world = CreateDispose();
+        world.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => world.GetContactEvents());
+    }
+
+    [Fact]
+    public void GetSensorEvents_AfterDispose_ThrowsObjectDisposed()
+    {
+        var world = CreateDispose();
+        world.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => world.GetSensorEvents());
+    }
+
+    [Fact]
+    public void GetBodyEvents_AfterDispose_ThrowsObjectDisposed()
+    {
+        var world = CreateDispose();
+        world.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => world.GetBodyEvents());
     }
 
     [Fact]

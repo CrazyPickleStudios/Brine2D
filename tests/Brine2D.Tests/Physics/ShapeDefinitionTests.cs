@@ -119,6 +119,57 @@ public class ShapeDefinitionTests
     }
 
     [Fact]
+    public void PolygonShape_DefaultOffset_IsZero()
+    {
+        Vector2[] verts = [new(-10f, -10f), new(10f, -10f), new(10f, 10f), new(-10f, 10f)];
+        var shape = new PolygonShape(verts);
+
+        Assert.Equal(Vector2.Zero, shape.Offset);
+    }
+
+    [Fact]
+    public void PolygonShape_InitOffset_SetsValue()
+    {
+        Vector2[] verts = [new(-10f, -10f), new(10f, -10f), new(10f, 10f), new(-10f, 10f)];
+        var shape = new PolygonShape(verts) { Offset = new Vector2(30f, 15f) };
+
+        Assert.Equal(new Vector2(30f, 15f), shape.Offset);
+    }
+
+    [Fact]
+    public void PolygonShape_WithExpression_PreservesOffset()
+    {
+        Vector2[] verts = [new(-10f, -10f), new(10f, -10f), new(10f, 10f), new(-10f, 10f)];
+        var shape = new PolygonShape(verts) { Offset = new Vector2(5f, 10f) };
+        var copy = shape with { Radius = 1f };
+
+        Assert.Equal(new Vector2(5f, 10f), copy.Offset);
+    }
+
+    [Fact]
+    public void PolygonShape_WithExpression_CanChangeOffset()
+    {
+        Vector2[] verts = [new(-10f, -10f), new(10f, -10f), new(10f, 10f), new(-10f, 10f)];
+        var shape = new PolygonShape(verts) { Offset = new Vector2(5f, 0f) };
+        var moved = shape with { Offset = new Vector2(20f, 0f) };
+
+        Assert.Equal(new Vector2(5f, 0f), shape.Offset);
+        Assert.Equal(new Vector2(20f, 0f), moved.Offset);
+    }
+
+    [Fact]
+    public void PolygonShape_Offset_DoesNotMutateVertices()
+    {
+        Vector2[] verts = [new(-10f, -10f), new(10f, -10f), new(10f, 10f), new(-10f, 10f)];
+        var original = new PolygonShape(verts);
+        var withOffset = original with { Offset = new Vector2(100f, 100f) };
+
+        Assert.Equal(original.Vertices.Count, withOffset.Vertices.Count);
+        for (int i = 0; i < original.Vertices.Count; i++)
+            Assert.Equal(original.Vertices[i], withOffset.Vertices[i]);
+    }
+
+    [Fact]
     public void ChainShape_TooFewPoints_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>

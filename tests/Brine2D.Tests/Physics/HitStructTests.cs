@@ -1,5 +1,4 @@
 using System.Numerics;
-using Box2D.NET.Bindings;
 using Brine2D.Physics;
 
 namespace Brine2D.Tests.Physics;
@@ -13,8 +12,7 @@ public class HitStructTests
         {
             Point = new Vector2(10f, 20f),
             Normal = new Vector2(0f, -1f),
-            Fraction = 0.5f,
-            ShapeId = default
+            Fraction = 0.5f
         };
 
         Assert.Equal(new Vector2(10f, 20f), hit.Point);
@@ -29,8 +27,7 @@ public class HitStructTests
         {
             Point = new Vector2(30f, 40f),
             Normal = new Vector2(1f, 0f),
-            Fraction = 0.75f,
-            ShapeId = default
+            Fraction = 0.75f
         };
 
         Assert.Equal(new Vector2(30f, 40f), hit.Point);

@@ -6,7 +6,6 @@ using Brine2D.Core;
 
 namespace Brine2D.Tests.Physics;
 
-[Collection("Physics")]
 public class OverlapBodyDeduplicationTests : PhysicsTestBase
 {
     public OverlapBodyDeduplicationTests() : base(gravity: Vector2.Zero) { }

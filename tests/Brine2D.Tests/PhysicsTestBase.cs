@@ -4,7 +4,6 @@ using Brine2D.Physics;
 
 namespace Brine2D.Tests;
 
-[Collection("Physics")]
 public abstract class PhysicsTestBase : TestBase, IDisposable
 {
     protected static readonly GameTime FixedTime = new(TimeSpan.Zero, TimeSpan.FromSeconds(1.0 / 60.0));
