@@ -380,7 +380,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         world.Flush();
         Step(world, system, 2);
 
-        bodyA.ApplyLinearImpulse(new Vector2(100000f, 0f));
+        bodyA.ApplyLinearImpulse(new Vector2(500f, 0f));
         Step(world, system, 5);
 
         Assert.True(breakFired, "OnBreak should fire when reaction force exceeds BreakForce.");
@@ -471,7 +471,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
         world.Flush();
         Step(world, system, 2);
 
-        bodyA.ApplyLinearImpulse(new Vector2(100000f, 0f));
+        bodyA.ApplyLinearImpulse(new Vector2(500f, 0f));
 
         Step(world, system, 1);
         Assert.True(breakCount >= 1, $"Joint should have broken on step 1. breakCount={breakCount}");
