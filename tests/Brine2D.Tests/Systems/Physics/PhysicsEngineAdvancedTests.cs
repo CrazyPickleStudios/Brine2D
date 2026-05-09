@@ -50,7 +50,7 @@ public class PhysicsEngineAdvancedTests : PhysicsTestBase
             });
 
         var dynEntity = world.CreateEntity()
-            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 180f))
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(0f, 150f))
             .AddComponent<PhysicsBodyComponent>(c =>
             {
                 c.Shape = new CircleShape(10f);
