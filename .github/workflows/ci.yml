@@ -26,6 +26,8 @@ jobs:
 
     - name: Test
       run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
+      env:
+        DOTNET_DefaultStackSize: "16777216"
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
