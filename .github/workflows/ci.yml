@@ -24,10 +24,26 @@ jobs:
     - name: Build
       run: dotnet build --no-restore --configuration Release
 
-    - name: Test
+    - name: Test (Physics - isolated)
+      run: >
+        dotnet test tests/Brine2D.Tests/Brine2D.Tests.csproj
+        --no-build --configuration Release --verbosity normal
+        --filter "Collection=Physics"
+        --logger "trx;LogFileName=physics-results.trx"
+      env:
+        DOTNET_DefaultStackSize: "16777216"
+
+    - name: Test (All)
       run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
       env:
         DOTNET_DefaultStackSize: "16777216"
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: "**/*.trx"
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
