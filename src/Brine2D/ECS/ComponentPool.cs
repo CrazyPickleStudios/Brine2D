@@ -1,3 +1,4 @@
+using Brine2D.Animation;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -23,6 +24,20 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
             !_components.ContainsKey(entityId),
             $"ComponentPool<{typeof(T).Name}> already contains entity {entityId}; duplicate AddComponent bypassed Entity's guard.");
         _components[entityId] = (T)component;
+    }
+
+    /// <summary>
+    /// Inserts <paramref name="t"/> into <paramref name="list"/> in stable priority order
+    /// (lower <see cref="AnimationTransition.Priority"/> = evaluated first).
+    /// Equal-priority transitions are appended after existing ones at the same priority,
+    /// preserving insertion order within a priority band.
+    /// </summary>
+    private static void InsertSorted(List<AnimationTransition> list, AnimationTransition t)
+    {
+        int i = list.Count;
+        while (i > 0 && list[i - 1].Priority > t.Priority)
+            i--;
+        list.Insert(i, t);
     }
 
     public Component? Get(long entityId)

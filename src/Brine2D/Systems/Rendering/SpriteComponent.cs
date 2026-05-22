@@ -44,6 +44,13 @@ public class SpriteComponent : Component
     public float Scale { get; set; } = 1.0f;
 
     /// <summary>
+    /// Origin/pivot point (0–1 range). Defaults to center.
+    /// Overridden each frame by <see cref="Brine2D.Systems.Animation.AnimationSystem"/> when an
+    /// <see cref="Brine2D.Animation.AnimatorComponent"/> is present.
+    /// </summary>
+    public Vector2 Origin { get; set; } = new Vector2(0.5f, 0.5f);
+
+    /// <summary>
     /// Whether to flip the sprite horizontally.
     /// </summary>
     public bool FlipX { get; set; }
@@ -58,4 +65,12 @@ public class SpriteComponent : Component
     /// Used by the batching system to sort sprites.
     /// </summary>
     public byte Layer { get; set; } = 0;
+
+    /// <summary>
+    /// Outgoing cross-fade ghosts, one per concurrent fade (base animator + each layer).
+    /// Rendered by <see cref="SpriteRenderingSystem"/> as additional draw calls at fading-out
+    /// opacity, producing true multi-source cross-fade blends.
+    /// Set and cleared automatically by <see cref="Brine2D.Systems.Animation.AnimationSystem"/>.
+    /// </summary>
+    public List<CrossFadeGhost> CrossFadeGhosts { get; } = new();
 }

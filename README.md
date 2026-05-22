@@ -231,6 +231,7 @@ public class GameScene : Scene
 | `SpriteRenderingSystem` | Render | 0 | Sprite batching and frustum culling |
 | `AudioSystem` | Update | 0 | Spatial audio processing |
 | `ParticleSystem` | Both | 250 / 100 | Particle effects with object pooling |
+| `AnimationSystem` | Update | 400 | Sprite animation, state machines, layers, blend trees |
 | `CameraSystem` | Update | 500 | Camera follow and zoom |
 | `DebugRenderer` | Render | 1000 | Debug visualization (disabled by default) |
 
@@ -473,6 +474,171 @@ _camera.Shake(duration: 0.3f, intensity: 8f);
 ~~~
 
 ---
+
+### Animation
+
+Add `AnimatorComponent` alongside `SpriteComponent`. `AnimationSystem` is a default system and runs automatically.
+
+**Building a clip manually:**
+~~~csharp
+var clip = new AnimationClip { Name = "run", PlaybackMode = PlaybackMode.Loop };
+clip.AddFrame(new SpriteFrame(new Rectangle(0,   0, 48, 48)));
+clip.AddFrame(new SpriteFrame(new Rectangle(48,  0, 48, 48)));
+clip.AddFrame(new SpriteFrame(new Rectangle(96,  0, 48, 48)));
+clip.AddFrame(new SpriteFrame(new Rectangle(144, 0, 48, 48)));
+
+var idle = new AnimationClip { Name = "idle", PlaybackMode = PlaybackMode.Loop };
+idle.AddFrame(new SpriteFrame(new Rectangle(0, 48, 48, 48), duration: 0.5f));
+
+var attack = new AnimationClip { Name = "attack", PlaybackMode = PlaybackMode.OnceHoldLast };
+attack.AddFrame(new SpriteFrame(new Rectangle(0,  96, 48, 48)));
+attack.AddFrame(new SpriteFrame(new Rectangle(48, 96, 48, 48)));
+~~~
+
+**Setting up the entity:**
+~~~csharp
+var entity = World.CreateEntity("Player")
+    .AddComponent<TransformComponent>(t => t.Position = new Vector2(400, 300))
+    .AddComponent<SpriteComponent>(s => s.TexturePath = "assets/images/player.png")
+    .AddComponent<AnimatorComponent>();
+
+var anim = entity.GetComponent<AnimatorComponent>()!;
+anim.Animator.AddAnimation(idle);
+anim.Animator.AddAnimation(clip);
+anim.Animator.AddAnimation(attack);
+~~~
+
+**Playback modes:**
+
+| `PlaybackMode` | Description |
+|---|---|
+| `Loop` | Loops indefinitely (default) |
+| `OnceHoldLast` | Plays once, freezes on last frame |
+| `OnceHoldFirst` | Plays once, freezes on first frame |
+| `OnceStop` | Plays once, then clears the current frame (`CurrentFrame` → `null`) |
+| `PingPong` | Loops forward→backward indefinitely |
+| `PingPongOnce` | One full forward→backward cycle, then stops |
+
+**Playback control:**
+~~~csharp
+anim.Animator.Play("run");
+anim.Animator.Play("attack");                           // hard cut
+anim.Animator.PlayWithCrossFade("run", crossFadeDuration: 0.1f);
+anim.Animator.PlayFromFrame("run", startFrame: 2);
+anim.Animator.PlayFromNormalizedTime("run", normalizedTime: 0.5f);
+anim.Animator.PlayQueued("idle");                       // plays after current non-looping clip ends
+anim.Animator.Pause();
+anim.Animator.Resume();
+anim.Animator.Stop();
+anim.Animator.Speed    = 1.5f;                          // playback speed multiplier
+anim.Animator.Reversed = true;                          // play in reverse
+~~~
+
+**Animator events:**
+~~~csharp
+anim.Animator.OnAnimationStart    += clip => { };
+anim.Animator.OnAnimationComplete += clip => { };       // non-looping clips only
+anim.Animator.OnLoopComplete      += clip => { };       // each wrap, ping-pong reverse, or RepeatCount pass
+anim.Animator.OnFrameChanged      += frame => { };
+~~~
+
+**State machine (automatic transitions):**
+~~~csharp
+var sm = anim.StateMachine;
+
+sm.SetDefaultState("idle");
+
+// Condition-based transitions
+sm.AddTransition("idle", "run",
+    condition: () => _speed > 10f,
+    canInterrupt: false,
+    crossFadeDuration: 0.08f);
+
+sm.AddTransition("run", "idle",
+    condition: () => _speed <= 10f,
+    crossFadeDuration: 0.08f);
+
+// AnyState → attack when trigger is armed
+sm.AddAnyTriggerTransition("attack", anim.Parameters, "AttackTrigger",
+    canInterrupt: false, crossFadeDuration: 0.05f);
+
+// Return to idle automatically when "attack" finishes
+sm.AddOnCompleteTransition("attack", "idle");
+
+// Arm a trigger from a behavior or system
+anim.Parameters.SetTrigger("AttackTrigger");
+~~~
+
+**Per-state callbacks:**
+~~~csharp
+sm.OnStateEnter("run",    prev => StartFootstepAudio());
+sm.OnStateExit("attack",  next => ResetHitbox());
+sm.OnStateChanged += (prev, next) => Debug.WriteLine($"{prev} → {next}");
+~~~
+
+**Animation layers** (independent tracks — e.g., body + upper-body overlay):
+~~~csharp
+var upperBody = anim.AddLayer("upper-body", priority: 1);
+upperBody.Mask      = AnimationLayerMask.SourceRect | AnimationLayerMask.FlipX;
+upperBody.Weight    = 1f;
+upperBody.BlendMode = AnimationLayerBlendMode.Override; // or Additive
+
+upperBody.Animator.AddAnimation(aimClip);
+upperBody.Animator.Play("aim");
+
+// Tint-flash layer (additive, drives only Tint)
+var tintLayer = anim.AddLayer("hit-flash", priority: 2);
+tintLayer.Mask      = AnimationLayerMask.Tint;
+tintLayer.BlendMode = AnimationLayerBlendMode.Additive;
+tintLayer.Animator.AddAnimation(flashClip);
+tintLayer.Animator.Play("flash");
+~~~
+
+**1D blend selector** (continuous parameter → clip selection):
+~~~csharp
+var tree = new AnimationBlendSelector1D(anim.Animator);
+tree.AddNode(threshold: 0f,   clipName: "idle", speed: 0f);
+tree.AddNode(threshold: 150f, clipName: "walk", speed: 1f);
+tree.AddNode(threshold: 400f, clipName: "run",  speed: 1.5f);
+tree.CrossFadeDuration      = 0.08f; // smooth clip transitions
+tree.RespectNonLoopingClips = true;  // don't interrupt attack/hurt clips
+
+anim.BlendSelector1D = tree;
+
+// Set each frame from a behavior or system
+anim.BlendSelector1D.Value = _velocity.Length();
+~~~
+
+**2D blend selector** (two-axis directional selection):
+~~~csharp
+var tree2d = new AnimationBlendSelector2D(anim.Animator);
+tree2d.AddNode(new Vector2( 0,  1), "walk-up");
+tree2d.AddNode(new Vector2( 0, -1), "walk-down");
+tree2d.AddNode(new Vector2(-1,  0), "walk-left");
+tree2d.AddNode(new Vector2( 1,  0), "walk-right");
+
+anim.BlendSelector2D       = tree2d;
+anim.BlendSelector2D.Value = new Vector2(_inputX, _inputY);
+~~~
+
+**Per-frame hit boxes:**
+~~~csharp
+// Set on a frame when building the clip
+frame.HitBox = new Rectangle(8, 4, 32, 40);            // primary hit box
+frame.SetHitBox("sword", new Rectangle(32, 8, 24, 8)); // named hit box
+
+// Read back at runtime
+var box   = anim.CurrentHitBox;
+var sword = anim.GetCurrentHitBox("sword");
+~~~
+
+**Per-frame clip events:**
+~~~csharp
+clip.AddEvent(new ClipEvent { Time = 0.1f, Name = "footstep" });
+
+// Events surface via OnFrameChanged; inspect clip.Events to match by Name / Time
+anim.Animator.OnFrameChanged += frame => { };
+~~~
 
 ---
 
@@ -1014,7 +1180,7 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 - One-way platforms, collision groups, per-body gravity overrides
 - Joints: revolute, distance, weld, prismatic, motor, wheel, mouse
 - Particle system with object pooling
-- Frame-based sprite animation
+- Sprite animation: `AnimatorComponent` with `SpriteAnimator`, code-driven state machine, animation layers (independent tracks with mask, weight, blend mode), 1D and 2D blend trees, cross-fade, ping-pong, per-frame hit boxes and clip events
 - Tilemap support: Tiled (`.tmj`) integration
 - UI framework: canvas, buttons, labels, scroll views
 

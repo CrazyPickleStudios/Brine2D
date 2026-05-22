@@ -4,6 +4,7 @@ using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.Hosting;
 using Brine2D.Rendering;
+using Brine2D.Systems.Animation;
 using Brine2D.Systems.Audio;
 using Brine2D.Systems.Physics;
 using Brine2D.Systems.Rendering;
@@ -32,6 +33,7 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
     /// </remarks>
     private static readonly (Type Type, Action<IEntityWorld> Register)[] DefaultSystems =
     [
+        (typeof(AnimationSystem),       static w => w.AddSystem<AnimationSystem>()),
         (typeof(SpriteRenderingSystem), static w => w.AddSystem<SpriteRenderingSystem>()),
         (typeof(ParticleSystem),        static w => w.AddSystem<ParticleSystem>()),
         (typeof(Box2DPhysicsSystem),    static w => w.AddSystem<Box2DPhysicsSystem>()),

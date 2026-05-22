@@ -15,15 +15,14 @@ namespace Brine2D.Systems.Rendering;
 /// </summary>
 public class SpriteRenderingSystem : RenderSystemBase
 {
-    public override int RenderOrder => SystemRenderOrder.Sprites; // Explicit order
+    public override int RenderOrder => SystemRenderOrder.Sprites;
     public string Name => "SpriteRenderingSystem";
 
     private readonly ITextureLoader _textureLoader;
     private readonly ICamera? _camera;
     private readonly Dictionary<string, ITexture> _textureCache = new();
     private readonly SpriteBatcher _batcher = new();
-    
-    // Track stats for performance monitoring
+
     private int _lastRenderedCount = 0;
     private int _lastTotalCount = 0;
 
@@ -41,8 +40,6 @@ public class SpriteRenderingSystem : RenderSystemBase
     /// <summary>
     /// Loads textures for all sprites that need them.
     /// </summary>
-    /// <param name="world">The entity world to load textures for.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task LoadTexturesAsync(IEntityWorld world, CancellationToken cancellationToken = default)
     {
         var sprites = world.GetEntitiesWithComponent<SpriteComponent>();
@@ -86,7 +83,7 @@ public class SpriteRenderingSystem : RenderSystemBase
             if (sprite.Texture != null)
                 _cachedSprites.Add((entity, sprite));
         }
-        
+
         _lastTotalCount = _cachedSprites.Count;
         int culledCount = 0;
 
@@ -109,28 +106,52 @@ public class SpriteRenderingSystem : RenderSystemBase
                 continue;
             }
 
-            // Calculate final scale (transform scale * sprite scale)
+            var position = transform.Position + sprite.Offset;
             var finalScale = transform.Scale * sprite.Scale;
-            
-            // Apply flip by negating scale
-            if (sprite.FlipX)
-                finalScale.X *= -1;
-            if (sprite.FlipY)
-                finalScale.Y *= -1;
+            var flipX = sprite.FlipX;
+            var flipY = sprite.FlipY;
 
-            // Add to batch
+            if (flipX) finalScale.X *= -1;
+            if (flipY) finalScale.Y *= -1;
+
+            // Ghost draws (outgoing frames of concurrent cross-fades) — rendered first so they appear behind.
+            foreach (var ghost in sprite.CrossFadeGhosts)
+            {
+                if (ghost.Alpha <= 0f)
+                    continue;
+
+                var ghostTexture = ghost.Texture
+                    ?? (ghost.TexturePath != null && _textureCache.TryGetValue(ghost.TexturePath, out var cached) ? cached : null);
+
+                if (ghostTexture == null)
+                    continue;
+
+                var ghostScale = transform.Scale * sprite.Scale;
+                if (ghost.FlipX) ghostScale.X *= -1;
+                if (ghost.FlipY) ghostScale.Y *= -1;
+
+                _batcher.Draw(
+                    texture: ghostTexture,
+                    position: transform.Position + ghost.DrawOffset,
+                    sourceRect: ghost.SourceRect,
+                    scale: ghostScale,
+                    rotation: transform.Rotation,
+                    origin: ghost.Origin,
+                    tint: ghost.Tint.WithAlpha(ghost.Alpha),
+                    layer: sprite.Layer);
+            }
+
             _batcher.Draw(
                 texture: sprite.Texture!,
-                position: transform.Position + sprite.Offset,
+                position: position,
                 sourceRect: sprite.SourceRect,
                 scale: finalScale,
                 rotation: transform.Rotation,
-                origin: new Vector2(0.5f, 0.5f), // Center origin
+                origin: sprite.Origin,
                 tint: sprite.Tint,
-                layer: sprite.Layer
-            );
+                layer: sprite.Layer);
         }
-        
+
         _lastRenderedCount = _lastTotalCount - culledCount;
 
         // Flush batch (sorts by layer/texture and renders)
