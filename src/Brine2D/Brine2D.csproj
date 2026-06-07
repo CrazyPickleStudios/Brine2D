@@ -92,6 +92,23 @@
 		<Exec Command="&quot;$(DxcExePath)&quot; -T ps_6_0 -E main &quot;$(ShaderSourceDir)\fragment.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\default_fragment.dxil&quot;" Condition="Exists('$(ShaderSourceDir)\fragment.hlsl')" />
 
 		<!-- ============================================ -->
+		<!-- Particle Rendering Shaders                   -->
+		<!-- ============================================ -->
+		<Message Text="Compiling particle shaders..." Importance="high" />
+
+		<!-- Compile particle vertex shader to SPIRV (for Vulkan) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T vs_6_0 -E main &quot;$(ShaderSourceDir)\particle_vertex.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\particle_vertex.spv&quot;" Condition="Exists('$(ShaderSourceDir)\particle_vertex.hlsl')" />
+
+		<!-- Compile particle vertex shader to DXIL (for D3D12) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -T vs_6_0 -E main &quot;$(ShaderSourceDir)\particle_vertex.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\particle_vertex.dxil&quot;" Condition="Exists('$(ShaderSourceDir)\particle_vertex.hlsl')" />
+
+		<!-- Compile particle fragment shader to SPIRV (for Vulkan) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -spirv -T ps_6_0 -E main &quot;$(ShaderSourceDir)\particle_fragment.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\particle_fragment.spv&quot;" Condition="Exists('$(ShaderSourceDir)\particle_fragment.hlsl')" />
+
+		<!-- Compile particle fragment shader to DXIL (for D3D12) -->
+		<Exec Command="&quot;$(DxcExePath)&quot; -T ps_6_0 -E main &quot;$(ShaderSourceDir)\particle_fragment.hlsl&quot; -Fo &quot;$(ShaderSourceDir)\particle_fragment.dxil&quot;" Condition="Exists('$(ShaderSourceDir)\particle_fragment.hlsl')" />
+
+		<!-- ============================================ -->
 		<!-- Post-Processing Shaders: Grayscale          -->
 		<!-- ============================================ -->
 		<Message Text="Compiling post-processing shaders (grayscale)..." Importance="high" />
@@ -145,6 +162,24 @@
 				<Link>Shaders\default_fragment.dxil</Link>
 			</EmbeddedResource>
 
+			<!-- Particle rendering shaders -->
+			<EmbeddedResource Include="$(ProjectDir)Shaders\particle_vertex.spv" Condition="Exists('$(ProjectDir)Shaders\particle_vertex.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.particle_vertex.spv</LogicalName>
+				<Link>Shaders\particle_vertex.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\particle_fragment.spv" Condition="Exists('$(ProjectDir)Shaders\particle_fragment.spv')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.particle_fragment.spv</LogicalName>
+				<Link>Shaders\particle_fragment.spv</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\particle_vertex.dxil" Condition="Exists('$(ProjectDir)Shaders\particle_vertex.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.particle_vertex.dxil</LogicalName>
+				<Link>Shaders\particle_vertex.dxil</Link>
+			</EmbeddedResource>
+			<EmbeddedResource Include="$(ProjectDir)Shaders\particle_fragment.dxil" Condition="Exists('$(ProjectDir)Shaders\particle_fragment.dxil')">
+				<LogicalName>Brine2D.Rendering.SDL.Shaders.particle_fragment.dxil</LogicalName>
+				<Link>Shaders\particle_fragment.dxil</Link>
+			</EmbeddedResource>
+
 			<!-- Post-processing shaders: Grayscale -->
 			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\grayscale_vertex.spv" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\grayscale_vertex.spv')">
 				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.grayscale_vertex.spv</LogicalName>
@@ -172,7 +207,6 @@
 				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.blur_vertex.dxil</LogicalName>
 				<Link>Shaders\PostProcessing\blur_vertex.dxil</Link>
 			</EmbeddedResource>
-
 			<EmbeddedResource Include="$(ProjectDir)Shaders\PostProcessing\blur_fragment.spv" Condition="Exists('$(ProjectDir)Shaders\PostProcessing\blur_fragment.spv')">
 				<LogicalName>Brine2D.Rendering.SDL.Shaders.PostProcessing.blur_fragment.spv</LogicalName>
 				<Link>Shaders\PostProcessing\blur_fragment.spv</Link>
@@ -182,7 +216,7 @@
 				<Link>Shaders\PostProcessing\blur_fragment.dxil</Link>
 			</EmbeddedResource>
 		</ItemGroup>
-		<Message Text="Added compiled shaders as embedded resources (default + grayscale + blur)" Importance="high" />
+		<Message Text="Added compiled shaders as embedded resources (default + particle + grayscale + blur)" Importance="high" />
 	</Target>
 
 </Project>

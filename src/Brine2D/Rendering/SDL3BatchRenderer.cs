@@ -232,52 +232,21 @@ internal sealed class SDL3BatchRenderer : IDisposable
     {
         if (radius <= 0) return;
 
-        int segments = Math.Min(CalculateCircleSegments(radius), MaxVertices / VerticesPerQuad * 2);
         EnsureTextureBound(_whiteTexture, WhiteTextureScaleMode, onFlushNeeded);
-        int quadsNeeded = (segments + 1) / 2;
-        if (!EnsureVertexCapacity(quadsNeeded * VerticesPerQuad, onFlushNeeded)) return;
+        if (!EnsureVertexCapacity(VerticesPerQuad, onFlushNeeded)) return;
 
-        float angleStep = MathF.PI * 2f / segments;
-        var colorVec = ColorToVector4(color);
+        var c = ColorToVector4(color);
+        float left = centerX - radius;
+        float top = centerY - radius;
+        float right = centerX + radius;
+        float bottom = centerY + radius;
 
-        for (int i = 0; i < segments - 1; i += 2)
-        {
-            float angle1 = i * angleStep;
-            float angle2 = (i + 1) * angleStep;
-            float angle3 = (i + 2) * angleStep;
-
-            float p1x = centerX + MathF.Cos(angle1) * radius;
-            float p1y = centerY + MathF.Sin(angle1) * radius;
-            float p2x = centerX + MathF.Cos(angle2) * radius;
-            float p2y = centerY + MathF.Sin(angle2) * radius;
-            float p3x = centerX + MathF.Cos(angle3) * radius;
-            float p3y = centerY + MathF.Sin(angle3) * radius;
-
-            AddVertex(p1x, p1y, colorVec, pixelSnap: false);
-            AddVertex(p2x, p2y, colorVec, pixelSnap: false);
-            AddVertex(centerX, centerY, colorVec, pixelSnap: false);
-            AddVertex(p3x, p3y, colorVec, pixelSnap: false);
-        }
-
-        if (segments % 2 != 0)
-        {
-            int last = segments - 1;
-            float angle1 = last * angleStep;
-            float angleMid = (last + 0.5f) * angleStep;
-            float angle2 = (last + 1) * angleStep;
-
-            float p1x = centerX + MathF.Cos(angle1) * radius;
-            float p1y = centerY + MathF.Sin(angle1) * radius;
-            float pMidX = centerX + MathF.Cos(angleMid) * radius;
-            float pMidY = centerY + MathF.Sin(angleMid) * radius;
-            float p2x = centerX + MathF.Cos(angle2) * radius;
-            float p2y = centerY + MathF.Sin(angle2) * radius;
-
-            AddVertex(p1x, p1y, colorVec, pixelSnap: false);
-            AddVertex(pMidX, pMidY, colorVec, pixelSnap: false);
-            AddVertex(centerX, centerY, colorVec, pixelSnap: false);
-            AddVertex(p2x, p2y, colorVec, pixelSnap: false);
-        }
+        // UV sentinel [2,3] triggers the SDF circle branch in fragment.hlsl.
+        // 4 vertices instead of the 8–56 quads the old segment loop produced.
+        AddVertex(left, top, c, 2f, 2f, pixelSnap: false);
+        AddVertex(right, top, c, 3f, 2f, pixelSnap: false);
+        AddVertex(left, bottom, c, 2f, 3f, pixelSnap: false);
+        AddVertex(right, bottom, c, 3f, 3f, pixelSnap: false);
     }
 
     public void DrawCircleOutline(float centerX, float centerY, float radius, Color color, float thickness = 1, Action? onFlushNeeded = null)

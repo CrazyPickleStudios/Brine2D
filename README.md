@@ -230,7 +230,7 @@ public class GameScene : Scene
 |---|---|---|---|
 | `SpriteRenderingSystem` | Render | 0 | Sprite batching and frustum culling |
 | `AudioSystem` | Update | 0 | Spatial audio processing |
-| `ParticleSystem` | Both | 250 / 100 | Particle effects with object pooling |
+| `ParticleSystem` | Both | 250 / 100 | GPU-instanced particles, trails, sub-emitters, turbulence |
 | `AnimationSystem` | Update | 400 | Sprite animation, state machines, layers, blend trees |
 | `CameraSystem` | Update | 500 | Camera follow and zoom |
 | `DebugRenderer` | Render | 1000 | Debug visualization (disabled by default) |
@@ -638,6 +638,169 @@ clip.AddEvent(new ClipEvent { Time = 0.1f, Name = "footstep" });
 
 // Events surface via OnFrameChanged; inspect clip.Events to match by Name / Time
 anim.Animator.OnFrameChanged += frame => { };
+~~~
+
+---
+
+### Particles
+
+`ParticleSystem` is a default system. Add `ParticleEmitterComponent` to any entity with a `TransformComponent`.
+
+~~~csharp
+World.CreateEntity("Fire")
+    .AddComponent<TransformComponent>(t => t.Position = new Vector2(400, 300))
+    .AddComponent<ParticleEmitterComponent>(e =>
+    {
+        e.EmissionRate   = 40f;
+        e.MaxParticles   = 200;
+        e.ParticleLifetime   = 1.5f;
+        e.LifetimeVariation  = 0.4f;
+        e.StartSize      = 6f;
+        e.EndSize        = 0f;
+        e.StartColor     = new Color(255, 180, 60, 220);
+        e.EndColor       = new Color(255, 80, 0, 0);
+        e.InitialVelocity = new Vector2(0, -80f);
+        e.VelocitySpread  = 35f;
+        e.Gravity         = new Vector2(0, -20f);
+        e.BlendMode       = BlendMode.Additive;
+    });
+~~~
+
+**Emitter shapes:**
+
+| `EmitterShape` | Properties used | Notes |
+|---|---|---|
+| `Point` | — | All particles spawn at the same position |
+| `Circle` | `SpawnRadius`, `SpawnOnPerimeter` | Uniform disk fill, or ring perimeter |
+| `Box` | `ShapeSize`, `BoxAngle` | Rotatable rectangular spawn area |
+| `Line` | `LineLength` / `ShapeSize.X`, `LineAngle` | Particles spawn along a rotatable segment |
+| `Cone` | `SpawnRadius`, `ConeAngle`, `SpawnOnPerimeter` | Directional cone; uses `InitialVelocity` as axis |
+
+**Key emitter properties:**
+
+| Property | Description |
+|---|---|
+| `EmissionRate` | Particles per second (continuous emitters) |
+| `IsBurst` / `BurstCount` | Single-frame burst instead of continuous emission |
+| `Duration` / `Loop` | Auto-stop after N seconds; re-arm with `Loop = true` |
+| `Delay` | Seconds before first emission (re-applied each loop) |
+| `WarmupDuration` | Pre-simulates N seconds on first activation; useful for ambient effects |
+| `MaxParticles` | Hard cap on live particles for this emitter |
+| `ColorGradient` | Multi-stop `Color[]` sampled over lifetime; overrides `StartColor`/`EndColor` |
+| `StartColorVariation` / `EndColorVariation` | Per-channel random nudge at spawn |
+| `SizeVariation` / `EndSizeVariation` | Per-particle random size range |
+| `StartSpeedMultiplier` / `EndSpeedMultiplier` | Speed curve over lifetime (1/1 = no change) |
+| `Damping` | Exponential drag: `velocity *= exp(-Damping * dt)` |
+| `TurbulenceStrength` / `TurbulenceFrequency` | Coherent value-noise velocity perturbation |
+| `SimulateInLocalSpace` | Particles move with the entity; good for exhaust and auras |
+| `VelocityInheritance` | Fraction of the entity's velocity added to new particles at spawn |
+| `RenderLayer` | Draw order relative to other emitters (lower = further back) |
+| `BlendMode` | `Alpha`, `Additive`, etc. |
+| `ParticleTexture` / `ParticleAtlasRegion` | Optional sprite; untextured particles use an SDF soft circle |
+| `ParticleFrames` | `AtlasRegion[]` animation strip distributed evenly over lifetime |
+
+**Burst emitter:**
+~~~csharp
+emitter.IsBurst   = true;
+emitter.BurstCount = 60;
+emitter.Loop      = false;                    // fires once; entity disables itself when particles expire
+emitter.OnEmitterFinished += () => entity.Destroy();
+~~~
+
+**Playback control:**
+~~~csharp
+var e = entity.GetComponent<ParticleEmitterComponent>()!;
+
+e.Play();    // start or restart from clean state
+e.Pause();   // freeze aging, movement, and emission
+e.Resume();  // unfreeze
+e.Stop();    // clear all live particles on the next update
+
+// Snapshot/restore configuration (e.g., after runtime tweaks)
+e.CaptureDefaultState();
+e.ResetToDefaultState();    // throws if CaptureDefaultState was never called
+e.TryResetToDefaultState(); // safe version; returns false if no snapshot exists
+~~~
+
+**Trails:**
+~~~csharp
+emitter.EnableTrails     = true;
+emitter.TrailLength      = 8;         // history slots
+emitter.TrailHeadAlpha   = 0.9f;      // alpha of newest trail segment
+emitter.TrailTailAlpha   = 0.0f;      // alpha of oldest trail segment
+emitter.TrailHeadSizeRatio = 1.0f;
+emitter.TrailTailSizeRatio = 0.3f;
+emitter.TrailMode        = TrailMode.Sprites; // or TrailMode.Lines (untextured only)
+~~~
+
+> Trail particles fall back to the batch renderer; GPU instancing is used for non-trail particles.
+
+**Sub-emitters (birth, death, lifetime-fraction):**
+~~~csharp
+var spark = new SubEmitterConfig
+{
+    BurstCount     = 8,
+    ParticleLifetime = 0.3f,
+    StartSize      = 3f,
+    EndSize        = 0f,
+    InitialVelocity = Vector2.Zero,
+    VelocitySpread  = 360f,
+    StartColor     = Color.White,
+    EndColor       = new Color(255, 255, 255, 0),
+    BlendMode      = BlendMode.Additive,
+    MaxParticles   = 400,             // shared cap across all bursts of this config
+};
+
+emitter.DeathSubEmitters = [spark];   // burst at each particle's death position
+emitter.BirthSubEmitters = [spark];   // burst at each particle's spawn position
+
+// Trigger at 50% lifetime
+emitter.LifetimeFractionSubEmitters =
+[
+    new LifetimeFractionSubEmitter { Fraction = 0.5f, Config = spark }
+];
+~~~
+
+Sub-emitter particles are managed internally — no extra entities or components needed. Sub-emitters do not chain.
+
+**Custom forces (`IParticleForce`):**
+~~~csharp
+public class VortexForce : IParticleForce
+{
+    public Vector2 Center { get; set; }
+    public float   Strength { get; set; } = 200f;
+
+    public Vector2 Evaluate(Vector2 particleWorldPosition, float deltaTime)
+    {
+        var diff = Center - particleWorldPosition;
+        var perp = new Vector2(-diff.Y, diff.X);
+        return Vector2.Normalize(perp) * Strength * deltaTime;
+    }
+}
+
+emitter.Forces = [new VortexForce { Center = new Vector2(400, 300) }];
+~~~
+
+Forces are summed into `BaseVelocity` every frame and are subject to `Damping` and `StartSpeedMultiplier`/`EndSpeedMultiplier`.
+
+**Fire-and-forget burst (no entity required):**
+~~~csharp
+// Inject ParticleSystem via constructor
+_particleSystem.Burst(worldPosition, sparkConfig);
+~~~
+
+**Callbacks:**
+~~~csharp
+emitter.OnParticleSpawned  += p => { };  // called immediately after spawn
+emitter.OnParticleDied     += p => { };  // called at natural expiry (not Stop())
+emitter.OnEmitterFinished  += ()  => { };  // called when a duration/burst emitter finishes
+~~~
+
+**Budget monitoring:**
+~~~csharp
+int total = World.GetSystem<ParticleSystem>()!.TotalParticleCount;
+int own   = emitter.ParticleCount;
+var live  = emitter.ActiveParticles; // IReadOnlyList<Particle>
 ~~~
 
 ---
@@ -1179,7 +1342,7 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 - Kinematic character controller: `MoveAndSlide`, `MoveAndCollide`, grounded state, snap-to-floor, moving platforms
 - One-way platforms, collision groups, per-body gravity overrides
 - Joints: revolute, distance, weld, prismatic, motor, wheel, mouse
-- Particle system with object pooling
+- Particle system: GPU-instanced rendering, SDF soft circles, trails (sprites and line ribbon), sub-emitters (birth / death / lifetime-fraction triggers), coherent turbulence, `IParticleForce`, animated sprite frames, multi-stop color gradients, local-space simulation, warmup pre-simulation, object pooling
 - Sprite animation: `AnimatorComponent` with `SpriteAnimator`, code-driven state machine, animation layers (independent tracks with mask, weight, blend mode), 1D and 2D blend trees, cross-fade, ping-pong, per-frame hit boxes and clip events
 - Tilemap support: Tiled (`.tmj`) integration
 - UI framework: canvas, buttons, labels, scroll views

@@ -12,10 +12,8 @@ float4 main(PSInput input) : SV_Target
 {
     float2 uv = input.TexCoord;
 
-    // SDF filled circle: TexCoord is in [2,3]×[2,3] when emitted by DrawCircleFilled.
-    // Normal texture UVs are always in [0,1] so the threshold is unambiguous.
-    // One bounding quad replaces N CPU-computed geometry segments; fwidth() gives
-    // sub-pixel anti-aliasing that scales automatically with circle size and camera zoom.
+    // SDF filled circle: UVRect sentinel (2,2,3,3) maps TexCoord into [2,3].
+    // Identical logic to fragment.hlsl so instanced circles match DrawCircleFilled visually.
     if (uv.x >= 1.5)
     {
         float2 circleUV = uv - 2.0;
@@ -27,16 +25,5 @@ float4 main(PSInput input) : SV_Target
     }
 
     float4 texColor = Texture.Sample(Sampler, uv);
-
-    float grayscale = (texColor.r + texColor.g + texColor.b) / 3.0;
-    bool isFont = grayscale > 0.95 &&
-                  abs(texColor.r - texColor.g) < 0.01 &&
-                  abs(texColor.g - texColor.b) < 0.01;
-
-    if (isFont)
-    {
-        return float4(input.Color.rgb, input.Color.a * texColor.a);
-    }
-
     return texColor * input.Color;
 }

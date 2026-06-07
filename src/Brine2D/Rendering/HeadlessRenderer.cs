@@ -331,9 +331,7 @@ internal sealed class HeadlessRenderer : IRenderer
         ThrowIfDisposed();
 
         if (_renderTargetStack.Count == 0)
-        {
             throw new InvalidOperationException("Cannot pop render target: stack is empty");
-        }
 
         _currentRenderTarget = _renderTargetStack.Pop();
     }
@@ -343,9 +341,7 @@ internal sealed class HeadlessRenderer : IRenderer
         ThrowIfDisposed();
 
         if (_scissorRectStack.Count == 0)
-        {
             throw new InvalidOperationException("Cannot pop scissor rect: stack is empty");
-        }
 
         _scissorRect = _scissorRectStack.Pop();
     }

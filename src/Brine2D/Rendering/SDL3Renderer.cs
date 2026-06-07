@@ -27,6 +27,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
     private readonly SDL3BatchRenderer _batchRenderer;
     private readonly SDL3FrameManager _frameManager;
     private readonly SDL3PostProcessPipeline? _postProcessPipeline;
+    private SDL3ParticleRenderer _particleRenderer;
 
     private nint _window;
     private nint _device;
@@ -40,6 +41,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
     private readonly SDL3.SDL.GPUColorTargetInfo[] _colorTargetInfoBuf = new SDL3.SDL.GPUColorTargetInfo[1];
     private readonly SDL3.SDL.GPUTextureSamplerBinding[] _textureSamplerBindingBuf = new SDL3.SDL.GPUTextureSamplerBinding[1];
     private readonly SDL3.SDL.GPUBufferBinding[] _vertexBufferBindingBuf = new SDL3.SDL.GPUBufferBinding[1];
+    private readonly SDL3.SDL.GPUBufferBinding[] _particleVertexBufferBindingBuf = new SDL3.SDL.GPUBufferBinding[2];
 
     private readonly List<DrawCallRecord> _pendingDrawCalls = new(64);
     private readonly HashSet<nint> _clearedSystemTargetsThisFrame = new(4);
@@ -86,7 +88,10 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         SDL3.SDL.Rect Scissor,
         bool IsUserRenderTarget,
         RenderTarget? UserRenderTarget,
-        ITexture? TextureRef
+        ITexture? TextureRef,
+        bool IsParticle,
+        int ParticleFirstInstance,
+        int ParticleInstanceCount
     )
     {
         public nint ResolvedRenderTargetHandle => IsUserRenderTarget && UserRenderTarget != null
@@ -115,6 +120,13 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
     internal SDL3.SDL.GPUTextureFormat SwapchainFormat => _swapchainFormat;
     public bool IsInitialized { get; private set; }
 
+    /// <summary>
+    /// Provides direct access to the hardware-instanced particle renderer.
+    /// Used internally by <c>ParticleSystem</c> to submit instanced draw calls
+    /// without going through the public <see cref="IRenderer"/> interface.
+    /// </summary>
+    internal SDL3ParticleRenderer ParticleRenderer => _particleRenderer;
+
     public ICamera? Camera
     {
         get => _stateManager.Camera;
@@ -142,19 +154,23 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         _eventBus = eventBus;
         if (_eventBus == null)
             _logger.LogWarning("No event bus provided; window resize/hide/show events will not be handled");
-        
+
         _viewportWidth = _windowOptions.Width;
         _viewportHeight = _windowOptions.Height;
-        
+
         _stateManager = new SDL3StateManager(_loggerFactory.CreateLogger<SDL3StateManager>());
 
         _textRenderer = new SDL3TextRenderer(
             _loggerFactory.CreateLogger<SDL3TextRenderer>(),
             _loggerFactory,
             fontLoader);
-    
+
         _batchRenderer = new SDL3BatchRenderer(
             _loggerFactory.CreateLogger<SDL3BatchRenderer>(),
+            renderingOptions);
+
+        _particleRenderer = new SDL3ParticleRenderer(
+            _loggerFactory.CreateLogger<SDL3ParticleRenderer>(),
             renderingOptions);
 
         _renderTargetManager = new SDL3RenderTargetManager(
@@ -188,9 +204,9 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
                 windowFlags |= SDL3.SDL.WindowFlags.Fullscreen;
 
             _window = SDL3.SDL.CreateWindow(
-                _windowOptions.Title,    
-                _windowOptions.Width,    
-                _windowOptions.Height,  
+                _windowOptions.Title,
+                _windowOptions.Width,
+                _windowOptions.Height,
                 windowFlags
             );
 
@@ -253,6 +269,13 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             _renderTargetManager.Initialize(_gpuDeviceHandle!, _swapchainFormat);
             _frameManager.Initialize(_device, _window, _renderingOptions.VSync);
             CreatePostProcessPipelines();
+
+            _logger.LogInformation("Loading particle shaders");
+            LoadParticleShaders();
+            CreateParticlePipelines();
+            CreateParticlePostProcessPipelines();
+            _particleRenderer.Initialize(_device);
+            _logger.LogDebug("Particle renderer initialized");
 
             await _textRenderer.LoadDefaultFontAsync(cancellationToken);
 
@@ -320,6 +343,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             return;
 
         _batchRenderer.NewFrame(_frameManager.CurrentFrameSlot);
+        _particleRenderer.NewFrame(_frameManager.CurrentFrameSlot);
     }
 
     /// <summary>
@@ -610,10 +634,82 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             scissor,
             isUserRenderTarget,
             userRenderTarget,
-            _batchRenderer.CurrentBoundTextureRef
+            _batchRenderer.CurrentBoundTextureRef,
+            false,
+            0,
+            0
         ));
 
         _batchRenderer.Clear();
+    }
+
+    /// <summary>
+    /// Records a hardware-instanced particle draw call into the pending draw call list.
+    /// Called by <c>ParticleSystem</c> after staging instances via
+    /// <see cref="SDL3ParticleRenderer.AppendInstances"/>.
+    /// </summary>
+    /// <param name="firstInstance">First instance index returned by <see cref="SDL3ParticleRenderer.AppendInstances"/>.</param>
+    /// <param name="instanceCount">Number of instances to draw.</param>
+    /// <param name="blendMode">Blend mode — selects the correct particle pipeline.</param>
+    /// <param name="textureHandle">Raw GPU texture handle. Pass <see cref="nint.Zero"/> for SDF circle draws.</param>
+    /// <param name="scaleMode">Texture scale mode used for sampler selection.</param>
+    /// <param name="textureRef">Optional managed texture reference for handle resolution.</param>
+    internal void EnqueueParticleDrawCall(
+        int firstInstance,
+        int instanceCount,
+        BlendMode blendMode,
+        nint textureHandle,
+        TextureScaleMode scaleMode,
+        ITexture? textureRef)
+    {
+        if (!_frameManager.HasActiveFrame) return;
+        if (instanceCount <= 0) return;
+
+        var (renderTarget, targetWidth, targetHeight, isUserRenderTarget, userRenderTarget) = ResolveRenderTargetInfo();
+        if (renderTarget == nint.Zero) return;
+
+        SDL3.SDL.Rect scissor;
+        if (_stateManager.CurrentScissorRect.HasValue)
+        {
+            var rect = _stateManager.CurrentScissorRect.Value;
+            int x = (int)MathF.Round(rect.X);
+            int y = (int)MathF.Round(rect.Y);
+            int right = (int)MathF.Round(rect.X + rect.Width);
+            int bottom = (int)MathF.Round(rect.Y + rect.Height);
+            scissor = new SDL3.SDL.Rect { X = x, Y = y, W = right - x, H = bottom - y };
+        }
+        else
+        {
+            scissor = new SDL3.SDL.Rect { X = 0, Y = 0, W = targetWidth, H = targetHeight };
+        }
+
+        bool isPostProcessTarget = _hasDistinctPostProcessFormat &&
+            !isUserRenderTarget &&
+            _renderTargetManager.UsePostProcessing &&
+            !_postProcessingAppliedThisFrame &&
+            _renderTargetManager.MainRenderTarget != null;
+
+        nint pipeline = isPostProcessTarget
+            ? _particlePostProcessBlendModePipelines[(int)blendMode]
+            : _particleBlendModePipelines[(int)blendMode];
+
+        _pendingDrawCalls.Add(new DrawCallRecord(
+            FirstVertex: 0,
+            VertexCount: 0,
+            TextureHandle: textureHandle,
+            ScaleMode: scaleMode,
+            RenderTargetHandle: renderTarget,
+            TargetWidth: targetWidth,
+            TargetHeight: targetHeight,
+            Pipeline: pipeline,
+            Scissor: scissor,
+            IsUserRenderTarget: isUserRenderTarget,
+            UserRenderTarget: userRenderTarget,
+            TextureRef: textureRef,
+            IsParticle: true,
+            ParticleFirstInstance: firstInstance,
+            ParticleInstanceCount: instanceCount
+        ));
     }
 
     private (nint Handle, int Width, int Height, bool IsUserRenderTarget, RenderTarget? UserRenderTarget) ResolveRenderTargetInfo()
@@ -661,7 +757,14 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         }
 
         foreach (var dc in _pendingDrawCalls)
-            _batchRenderer.UploadWithinCopyPass(copyPass, dc.FirstVertex, dc.VertexCount);
+        {
+            if (!dc.IsParticle)
+                _batchRenderer.UploadWithinCopyPass(copyPass, dc.FirstVertex, dc.VertexCount);
+        }
+
+        if (_particleRenderer.StagedCount > 0)
+            _particleRenderer.FlushToGPU(copyPass);
+
         SDL3.SDL.EndGPUCopyPass(copyPass);
 
         nint activeRenderPass = nint.Zero;
@@ -672,6 +775,8 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         TextureScaleMode activeScaleMode = default;
         SDL3.SDL.Rect activeScissor = default;
         bool scissorBound = false;
+        bool samplerBound = false;
+        bool activeIsParticleMode = false;
 
         foreach (var dc in _pendingDrawCalls)
         {
@@ -744,8 +849,11 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
                 failedRenderTarget = nint.Zero;
                 activePipeline = nint.Zero;
                 activeTexture = nint.Zero;
+                samplerBound = false;
                 scissorBound = false;
+                activeIsParticleMode = false;
 
+                // Start in batch mode — slot 0 = batch vertex buffer.
                 _vertexBufferBindingBuf[0] = new SDL3.SDL.GPUBufferBinding { Buffer = _vertexBuffer, Offset = 0 };
                 SDL3.SDL.BindGPUVertexBuffers(activeRenderPass, 0, _vertexBufferBindingBuf, 1);
 
@@ -768,6 +876,32 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             if (failedRenderTarget == renderTargetHandle)
                 continue;
 
+            // Rebind vertex buffers when switching between batch and particle draw calls.
+            if (dc.IsParticle != activeIsParticleMode)
+            {
+                if (dc.IsParticle)
+                {
+                    _particleVertexBufferBindingBuf[0] = new SDL3.SDL.GPUBufferBinding
+                    {
+                        Buffer = _particleRenderer.UnitQuadVertexBuffer,
+                        Offset = 0
+                    };
+                    _particleVertexBufferBindingBuf[1] = new SDL3.SDL.GPUBufferBinding
+                    {
+                        Buffer = _particleRenderer.InstanceBuffer,
+                        Offset = 0
+                    };
+                    SDL3.SDL.BindGPUVertexBuffers(activeRenderPass, 0, _particleVertexBufferBindingBuf, 2);
+                }
+                else
+                {
+                    _vertexBufferBindingBuf[0] = new SDL3.SDL.GPUBufferBinding { Buffer = _vertexBuffer, Offset = 0 };
+                    SDL3.SDL.BindGPUVertexBuffers(activeRenderPass, 0, _vertexBufferBindingBuf, 1);
+                }
+
+                activeIsParticleMode = dc.IsParticle;
+            }
+
             if (dc.Pipeline != activePipeline)
             {
                 SDL3.SDL.BindGPUGraphicsPipeline(activeRenderPass, dc.Pipeline);
@@ -775,9 +909,9 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             }
 
             var resolvedTexture = dc.ResolvedTextureHandle;
-            if (resolvedTexture != activeTexture || dc.ScaleMode != activeScaleMode)
+            if (!samplerBound || resolvedTexture != activeTexture || dc.ScaleMode != activeScaleMode)
             {
-                if (resolvedTexture == nint.Zero && !_zeroHandleWarningLoggedThisFrame)
+                if (resolvedTexture == nint.Zero && !_zeroHandleWarningLoggedThisFrame && !dc.IsParticle)
                 {
                     _logger.LogWarning("Draw call submitted with a zero texture handle; falling back to white texture");
                     _zeroHandleWarningLoggedThisFrame = true;
@@ -789,6 +923,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
                     Sampler = dc.ScaleMode == TextureScaleMode.Nearest ? _samplerNearest : _sampler
                 };
                 SDL3.SDL.BindGPUFragmentSamplers(activeRenderPass, 0, _textureSamplerBindingBuf, 1);
+                samplerBound = true;
                 activeTexture = resolvedTexture;
                 activeScaleMode = dc.ScaleMode;
             }
@@ -802,9 +937,24 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
                 SDL3.SDL.SetGPUScissor(activeRenderPass, ref activeScissor);
             }
 
-            int firstIndex = SDL3BatchRenderer.VertexOffsetToFirstIndex(dc.FirstVertex);
-            int indexCount = SDL3BatchRenderer.IndicesToDraw(dc.VertexCount);
-            SDL3.SDL.DrawGPUIndexedPrimitives(activeRenderPass, (uint)indexCount, 1, (uint)firstIndex, 0, 0);
+            if (dc.IsParticle)
+            {
+                // 6 indices = one quad from the static index buffer; instanceCount drives the draw.
+                // firstInstance offsets into the instance buffer uploaded by SDL3ParticleRenderer.
+                SDL3.SDL.DrawGPUIndexedPrimitives(
+                    activeRenderPass,
+                    6,
+                    (uint)dc.ParticleInstanceCount,
+                    0,
+                    0,
+                    (uint)dc.ParticleFirstInstance);
+            }
+            else
+            {
+                int firstIndex = SDL3BatchRenderer.VertexOffsetToFirstIndex(dc.FirstVertex);
+                int indexCount = SDL3BatchRenderer.IndicesToDraw(dc.VertexCount);
+                SDL3.SDL.DrawGPUIndexedPrimitives(activeRenderPass, (uint)indexCount, 1, (uint)firstIndex, 0, 0);
+            }
         }
 
         if (activeRenderPass != nint.Zero)
@@ -910,9 +1060,12 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         _renderTargetManager.Dispose();
         (_postProcessPipeline as IDisposable)?.Dispose();
         _batchRenderer.Dispose();
+        _particleRenderer.Dispose();
         _textRenderer.Dispose();
         _vertexShader?.Dispose();
         _fragmentShader?.Dispose();
+        _particleVertexShader?.Dispose();
+        _particleFragmentShader?.Dispose();
         (_shaderLoader as IDisposable)?.Dispose();
 
         if (_device != nint.Zero)
@@ -956,6 +1109,24 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
                 {
                     SDL3.SDL.ReleaseGPUGraphicsPipeline(_device, _postProcessBlendModePipelines[i]);
                     _postProcessBlendModePipelines[i] = nint.Zero;
+                }
+            }
+
+            for (int i = 0; i < _particleBlendModePipelines.Length; i++)
+            {
+                if (_particleBlendModePipelines[i] != nint.Zero)
+                {
+                    SDL3.SDL.ReleaseGPUGraphicsPipeline(_device, _particleBlendModePipelines[i]);
+                    _particleBlendModePipelines[i] = nint.Zero;
+                }
+            }
+
+            for (int i = 0; i < _particlePostProcessBlendModePipelines.Length; i++)
+            {
+                if (_particlePostProcessBlendModePipelines[i] != nint.Zero)
+                {
+                    SDL3.SDL.ReleaseGPUGraphicsPipeline(_device, _particlePostProcessBlendModePipelines[i]);
+                    _particlePostProcessBlendModePipelines[i] = nint.Zero;
                 }
             }
 

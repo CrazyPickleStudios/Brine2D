@@ -421,3 +421,6 @@ FodyWeavers.xsd
 *.msp
 /.github/copilot-instructions.md
 /.gitignore
+
+# Generated API preview output
+api-preview/

@@ -1,3 +1,4 @@
+using Brine2D.Rendering.SDL.Shaders;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -7,6 +8,11 @@ namespace Brine2D.Rendering;
 internal sealed partial class SDL3Renderer
 {
     private readonly nint[] _singleFenceBuf = new nint[1];
+
+    private IShader? _particleVertexShader;
+    private IShader? _particleFragmentShader;
+    private readonly nint[] _particleBlendModePipelines = new nint[Enum.GetValues<BlendMode>().Length];
+    private readonly nint[] _particlePostProcessBlendModePipelines = new nint[Enum.GetValues<BlendMode>().Length];
 
     private void CreateSamplers()
     {
@@ -216,72 +222,10 @@ internal sealed partial class SDL3Renderer
             }
         };
 
-        var blendState = blendMode switch
-        {
-            BlendMode.Alpha => new SDL3.SDL.GPUColorTargetBlendState
-            {
-                EnableBlend = true,
-                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.SrcAlpha,
-                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
-                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
-                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
-                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
-                               SDL3.SDL.GPUColorComponentFlags.G |
-                               SDL3.SDL.GPUColorComponentFlags.B |
-                               SDL3.SDL.GPUColorComponentFlags.A
-            },
-
-            BlendMode.Additive => new SDL3.SDL.GPUColorTargetBlendState
-            {
-                EnableBlend = true,
-                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.SrcAlpha,
-                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.One,
-                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
-                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
-                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
-                               SDL3.SDL.GPUColorComponentFlags.G |
-                               SDL3.SDL.GPUColorComponentFlags.B |
-                               SDL3.SDL.GPUColorComponentFlags.A
-            },
-
-            BlendMode.Multiply => new SDL3.SDL.GPUColorTargetBlendState
-            {
-                EnableBlend = true,
-                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.DstColor,
-                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.Zero,
-                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
-                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.Zero,
-                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
-                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
-                               SDL3.SDL.GPUColorComponentFlags.G |
-                               SDL3.SDL.GPUColorComponentFlags.B |
-                               SDL3.SDL.GPUColorComponentFlags.A
-            },
-
-            BlendMode.None => new SDL3.SDL.GPUColorTargetBlendState
-            {
-                EnableBlend = false,
-                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R |
-                               SDL3.SDL.GPUColorComponentFlags.G |
-                               SDL3.SDL.GPUColorComponentFlags.B |
-                               SDL3.SDL.GPUColorComponentFlags.A
-            },
-
-            _ => throw new ArgumentException($"Unsupported blend mode: {blendMode}")
-        };
-
+        var blendState = BuildBlendState(blendMode);
         var colorTargetDescriptions = new SDL3.SDL.GPUColorTargetDescription[]
         {
-            new()
-            {
-                Format = targetFormat,
-                BlendState = blendState
-            }
+            new() { Format = targetFormat, BlendState = blendState }
         };
 
         var vertexAttribHandle = GCHandle.Alloc(vertexAttributes, GCHandleType.Pinned);
@@ -368,6 +312,293 @@ internal sealed partial class SDL3Renderer
 
         _logger.LogDebug("Vertex buffer created ({Size} vertices)", _batchRenderer.MaxVertices);
     }
+
+    // -------------------------------------------------------------------------
+    // Particle pipeline
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Loads the pre-compiled particle shaders for the active GPU driver
+    /// (SPIRV for Vulkan, DXIL for Direct3D 12, SPIRV fallback for everything else).
+    /// </summary>
+    private void LoadParticleShaders()
+    {
+        var driverName = SDL3.SDL.GetGPUDeviceDriver(_device);
+
+        byte[]? vertexBytecode;
+        byte[]? fragmentBytecode;
+        SDL3.SDL.GPUShaderFormat shaderFormat;
+
+        switch (driverName)
+        {
+            case "direct3d12":
+                vertexBytecode = ParticleShaders.LoadVertexShaderDXIL();
+                fragmentBytecode = ParticleShaders.LoadFragmentShaderDXIL();
+                shaderFormat = SDL3.SDL.GPUShaderFormat.DXIL;
+                break;
+            default:
+                vertexBytecode = ParticleShaders.LoadVertexShaderSPIRV();
+                fragmentBytecode = ParticleShaders.LoadFragmentShaderSPIRV();
+                shaderFormat = SDL3.SDL.GPUShaderFormat.SPIRV;
+                break;
+        }
+
+        if (vertexBytecode == null || fragmentBytecode == null)
+        {
+            throw new InvalidOperationException(
+                $"Pre-compiled particle shader resources not found for driver '{driverName}'. " +
+                "Ensure the project was built on Windows so the shader compile target ran.");
+        }
+
+        var vs = new SDL3Shader("ParticleVertex", ShaderStage.Vertex,
+            _loggerFactory.CreateLogger<SDL3Shader>());
+        if (!vs.Compile(_device, vertexBytecode, "main", shaderFormat))
+            throw new InvalidOperationException("Failed to compile particle vertex shader.");
+
+        var fs = new SDL3Shader("ParticleFragment", ShaderStage.Fragment,
+            _loggerFactory.CreateLogger<SDL3Shader>());
+        if (!fs.Compile(_device, fragmentBytecode, "main", shaderFormat))
+        {
+            vs.Dispose();
+            throw new InvalidOperationException("Failed to compile particle fragment shader.");
+        }
+
+        _particleVertexShader = vs;
+        _particleFragmentShader = fs;
+
+        _logger.LogInformation(
+            "Particle shaders loaded (driver: {Driver}, format: {Format}, {VsBytes}+{FsBytes} bytes)",
+            driverName, shaderFormat, vertexBytecode.Length, fragmentBytecode.Length);
+    }
+
+    /// <summary>
+    /// Creates particle pipelines for all blend modes targeting the swapchain format.
+    /// Must be called after <see cref="LoadParticleShaders"/>.
+    /// </summary>
+    private void CreateParticlePipelines()
+    {
+        _logger.LogDebug("Creating particle pipelines for all blend modes");
+
+        foreach (var mode in Enum.GetValues<BlendMode>())
+        {
+            _particleBlendModePipelines[(int)mode] =
+                CreateParticlePipelineForBlendMode(mode, _swapchainFormat);
+        }
+    }
+
+    /// <summary>
+    /// Creates particle pipelines targeting the post-process render-target format when it
+    /// differs from the swapchain format. No-op when post-processing is disabled or the
+    /// formats are identical.
+    /// </summary>
+    private void CreateParticlePostProcessPipelines()
+    {
+        if (!_renderTargetManager.UsePostProcessing)
+            return;
+
+        if (!_hasDistinctPostProcessFormat)
+            return;
+
+        _logger.LogDebug("Creating particle post-processing pipelines for format: {Format}", _postProcessFormat);
+
+        foreach (var mode in Enum.GetValues<BlendMode>())
+        {
+            _particlePostProcessBlendModePipelines[(int)mode] =
+                CreateParticlePipelineForBlendMode(mode, _postProcessFormat);
+        }
+
+        _logger.LogInformation(
+            "Particle post-processing pipelines created for format {Format}",
+            _postProcessFormat);
+    }
+
+    /// <summary>
+    /// Creates a two-slot instanced graphics pipeline for particle rendering.
+    /// <list type="bullet">
+    /// <item>Slot 0 — per-vertex, pitch = 8: <c>float2 Corner</c> from the static unit-quad VB.</item>
+    /// <item>Slot 1 — per-instance, pitch = 48: <c>ParticleInstance</c> from the instance buffer.</item>
+    /// </list>
+    /// Vertex attribute layout:
+    /// <list type="table">
+    /// <item><term>Location 0</term><description>Slot 0 · Float2 · Offset  0 — Corner</description></item>
+    /// <item><term>Location 1</term><description>Slot 1 · Float2 · Offset  0 — InstPosition</description></item>
+    /// <item><term>Location 2</term><description>Slot 1 · Float  · Offset  8 — InstSize</description></item>
+    /// <item><term>Location 3</term><description>Slot 1 · Float  · Offset 12 — InstRotation</description></item>
+    /// <item><term>Location 4</term><description>Slot 1 · Float4 · Offset 16 — InstColor</description></item>
+    /// <item><term>Location 5</term><description>Slot 1 · Float4 · Offset 32 — InstUVRect</description></item>
+    /// </list>
+    /// </summary>
+    private nint CreateParticlePipelineForBlendMode(BlendMode blendMode, SDL3.SDL.GPUTextureFormat targetFormat)
+    {
+        _logger.LogDebug(
+            "Creating particle pipeline for blend mode: {BlendMode}, format: {Format}",
+            blendMode, targetFormat);
+
+        var vertexShader = (_particleVertexShader as SDL3Shader)?.Handle ?? nint.Zero;
+        var fragmentShader = (_particleFragmentShader as SDL3Shader)?.Handle ?? nint.Zero;
+
+        if (vertexShader == nint.Zero || fragmentShader == nint.Zero)
+            throw new InvalidOperationException("Particle shaders must be loaded before creating the particle pipeline.");
+
+        // 6 attributes across 2 slots — matches particle_vertex.hlsl TEXCOORD semantics.
+        var vertexAttributes = new SDL3.SDL.GPUVertexAttribute[]
+        {
+            // slot 0 — per-vertex unit-quad corner (float2, pitch 8)
+            new() { Location = 0, BufferSlot = 0, Format = SDL3.SDL.GPUVertexElementFormat.Float2, Offset =  0 },
+            // slot 1 — per-instance ParticleInstance (total pitch 48)
+            new() { Location = 1, BufferSlot = 1, Format = SDL3.SDL.GPUVertexElementFormat.Float2, Offset =  0 }, // Position
+            new() { Location = 2, BufferSlot = 1, Format = SDL3.SDL.GPUVertexElementFormat.Float,  Offset =  8 }, // Size
+            new() { Location = 3, BufferSlot = 1, Format = SDL3.SDL.GPUVertexElementFormat.Float,  Offset = 12 }, // Rotation
+            new() { Location = 4, BufferSlot = 1, Format = SDL3.SDL.GPUVertexElementFormat.Float4, Offset = 16 }, // Color
+            new() { Location = 5, BufferSlot = 1, Format = SDL3.SDL.GPUVertexElementFormat.Float4, Offset = 32 }, // UVRect
+        };
+
+        var vertexBufferDescriptions = new SDL3.SDL.GPUVertexBufferDescription[]
+        {
+            new()
+            {
+                Slot = 0,
+                Pitch = sizeof(float) * 2, // float2 Corner = 8 bytes
+                InputRate = SDL3.SDL.GPUVertexInputRate.Vertex,
+                InstanceStepRate = 0
+            },
+            new()
+            {
+                Slot = 1,
+                Pitch = (uint)SDL3ParticleRenderer.InstanceSize, // 48 bytes
+                InputRate = SDL3.SDL.GPUVertexInputRate.Instance,
+                InstanceStepRate = 0  // must be 0 — SDL3 assertion enforces this for all slots
+            }
+        };
+
+        var blendState = BuildBlendState(blendMode);
+        var colorTargetDescriptions = new SDL3.SDL.GPUColorTargetDescription[]
+        {
+            new() { Format = targetFormat, BlendState = blendState }
+        };
+
+        var vertexAttribHandle = GCHandle.Alloc(vertexAttributes, GCHandleType.Pinned);
+        var vertexBufferHandle = GCHandle.Alloc(vertexBufferDescriptions, GCHandleType.Pinned);
+        var colorTargetHandle = GCHandle.Alloc(colorTargetDescriptions, GCHandleType.Pinned);
+
+        try
+        {
+            var vertexInputState = new SDL3.SDL.GPUVertexInputState
+            {
+                VertexBufferDescriptions = vertexBufferHandle.AddrOfPinnedObject(),
+                NumVertexBuffers = 2,
+                VertexAttributes = vertexAttribHandle.AddrOfPinnedObject(),
+                NumVertexAttributes = 6,
+            };
+
+            var pipelineCreateInfo = new SDL3.SDL.GPUGraphicsPipelineCreateInfo
+            {
+                VertexShader = vertexShader,
+                FragmentShader = fragmentShader,
+                VertexInputState = vertexInputState,
+                PrimitiveType = SDL3.SDL.GPUPrimitiveType.TriangleList,
+                RasterizerState = new SDL3.SDL.GPURasterizerState
+                {
+                    FillMode = SDL3.SDL.GPUFillMode.Fill,
+                    CullMode = SDL3.SDL.GPUCullMode.None,
+                    FrontFace = SDL3.SDL.GPUFrontFace.CounterClockwise
+                },
+                MultisampleState = new SDL3.SDL.GPUMultisampleState
+                {
+                    SampleCount = SDL3.SDL.GPUSampleCount.SampleCount1,
+                    SampleMask = 0
+                },
+                DepthStencilState = new SDL3.SDL.GPUDepthStencilState
+                {
+                    CompareOp = SDL3.SDL.GPUCompareOp.Always,
+                    EnableStencilTest = false
+                },
+                TargetInfo = new SDL3.SDL.GPUGraphicsPipelineTargetInfo
+                {
+                    ColorTargetDescriptions = colorTargetHandle.AddrOfPinnedObject(),
+                    NumColorTargets = 1,
+                    DepthStencilFormat = SDL3.SDL.GPUTextureFormat.Invalid,
+                    HasDepthStencilTarget = false
+                }
+            };
+
+            var pipeline = SDL3.SDL.CreateGPUGraphicsPipeline(_device, ref pipelineCreateInfo);
+
+            if (pipeline == nint.Zero)
+            {
+                var error = SDL3.SDL.GetError();
+                _logger.LogError(
+                    "Failed to create particle pipeline for {BlendMode}: {Error}", blendMode, error);
+                throw new InvalidOperationException($"Failed to create particle pipeline: {error}");
+            }
+
+            _logger.LogDebug("Particle pipeline created for {BlendMode} ({Format})", blendMode, targetFormat);
+            return pipeline;
+        }
+        finally
+        {
+            vertexAttribHandle.Free();
+            vertexBufferHandle.Free();
+            colorTargetHandle.Free();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Shared helpers
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds the <see cref="SDL3.SDL.GPUColorTargetBlendState"/> for a given blend mode.
+    /// Shared between the standard and particle pipeline creation paths so the blend
+    /// equations are never duplicated.
+    /// </summary>
+    private static SDL3.SDL.GPUColorTargetBlendState BuildBlendState(BlendMode blendMode) =>
+        blendMode switch
+        {
+            BlendMode.Alpha => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = true,
+                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.SrcAlpha,
+                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
+                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.OneMinusSrcAlpha,
+                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R | SDL3.SDL.GPUColorComponentFlags.G |
+                                 SDL3.SDL.GPUColorComponentFlags.B | SDL3.SDL.GPUColorComponentFlags.A
+            },
+            BlendMode.Additive => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = true,
+                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.SrcAlpha,
+                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R | SDL3.SDL.GPUColorComponentFlags.G |
+                                 SDL3.SDL.GPUColorComponentFlags.B | SDL3.SDL.GPUColorComponentFlags.A
+            },
+            BlendMode.Multiply => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = true,
+                SrcColorBlendFactor = SDL3.SDL.GPUBlendFactor.DstColor,
+                DstColorBlendFactor = SDL3.SDL.GPUBlendFactor.Zero,
+                ColorBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                SrcAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.One,
+                DstAlphaBlendFactor = SDL3.SDL.GPUBlendFactor.Zero,
+                AlphaBlendOp = SDL3.SDL.GPUBlendOp.Add,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R | SDL3.SDL.GPUColorComponentFlags.G |
+                                 SDL3.SDL.GPUColorComponentFlags.B | SDL3.SDL.GPUColorComponentFlags.A
+            },
+            BlendMode.None => new SDL3.SDL.GPUColorTargetBlendState
+            {
+                EnableBlend = false,
+                ColorWriteMask = SDL3.SDL.GPUColorComponentFlags.R | SDL3.SDL.GPUColorComponentFlags.G |
+                                 SDL3.SDL.GPUColorComponentFlags.B | SDL3.SDL.GPUColorComponentFlags.A
+            },
+            _ => throw new ArgumentException($"Unsupported blend mode: {blendMode}")
+        };
 
     public ITexture CreateTextureFromSurface(nint surface, int width, int height, TextureScaleMode scaleMode)
     {

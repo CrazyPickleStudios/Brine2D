@@ -1,43 +1,67 @@
-﻿using Brine2D.Rendering;
+﻿using Brine2D.Core;
+using Brine2D.Rendering;
 using Brine2D.Rendering.TextureAtlas;
-using System;
-using System.Collections.Generic;
-using Brine2D.Core;
 using System.Numerics;
-using System.Text;
 
-namespace Brine2D.Systems.Rendering
+namespace Brine2D.Systems.Rendering;
+
+internal class ParticleEmitterState
 {
-    internal class ParticleEmitterState
-    {
-        public bool IsEmitting;
-        public float EmissionRate;
-        public int MaxParticles;
-        public float ParticleLifetime;
-        public float LifetimeVariation;
-        public Color StartColor;
-        public Color EndColor;
-        public float StartSize;
-        public float EndSize;
-        public Vector2 InitialVelocity;
-        public float VelocitySpread;
-        public float SpeedVariation;
-        public Vector2 Gravity;
-        public Vector2 SpawnOffset;
-        public float SpawnRadius;
-        public ITexture? ParticleTexture;
-        public AtlasRegion? ParticleAtlasRegion;
-        public float InitialRotation;
-        public float InitialRotationVariation;
-        public float RotationSpeed;
-        public float RotationSpeedVariation;
-        public bool EnableTrails;
-        public int TrailLength;
-        public float TrailStartAlpha;
-        public float TrailEndAlpha;
-        public BlendMode BlendMode;
-        public EmitterShape Shape;
-        public Vector2 ShapeSize;
-        public float ConeAngle;
-    }
+    public bool IsEmitting;
+    public bool IsEnabled;
+    public float EmissionRate;
+    public int MaxParticles;
+    public float ParticleLifetime;
+    public float LifetimeVariation;
+    public Color StartColor;
+    public Color EndColor;
+    public Color StartColorVariation;
+    public Color EndColorVariation;
+    public Color[]? ColorGradient;
+    public float StartSize;
+    public float EndSize;
+    public float SizeVariation;
+    public float EndSizeVariation;
+    public Vector2 InitialVelocity;
+    public float VelocitySpread;
+    public float SpeedVariation;
+    public float VelocityInheritance;
+    public float Damping;
+    public Vector2 Gravity;
+    public Vector2 SpawnOffset;
+    public float SpawnRadius;
+    public ITexture? ParticleTexture;
+    public AtlasRegion? ParticleAtlasRegion;
+    public AtlasRegion[]? ParticleFrames;
+    public float InitialRotation;
+    public float InitialRotationVariation;
+    public float RotationSpeed;
+    public float RotationSpeedVariation;
+    public bool EnableTrails;
+    public int TrailLength;
+    public float TrailHeadAlpha;
+    public float TrailTailAlpha;
+    public float TrailTailSizeRatio;
+    public float TrailHeadSizeRatio;
+    public TrailMode TrailMode;
+    public BlendMode BlendMode;
+    public EmitterShape Shape;
+    public Vector2 ShapeSize;
+    public float LineAngle;
+    public float LineLength;
+    public float BoxAngle;
+    public float ConeAngle;
+    public bool SpawnOnPerimeter;
+    public bool SimulateInLocalSpace;
+    public bool IsBurst;
+    public int BurstCount;
+    public float? Duration;
+    public float WarmupDuration;
+    public int RenderLayer;
+    public float Delay;
+    public bool Loop;
+    public float StartSpeedMultiplier;
+    public float EndSpeedMultiplier;
+    public float TurbulenceStrength;
+    public float TurbulenceFrequency;
 }

@@ -524,14 +524,12 @@ public class ParticleDemoScene : DemoSceneBase
         emitter.VelocitySpread = 30f;
         emitter.Gravity = new Vector2(0, 20);
         emitter.SpawnRadius = 8f;
-        
-        // Enable trails!
+
         emitter.EnableTrails = true;
         emitter.TrailLength = 8;
-        emitter.TrailStartAlpha = 0.8f;
-        emitter.TrailEndAlpha = 0.0f;
-        
-        // Add rotation for extra flair
+        emitter.TrailHeadAlpha = 0.8f;
+        emitter.TrailTailAlpha = 0.0f;
+
         emitter.InitialRotationVariation = 1f;
         emitter.RotationSpeed = 2f;
         emitter.RotationSpeedVariation = 0.5f;

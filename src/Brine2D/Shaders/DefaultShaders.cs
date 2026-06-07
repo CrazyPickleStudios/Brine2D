@@ -43,9 +43,9 @@ VSOutput main(VSInput input)
 ";
 
     /// <summary>
-    /// Simple fragment shader in HLSL (reference only).
+    /// Fragment shader in HLSL (reference only).
     /// The actual shader is compiled from Shaders/fragment.hlsl at build time.
-    /// Outputs the interpolated color.
+    /// Handles textured quads, font rendering, and SDF circles (TexCoord in [2,3] sentinel).
     /// </summary>
     public const string SimpleFragmentShaderHLSL = @"
 struct PSInput
@@ -60,11 +60,34 @@ SamplerState Sampler : register(s0, space2);
 
 float4 main(PSInput input) : SV_Target
 {
-    float4 texColor = Texture.Sample(Sampler, input.TexCoord);
+    float2 uv = input.TexCoord;
+
+    if (uv.x >= 1.5)
+    {
+        float2 circleUV = uv - 2.0;
+        float dist = length(circleUV - 0.5);
+        float fw = fwidth(dist) * 0.5;
+        float alpha = 1.0 - smoothstep(0.5 - fw, 0.5 + fw, dist);
+        if (alpha <= 0.0) discard;
+        return float4(input.Color.rgb, input.Color.a * alpha);
+    }
+
+    float4 texColor = Texture.Sample(Sampler, uv);
+
+    float grayscale = (texColor.r + texColor.g + texColor.b) / 3.0;
+    bool isFont = grayscale > 0.95 &&
+                  abs(texColor.r - texColor.g) < 0.01 &&
+                  abs(texColor.g - texColor.b) < 0.01;
+
+    if (isFont)
+    {
+        return float4(input.Color.rgb, input.Color.a * texColor.a);
+    }
+
     return texColor * input.Color;
 }
 ";
-    
+
     public const string VertexShaderResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.spv";
     public const string FragmentShaderResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.spv";
 
@@ -77,7 +100,7 @@ float4 main(PSInput input) : SV_Target
     {
         return LoadEmbeddedResource(FragmentShaderResourceName);
     }
-    
+
     public const string VertexShaderDXILResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.dxil";
     public const string FragmentShaderDXILResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.dxil";
 
@@ -90,7 +113,7 @@ float4 main(PSInput input) : SV_Target
     {
         return LoadEmbeddedResource(FragmentShaderDXILResourceName);
     }
-    
+
     public const string VertexShaderDXBCResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.dxbc";
     public const string FragmentShaderDXBCResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.dxbc";
 
@@ -103,7 +126,7 @@ float4 main(PSInput input) : SV_Target
     {
         return LoadEmbeddedResource(FragmentShaderDXBCResourceName);
     }
-    
+
     public const string VertexShaderMSLResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.msl";
     public const string FragmentShaderMSLResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.msl";
 
@@ -116,12 +139,12 @@ float4 main(PSInput input) : SV_Target
     {
         return LoadEmbeddedResource(FragmentShaderMSLResourceName);
     }
-    
+
     private static byte[]? LoadEmbeddedResource(string resourceName)
     {
         var assembly = typeof(DefaultShaders).Assembly;
         using var stream = assembly.GetManifestResourceStream(resourceName);
-        
+
         if (stream == null)
         {
             return null;

@@ -49,5 +49,15 @@ public sealed class RenderingOptions
     [Range(1000, 1_000_000, ErrorMessage = "MaxVerticesPerFrame must be between 1,000 and 1,000,000")]
     public int MaxVerticesPerFrame { get; set; } = 50_000;
 
+    /// <summary>
+    /// Gets or sets the maximum number of particles that can be rendered per frame using
+    /// hardware instancing. Each particle occupies one 48-byte instance record in the GPU buffer.
+    /// Memory cost is approximately <c>MaxParticlesPerFrame × 48 × 4</c> bytes
+    /// (1 instance buffer + 3 transfer buffers in-flight). The default of 20,000 uses ~3.8 MB total.
+    /// Particles beyond this limit per emitter flush are silently dropped for that frame.
+    /// </summary>
+    [Range(100, 1_000_000, ErrorMessage = "MaxParticlesPerFrame must be between 100 and 1,000,000")]
+    public int MaxParticlesPerFrame { get; set; } = 20_000;
+
     public Color ClearColor { get; set; } = Color.FromArgb(255, 52, 78, 65);
 }
