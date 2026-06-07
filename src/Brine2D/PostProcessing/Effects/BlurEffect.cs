@@ -1,5 +1,4 @@
 ﻿using Brine2D.Rendering;
-using Brine2D.Rendering.SDL.Shaders.PostProcessing;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -134,60 +133,125 @@ public class BlurEffect : ISDL3PostProcessEffect, IDisposable
 
     private void CreateShaders()
     {
+        var device = _deviceHandle.Handle;
+        var driverName = SDL3.SDL.GetGPUDeviceDriver(device);
+        var target = ShaderFormatHelper.GetTargetFromDriver(driverName);
+        var shaderFormat = ShaderFormatHelper.GetShaderFormat(target);
+
+        _logger?.LogDebug("Compiling blur shaders for {Driver} via ShaderCross", driverName);
+
+        var vertexBytecode = CompileHLSL(BlurVertexShaderHLSL, SDL3.ShaderCross.ShaderStage.Vertex, target);
+        var fragmentBytecode = CompileHLSL(BlurFragmentShaderHLSL, SDL3.ShaderCross.ShaderStage.Fragment, target);
+
+        _vertexShader = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
+        _fragmentShader = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
+
+        _logger?.LogDebug("Blur shaders compiled via ShaderCross");
+    }
+
+    private static byte[] CompileHLSL(
+        string hlsl,
+        SDL3.ShaderCross.ShaderStage stage,
+        ShaderFormatHelper.GraphicsShaderTarget target)
+    {
+        var sourcePtr = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUTF8(hlsl);
+        var entrypointPtr = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUTF8("main");
         try
         {
-            _logger?.LogInformation("Loading pre-compiled blur shaders...");
-
-            var device = _deviceHandle.Handle;
-            var driverName = SDL3.SDL.GetGPUDeviceDriver(device);
-            var targetFormat = ShaderFormatHelper.GetTargetFromDriver(driverName);
-            var shaderFormat = ShaderFormatHelper.GetShaderFormat(targetFormat);
-
-            byte[]? vertexBytecode = null;
-            byte[]? fragmentBytecode = null;
-
-            switch (targetFormat)
+            var hlslInfo = new SDL3.ShaderCross.HLSLInfo
             {
-                case ShaderFormatHelper.GraphicsShaderTarget.SPIRV:
-                    vertexBytecode = BlurShaders.LoadVertexShaderSPIRV();
-                    fragmentBytecode = BlurShaders.LoadFragmentShaderSPIRV();
-                    break;
+                Source = sourcePtr,
+                Entrypoint = entrypointPtr,
+                IncludeDir = IntPtr.Zero,
+                Defines = IntPtr.Zero,
+                ShaderStage = stage,
+                Props = 0
+            };
+
+            nint resultPtr;
+            nuint size;
+
+            switch (target)
+            {
                 case ShaderFormatHelper.GraphicsShaderTarget.DXIL:
-                    vertexBytecode = BlurShaders.LoadVertexShaderDXIL();
-                    fragmentBytecode = BlurShaders.LoadFragmentShaderDXIL();
+                    resultPtr = SDL3.ShaderCross.CompileDXILFromHLSL(ref hlslInfo, out size);
                     break;
                 case ShaderFormatHelper.GraphicsShaderTarget.DXBC:
-                    vertexBytecode = BlurShaders.LoadVertexShaderDXBC();
-                    fragmentBytecode = BlurShaders.LoadFragmentShaderDXBC();
+                    resultPtr = SDL3.ShaderCross.CompileDXBCFromHLSL(ref hlslInfo, out size);
                     break;
-                case ShaderFormatHelper.GraphicsShaderTarget.MSL:
-                    vertexBytecode = BlurShaders.LoadVertexShaderMSL();
-                    fragmentBytecode = BlurShaders.LoadFragmentShaderMSL();
+                default:
+                    resultPtr = SDL3.ShaderCross.CompileSPIRVFromHLSL(ref hlslInfo, out size);
                     break;
             }
 
-            if (vertexBytecode == null || fragmentBytecode == null)
-            {
-                throw new InvalidOperationException($"Pre-compiled blur shaders not found for {targetFormat}");
-            }
+            if (resultPtr == IntPtr.Zero || size == 0)
+                throw new InvalidOperationException($"ShaderCross failed to compile blur {stage} shader for {target}");
 
-            _vertexShader = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
-            _fragmentShader = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
-
-            if (_vertexShader.Handle == nint.Zero || _fragmentShader.Handle == nint.Zero)
-            {
-                throw new InvalidOperationException("Failed to create blur shaders");
-            }
-
-            _logger?.LogInformation("Blur shaders loaded successfully ({VertexSize} + {FragmentSize} bytes)",
-                vertexBytecode.Length, fragmentBytecode.Length);
+            var bytes = new byte[size];
+            System.Runtime.InteropServices.Marshal.Copy(resultPtr, bytes, 0, (int)size);
+            SDL3.SDL.Free(resultPtr);
+            return bytes;
         }
-        catch (Exception ex)
+        finally
         {
-            _logger?.LogError(ex, "Failed to load blur shaders");
-            throw;
+            System.Runtime.InteropServices.Marshal.FreeCoTaskMem(sourcePtr);
+            System.Runtime.InteropServices.Marshal.FreeCoTaskMem(entrypointPtr);
         }
     }
+
+    private const string BlurVertexShaderHLSL = @"
+struct VSOutput
+{
+    float4 position : SV_Position;
+    float2 texCoord : TEXCOORD0;
+};
+
+VSOutput main(uint vertexID : SV_VertexID)
+{
+    VSOutput output;
+    float x = (vertexID == 2) ? 3.0 : -1.0;
+    float y = (vertexID == 1) ? -3.0 : 1.0;
+    output.position = float4(x, y, 0.0, 1.0);
+    float u = (vertexID == 2) ? 2.0 : 0.0;
+    float v = (vertexID == 1) ? 2.0 : 0.0;
+    output.texCoord = float2(u, v);
+    return output;
+}";
+
+    private const string BlurFragmentShaderHLSL = @"
+Texture2D inputTexture : register(t0, space2);
+SamplerState inputSampler : register(s0, space2);
+
+struct BlurUniforms
+{
+    float2 direction;
+    float blurRadius;
+    float _padding;
+};
+
+[[vk::binding(0, 3)]]
+ConstantBuffer<BlurUniforms> uniforms : register(b0, space3);
+
+struct PSInput
+{
+    float4 position : SV_Position;
+    float2 texCoord : TEXCOORD0;
+};
+
+float4 main(PSInput input) : SV_Target
+{
+    float2 texelSize;
+    inputTexture.GetDimensions(texelSize.x, texelSize.y);
+    texelSize = 1.0 / texelSize;
+    float2 offset = uniforms.direction * texelSize * uniforms.blurRadius;
+    float4 color = float4(0, 0, 0, 0);
+    color += inputTexture.Sample(inputSampler, input.texCoord - offset * 2.0) * 0.0545;
+    color += inputTexture.Sample(inputSampler, input.texCoord - offset * 1.0) * 0.2442;
+    color += inputTexture.Sample(inputSampler, input.texCoord) * 0.4026;
+    color += inputTexture.Sample(inputSampler, input.texCoord + offset * 1.0) * 0.2442;
+    color += inputTexture.Sample(inputSampler, input.texCoord + offset * 2.0) * 0.0545;
+    return color;
+}";
 
     private SDL3Shader CreateShaderFromBytecode(ShaderStage stage, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format)
     {

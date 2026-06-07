@@ -31,6 +31,13 @@ internal sealed class SDL3Lifecycle(ILogger<SDL3Lifecycle> logger) : IHostedServ
             throw new EngineInitializationException($"Failed to initialize SDL3: {error}");
         }
 
+        if (!SDL3.ShaderCross.Init())
+        {
+            var error = SDL3.SDL.GetError();
+            logger.LogCritical("Failed to initialize SDL_ShaderCross: {Error}", error);
+            throw new EngineInitializationException($"Failed to initialize SDL_ShaderCross: {error}");
+        }
+
         Volatile.Write(ref _initialized, 1);
         logger.LogInformation("SDL3 initialized successfully");
         return Task.CompletedTask;
@@ -45,6 +52,7 @@ internal sealed class SDL3Lifecycle(ILogger<SDL3Lifecycle> logger) : IHostedServ
 
         if (Volatile.Read(ref _initialized) == 1)
         {
+            SDL3.ShaderCross.Quit();
             logger.LogInformation("Calling SDL_Quit");
             SDL3.SDL.Quit();
         }

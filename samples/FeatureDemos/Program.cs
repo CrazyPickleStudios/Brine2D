@@ -27,7 +27,7 @@ builder.Configure(options =>
     options.Window.Height = 720;
     options.Rendering.VSync = true;
     options.Rendering.TargetFPS = 0;
-    options.Rendering.PreferredGPUDriver = GPUDriver.Vulkan;
+    //options.Rendering.PreferredGPUDriver = GPUDriver.Vulkan;
     options.ECS.EnableMultiThreading = false;
 });
 

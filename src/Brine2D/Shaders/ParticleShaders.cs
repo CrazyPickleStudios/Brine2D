@@ -2,8 +2,7 @@
 
 /// <summary>
 /// Built-in shaders for hardware-instanced particle rendering.
-/// HLSL source is provided for reference/documentation.
-/// The actual shaders are compiled from particle_vertex.hlsl and particle_fragment.hlsl at build time.
+/// Compiled at runtime via SDL_ShaderCross.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -109,27 +108,4 @@ float4 main(PSInput input) : SV_Target
     return texColor * input.Color;
 }
 ";
-
-    public const string VertexShaderSPIRVResourceName = "Brine2D.Rendering.SDL.Shaders.particle_vertex.spv";
-    public const string FragmentShaderSPIRVResourceName = "Brine2D.Rendering.SDL.Shaders.particle_fragment.spv";
-    public const string VertexShaderDXILResourceName = "Brine2D.Rendering.SDL.Shaders.particle_vertex.dxil";
-    public const string FragmentShaderDXILResourceName = "Brine2D.Rendering.SDL.Shaders.particle_fragment.dxil";
-
-    public static byte[]? LoadVertexShaderSPIRV() => LoadEmbeddedResource(VertexShaderSPIRVResourceName);
-    public static byte[]? LoadFragmentShaderSPIRV() => LoadEmbeddedResource(FragmentShaderSPIRVResourceName);
-    public static byte[]? LoadVertexShaderDXIL() => LoadEmbeddedResource(VertexShaderDXILResourceName);
-    public static byte[]? LoadFragmentShaderDXIL() => LoadEmbeddedResource(FragmentShaderDXILResourceName);
-
-    private static byte[]? LoadEmbeddedResource(string resourceName)
-    {
-        var assembly = typeof(ParticleShaders).Assembly;
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-
-        if (stream == null)
-            return null;
-
-        using var memoryStream = new MemoryStream();
-        stream.CopyTo(memoryStream);
-        return memoryStream.ToArray();
-    }
 }

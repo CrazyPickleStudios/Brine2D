@@ -24,7 +24,6 @@ public static class SDL3RenderingServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SDL3Lifecycle>());
 
         services.TryAddSingleton<IFontLoader, SDL3FontLoader>();
-        services.TryAddSingleton<IShaderLoader, SDL3ShaderLoader>();
 
         // SDL3Renderer's optional ctor parameters use default values; the DI container
         // injects registered services or falls back to null for unregistered ones.

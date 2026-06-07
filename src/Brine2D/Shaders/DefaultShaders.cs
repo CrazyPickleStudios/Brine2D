@@ -2,15 +2,12 @@ namespace Brine2D.Rendering.SDL.Shaders;
 
 /// <summary>
 /// Built-in default shaders for basic rendering.
-/// HLSL source is provided for reference/documentation.
-/// The actual shaders are compiled from vertex.hlsl and fragment.hlsl at build time.
+/// Compiled at runtime via SDL_ShaderCross.
 /// </summary>
 public static class DefaultShaders
 {
     /// <summary>
-    /// Simple vertex shader in HLSL (reference only).
-    /// The actual shader is compiled from Shaders/vertex.hlsl at build time.
-    /// Transforms position and passes through color.
+    /// Vertex shader HLSL source. Transforms position and passes through color.
     /// </summary>
     public const string SimpleVertexShaderHLSL = @"
 struct VSInput
@@ -43,8 +40,7 @@ VSOutput main(VSInput input)
 ";
 
     /// <summary>
-    /// Fragment shader in HLSL (reference only).
-    /// The actual shader is compiled from Shaders/fragment.hlsl at build time.
+    /// Fragment shader HLSL source.
     /// Handles textured quads, font rendering, and SDF circles (TexCoord in [2,3] sentinel).
     /// </summary>
     public const string SimpleFragmentShaderHLSL = @"
@@ -87,71 +83,4 @@ float4 main(PSInput input) : SV_Target
     return texColor * input.Color;
 }
 ";
-
-    public const string VertexShaderResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.spv";
-    public const string FragmentShaderResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.spv";
-
-    public static byte[]? LoadVertexShaderSPIRV()
-    {
-        return LoadEmbeddedResource(VertexShaderResourceName);
-    }
-
-    public static byte[]? LoadFragmentShaderSPIRV()
-    {
-        return LoadEmbeddedResource(FragmentShaderResourceName);
-    }
-
-    public const string VertexShaderDXILResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.dxil";
-    public const string FragmentShaderDXILResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.dxil";
-
-    public static byte[]? LoadVertexShaderDXIL()
-    {
-        return LoadEmbeddedResource(VertexShaderDXILResourceName);
-    }
-
-    public static byte[]? LoadFragmentShaderDXIL()
-    {
-        return LoadEmbeddedResource(FragmentShaderDXILResourceName);
-    }
-
-    public const string VertexShaderDXBCResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.dxbc";
-    public const string FragmentShaderDXBCResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.dxbc";
-
-    public static byte[]? LoadVertexShaderDXBC()
-    {
-        return LoadEmbeddedResource(VertexShaderDXBCResourceName);
-    }
-
-    public static byte[]? LoadFragmentShaderDXBC()
-    {
-        return LoadEmbeddedResource(FragmentShaderDXBCResourceName);
-    }
-
-    public const string VertexShaderMSLResourceName = "Brine2D.Rendering.SDL.Shaders.default_vertex.msl";
-    public const string FragmentShaderMSLResourceName = "Brine2D.Rendering.SDL.Shaders.default_fragment.msl";
-
-    public static byte[]? LoadVertexShaderMSL()
-    {
-        return LoadEmbeddedResource(VertexShaderMSLResourceName);
-    }
-
-    public static byte[]? LoadFragmentShaderMSL()
-    {
-        return LoadEmbeddedResource(FragmentShaderMSLResourceName);
-    }
-
-    private static byte[]? LoadEmbeddedResource(string resourceName)
-    {
-        var assembly = typeof(DefaultShaders).Assembly;
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-
-        if (stream == null)
-        {
-            return null;
-        }
-
-        using var memoryStream = new MemoryStream();
-        stream.CopyTo(memoryStream);
-        return memoryStream.ToArray();
-    }
 }

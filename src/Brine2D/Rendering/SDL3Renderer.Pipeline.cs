@@ -318,45 +318,29 @@ internal sealed partial class SDL3Renderer
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Loads the pre-compiled particle shaders for the active GPU driver
-    /// (SPIRV for Vulkan, DXIL for Direct3D 12, SPIRV fallback for everything else).
+    /// Compiles the particle shaders from HLSL source via ShaderCross.
     /// </summary>
     private void LoadParticleShaders()
     {
         var driverName = SDL3.SDL.GetGPUDeviceDriver(_device);
+        var target = GetShaderTarget(driverName);
+        var shaderFormat = GetShaderFormatForTarget(target);
 
-        byte[]? vertexBytecode;
-        byte[]? fragmentBytecode;
-        SDL3.SDL.GPUShaderFormat shaderFormat;
+        var vertexBytecode = CompileParticleHLSL(
+            ParticleShaders.ParticleVertexShaderHLSL,
+            SDL3.ShaderCross.ShaderStage.Vertex,
+            target);
 
-        switch (driverName)
-        {
-            case "direct3d12":
-                vertexBytecode = ParticleShaders.LoadVertexShaderDXIL();
-                fragmentBytecode = ParticleShaders.LoadFragmentShaderDXIL();
-                shaderFormat = SDL3.SDL.GPUShaderFormat.DXIL;
-                break;
-            default:
-                vertexBytecode = ParticleShaders.LoadVertexShaderSPIRV();
-                fragmentBytecode = ParticleShaders.LoadFragmentShaderSPIRV();
-                shaderFormat = SDL3.SDL.GPUShaderFormat.SPIRV;
-                break;
-        }
+        var fragmentBytecode = CompileParticleHLSL(
+            ParticleShaders.ParticleFragmentShaderHLSL,
+            SDL3.ShaderCross.ShaderStage.Fragment,
+            target);
 
-        if (vertexBytecode == null || fragmentBytecode == null)
-        {
-            throw new InvalidOperationException(
-                $"Pre-compiled particle shader resources not found for driver '{driverName}'. " +
-                "Ensure the project was built on Windows so the shader compile target ran.");
-        }
-
-        var vs = new SDL3Shader("ParticleVertex", ShaderStage.Vertex,
-            _loggerFactory.CreateLogger<SDL3Shader>());
+        var vs = new SDL3Shader("ParticleVertex", ShaderStage.Vertex, _loggerFactory.CreateLogger<SDL3Shader>());
         if (!vs.Compile(_device, vertexBytecode, "main", shaderFormat))
             throw new InvalidOperationException("Failed to compile particle vertex shader.");
 
-        var fs = new SDL3Shader("ParticleFragment", ShaderStage.Fragment,
-            _loggerFactory.CreateLogger<SDL3Shader>());
+        var fs = new SDL3Shader("ParticleFragment", ShaderStage.Fragment, _loggerFactory.CreateLogger<SDL3Shader>());
         if (!fs.Compile(_device, fragmentBytecode, "main", shaderFormat))
         {
             vs.Dispose();
@@ -367,9 +351,74 @@ internal sealed partial class SDL3Renderer
         _particleFragmentShader = fs;
 
         _logger.LogInformation(
-            "Particle shaders loaded (driver: {Driver}, format: {Format}, {VsBytes}+{FsBytes} bytes)",
-            driverName, shaderFormat, vertexBytecode.Length, fragmentBytecode.Length);
+            "Particle shaders compiled via ShaderCross (driver: {Driver}, format: {Format})",
+            driverName, shaderFormat);
     }
+
+    private static byte[] CompileParticleHLSL(
+        string hlsl,
+        SDL3.ShaderCross.ShaderStage stage,
+        SDL3.SDL.GPUShaderFormat target)
+    {
+        var sourcePtr = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUTF8(hlsl);
+        var entrypointPtr = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUTF8("main");
+        try
+        {
+            var hlslInfo = new SDL3.ShaderCross.HLSLInfo
+            {
+                Source = sourcePtr,
+                Entrypoint = entrypointPtr,
+                IncludeDir = IntPtr.Zero,
+                Defines = IntPtr.Zero,
+                ShaderStage = stage,
+                Props = 0
+            };
+
+            nint resultPtr;
+            nuint size;
+
+            switch (target)
+            {
+                case SDL3.SDL.GPUShaderFormat.DXIL:
+                    resultPtr = SDL3.ShaderCross.CompileDXILFromHLSL(ref hlslInfo, out size);
+                    break;
+                case SDL3.SDL.GPUShaderFormat.DXBC:
+                    resultPtr = SDL3.ShaderCross.CompileDXBCFromHLSL(ref hlslInfo, out size);
+                    break;
+                default:
+                    resultPtr = SDL3.ShaderCross.CompileSPIRVFromHLSL(ref hlslInfo, out size);
+                    break;
+            }
+
+            if (resultPtr == IntPtr.Zero || size == 0)
+                throw new InvalidOperationException(
+                    $"ShaderCross failed to compile particle {stage} shader for {target}");
+
+            var bytes = new byte[size];
+            System.Runtime.InteropServices.Marshal.Copy(resultPtr, bytes, 0, (int)size);
+            SDL3.SDL.Free(resultPtr);
+            return bytes;
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeCoTaskMem(sourcePtr);
+            System.Runtime.InteropServices.Marshal.FreeCoTaskMem(entrypointPtr);
+        }
+    }
+
+    private static SDL3.SDL.GPUShaderFormat GetShaderTarget(string driverName)
+    {
+        return driverName switch
+        {
+            "vulkan" => SDL3.SDL.GPUShaderFormat.SPIRV,
+            "metal" => SDL3.SDL.GPUShaderFormat.MSL,
+            "direct3d12" => SDL3.SDL.GPUShaderFormat.DXIL,
+            "direct3d11" => SDL3.SDL.GPUShaderFormat.DXBC,
+            _ => SDL3.SDL.GPUShaderFormat.SPIRV
+        };
+    }
+
+    private static SDL3.SDL.GPUShaderFormat GetShaderFormatForTarget(SDL3.SDL.GPUShaderFormat target) => target;
 
     /// <summary>
     /// Creates particle pipelines for all blend modes targeting the swapchain format.

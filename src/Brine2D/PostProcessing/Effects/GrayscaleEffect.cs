@@ -1,5 +1,4 @@
 using Brine2D.Rendering;
-using Brine2D.Rendering.SDL.Shaders.PostProcessing;
 using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
@@ -7,7 +6,6 @@ namespace Brine2D.Rendering.SDL.PostProcessing.Effects;
 
 /// <summary>
 /// Post-processing effect that converts the image to grayscale.
-/// Uses pre-compiled SPIRV/DXIL shaders embedded as resources.
 /// Luminance calculation: 0.299*R + 0.587*G + 0.114*B
 /// </summary>
 public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
@@ -135,65 +133,115 @@ public class GrayscaleEffect : ISDL3PostProcessEffect, IDisposable
     private void CreateShaders()
     {
         var device = _deviceHandle.Handle;
+        var driverName = SDL3.SDL.GetGPUDeviceDriver(device);
+        var target = ShaderFormatHelper.GetTargetFromDriver(driverName);
+        var shaderFormat = ShaderFormatHelper.GetShaderFormat(target);
 
+        _logger?.LogDebug("Compiling grayscale shaders for {Driver} via ShaderCross", driverName);
+
+        var vertexBytecode = CompileHLSL(GrayscaleVertexShaderHLSL, SDL3.ShaderCross.ShaderStage.Vertex, target);
+        var fragmentBytecode = CompileHLSL(GrayscaleFragmentShaderHLSL, SDL3.ShaderCross.ShaderStage.Fragment, target);
+
+        _vertexShader = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
+        _fragmentShader = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
+
+        _logger?.LogDebug("Grayscale shaders compiled via ShaderCross");
+    }
+
+    private static byte[] CompileHLSL(
+        string hlsl,
+        SDL3.ShaderCross.ShaderStage stage,
+        ShaderFormatHelper.GraphicsShaderTarget target)
+    {
+        var sourcePtr = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUTF8(hlsl);
+        var entrypointPtr = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUTF8("main");
         try
         {
-            _logger?.LogInformation("Loading pre-compiled grayscale shaders...");
-            
-            var driverName = SDL3.SDL.GetGPUDeviceDriver(device);
-            var targetFormat = ShaderFormatHelper.GetTargetFromDriver(driverName);
-            var shaderFormat = ShaderFormatHelper.GetShaderFormat(targetFormat);
-
-            byte[]? vertexBytecode = null;
-            byte[]? fragmentBytecode = null;
-
-            switch (targetFormat)
+            var hlslInfo = new SDL3.ShaderCross.HLSLInfo
             {
-                case ShaderFormatHelper.GraphicsShaderTarget.SPIRV:
-                    vertexBytecode = GrayscaleShaders.LoadVertexShaderSPIRV();
-                    fragmentBytecode = GrayscaleShaders.LoadFragmentShaderSPIRV();
-                    break;
+                Source = sourcePtr,
+                Entrypoint = entrypointPtr,
+                IncludeDir = IntPtr.Zero,
+                Defines = IntPtr.Zero,
+                ShaderStage = stage,
+                Props = 0
+            };
 
+            nint resultPtr;
+            nuint size;
+
+            switch (target)
+            {
                 case ShaderFormatHelper.GraphicsShaderTarget.DXIL:
-                    vertexBytecode = GrayscaleShaders.LoadVertexShaderDXIL();
-                    fragmentBytecode = GrayscaleShaders.LoadFragmentShaderDXIL();
+                    resultPtr = SDL3.ShaderCross.CompileDXILFromHLSL(ref hlslInfo, out size);
                     break;
-
                 case ShaderFormatHelper.GraphicsShaderTarget.DXBC:
-                    vertexBytecode = GrayscaleShaders.LoadVertexShaderDXBC();
-                    fragmentBytecode = GrayscaleShaders.LoadFragmentShaderDXBC();
+                    resultPtr = SDL3.ShaderCross.CompileDXBCFromHLSL(ref hlslInfo, out size);
                     break;
-
-                case ShaderFormatHelper.GraphicsShaderTarget.MSL:
-                    vertexBytecode = GrayscaleShaders.LoadVertexShaderMSL();
-                    fragmentBytecode = GrayscaleShaders.LoadFragmentShaderMSL();
+                default:
+                    resultPtr = SDL3.ShaderCross.CompileSPIRVFromHLSL(ref hlslInfo, out size);
                     break;
             }
 
-            if (vertexBytecode == null || fragmentBytecode == null)
-            {
-                throw new InvalidOperationException(
-                    $"Pre-compiled {targetFormat} grayscale shader resources not found for {SDL3.SDL.GetGPUDeviceDriver(device)} backend. " +
-                    $"Shaders may not have been compiled at build time.");
-            }
+            if (resultPtr == IntPtr.Zero || size == 0)
+                throw new InvalidOperationException($"ShaderCross failed to compile grayscale {stage} shader for {target}");
 
-            _vertexShader = CreateShaderFromBytecode(ShaderStage.Vertex, vertexBytecode, "main", shaderFormat);
-            _fragmentShader = CreateShaderFromBytecode(ShaderStage.Fragment, fragmentBytecode, "main", shaderFormat);
-
-            if (_vertexShader.Handle == nint.Zero || _fragmentShader.Handle == nint.Zero)
-            {
-                throw new InvalidOperationException("Failed to create grayscale shaders from bytecode");
-            }
-
-            _logger?.LogInformation("Grayscale shaders loaded successfully ({VertexSize} + {FragmentSize} bytes)",
-                vertexBytecode.Length, fragmentBytecode.Length);
+            var bytes = new byte[size];
+            System.Runtime.InteropServices.Marshal.Copy(resultPtr, bytes, 0, (int)size);
+            SDL3.SDL.Free(resultPtr);
+            return bytes;
         }
-        catch (Exception ex)
+        finally
         {
-            _logger?.LogError(ex, "Failed to load grayscale shaders");
-            throw;
+            System.Runtime.InteropServices.Marshal.FreeCoTaskMem(sourcePtr);
+            System.Runtime.InteropServices.Marshal.FreeCoTaskMem(entrypointPtr);
         }
     }
+
+    private const string GrayscaleVertexShaderHLSL = @"
+struct VSOutput
+{
+    float4 position : SV_Position;
+    float2 texCoord : TEXCOORD0;
+};
+
+VSOutput main(uint vertexID : SV_VertexID)
+{
+    VSOutput output;
+    float x = (vertexID == 2) ? 3.0 : -1.0;
+    float y = (vertexID == 1) ? -3.0 : 1.0;
+    output.position = float4(x, y, 0.0, 1.0);
+    float u = (vertexID == 2) ? 2.0 : 0.0;
+    float v = (vertexID == 1) ? 2.0 : 0.0;
+    output.texCoord = float2(u, v);
+    return output;
+}";
+
+    private const string GrayscaleFragmentShaderHLSL = @"
+Texture2D inputTexture : register(t0, space2);
+SamplerState inputSampler : register(s0, space2);
+
+cbuffer GrayscaleParams : register(b0, space3)
+{
+    float intensity;
+    float _padding1;
+    float _padding2;
+    float _padding3;
+};
+
+struct PSInput
+{
+    float4 position : SV_Position;
+    float2 texCoord : TEXCOORD0;
+};
+
+float4 main(PSInput input) : SV_Target
+{
+    float4 color = inputTexture.Sample(inputSampler, input.texCoord);
+    float gray = dot(color.rgb, float3(0.299, 0.587, 0.114));
+    float3 result = lerp(color.rgb, float3(gray, gray, gray), intensity);
+    return float4(result, color.a);
+}";
 
     private SDL3Shader CreateShaderFromBytecode(ShaderStage stage, byte[] bytecode, string entryPoint, SDL3.SDL.GPUShaderFormat format)
     {
