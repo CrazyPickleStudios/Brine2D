@@ -1,49 +1,44 @@
+using Brine2D.Core;
+
 namespace Brine2D.Tilemap;
 
-/// <summary>
-/// Represents a single layer in a tilemap.
-/// </summary>
 public class TilemapLayer
 {
-    /// <summary>
-    /// Layer name (e.g., "background", "gameplay", "foreground").
-    /// </summary>
     public string Name { get; set; }
 
-    /// <summary>
-    /// Width of the layer in tiles.
-    /// </summary>
     public int Width { get; set; }
 
-    /// <summary>
-    /// Height of the layer in tiles.
-    /// </summary>
     public int Height { get; set; }
 
-    /// <summary>
-    /// 2D array of tiles [x, y].
-    /// </summary>
     public Tile[,] Tiles { get; set; }
 
     /// <summary>
-    /// Whether this layer generates collision.
+    /// When true, solid tiles on this layer contribute collision rects.
+    /// Both this and <see cref="TileProperties.IsSolid"/> must be set for a rect to be generated.
     /// </summary>
     public bool HasCollision { get; set; }
 
-    /// <summary>
-    /// Rendering order (lower renders first/behind).
-    /// </summary>
     public byte ZOrder { get; set; }
 
-    /// <summary>
-    /// Layer opacity (0.0 = invisible, 1.0 = fully visible).
-    /// </summary>
     public float Opacity { get; set; } = 1.0f;
 
-    /// <summary>
-    /// Whether this layer is visible.
-    /// </summary>
     public bool Visible { get; set; } = true;
+
+    public float OffsetX { get; set; }
+
+    public float OffsetY { get; set; }
+
+    /// <summary>Parallax scroll factor on X. 1.0 scrolls with the camera, 0.0 is screen-fixed. Maps to Tiled's parallaxx.</summary>
+    public float ParallaxX { get; set; } = 1.0f;
+
+    /// <summary>Parallax scroll factor on Y. 1.0 scrolls with the camera, 0.0 is screen-fixed. Maps to Tiled's parallaxy.</summary>
+    public float ParallaxY { get; set; } = 1.0f;
+
+    /// <summary>Tint multiplied with each tile during rendering. Defaults to White (no tint). Alpha is pre-multiplied with <see cref="Opacity"/>.</summary>
+    public Color TintColor { get; set; } = Color.White;
+
+    /// <summary>Custom properties from Tiled. Does not include collision/hascollision, which is reflected in <see cref="HasCollision"/>.</summary>
+    public Dictionary<string, string> Properties { get; set; } = new();
 
     public TilemapLayer(string name, int width, int height)
     {
@@ -53,9 +48,6 @@ public class TilemapLayer
         Tiles = new Tile[width, height];
     }
 
-    /// <summary>
-    /// Gets a tile at the specified position.
-    /// </summary>
     public Tile GetTile(int x, int y)
     {
         if (x < 0 || x >= Width || y < 0 || y >= Height)
@@ -64,9 +56,6 @@ public class TilemapLayer
         return Tiles[x, y];
     }
 
-    /// <summary>
-    /// Sets a tile at the specified position.
-    /// </summary>
     public void SetTile(int x, int y, Tile tile)
     {
         if (x < 0 || x >= Width || y < 0 || y >= Height)

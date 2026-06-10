@@ -20,11 +20,17 @@ public struct Tile
     /// </summary>
     public bool FlipVertical { get; set; }
 
-    public Tile(int id, bool flipH = false, bool flipV = false)
+    /// <summary>
+    /// Whether this tile is flipped diagonally.
+    /// </summary>
+    public bool FlipDiagonal { get; set; }
+
+    public Tile(int id, bool flipH = false, bool flipV = false, bool flipD = false)
     {
         Id = id;
         FlipHorizontal = flipH;
         FlipVertical = flipV;
+        FlipDiagonal = flipD;
     }
 
     public static Tile Empty => new Tile(0);

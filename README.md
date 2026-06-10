@@ -1344,7 +1344,63 @@ FPS: 60 (16.67ms)    Draw Calls: 12    Entities: 1,247    Systems: 8
 - Joints: revolute, distance, weld, prismatic, motor, wheel, mouse
 - Particle system: GPU-instanced rendering, SDF soft circles, trails (sprites and line ribbon), sub-emitters (birth / death / lifetime-fraction triggers), coherent turbulence, `IParticleForce`, animated sprite frames, multi-stop color gradients, local-space simulation, warmup pre-simulation, object pooling
 - Sprite animation: `AnimatorComponent` with `SpriteAnimator`, code-driven state machine, animation layers (independent tracks with mask, weight, blend mode), 1D and 2D blend trees, cross-fade, ping-pong, per-frame hit boxes and clip events
-- Tilemap support: Tiled (`.tmj`) integration
+- Tilemap: Tiled (`.tmj`) orthogonal maps; embedded and external (`.tsj`) tilesets; tile, object, image, and group layers (with inherited parallax, opacity, tint, and offset); tile animation; tile flipping (H/V/diagonal); multi-tileset GID resolution; solid and one-way platform collision rect generation with greedy merge; world↔tile coordinate conversion with full parallax support; custom properties on maps, layers, tilesets, tiles, and objects; CSV and base64+zlib/gzip/zstd tile data encodings; ECS integration via `TilemapComponent` + `TilemapSystem`
+
+**Loading and rendering a tilemap**
+
+~~~csharp
+// In your scene's OnLoadAsync:
+var loader = Services.GetRequiredService<ITilemapLoader>();
+var tilemap = await loader.LoadAsync("maps/level1.tmj");
+
+var entity = World.CreateEntity()
+    .AddComponent<TilemapComponent>(c => c.Tilemap = tilemap);
+
+// TilemapSystem handles async texture loading and rendering automatically.
+// The component's IsLoaded flag goes true once textures are ready.
+~~~
+
+**Collision rects from solid tiles**
+
+Mark tiles as solid in Tiled with a boolean custom property named `solid` (or `isSolid`).
+Enable collision on the layer with a boolean property named `collision` (or `hasCollision`).
+
+~~~csharp
+// One rect per tile:
+var rects = tilemap.GenerateCollisionRects("Collision");
+
+// Greedy-merged rects (fewer, larger rects — better for physics solvers):
+var merged = tilemap.MergeCollisionRects("Collision");
+
+// One-way platforms work the same way, using the isSolid + isOneWayPlatform properties:
+var platforms = tilemap.MergeOneWayPlatformRects("Collision");
+~~~
+
+**Reading objects**
+
+~~~csharp
+// All objects in a layer:
+var triggers = tilemap.GetObjects("Triggers");
+
+// By ID (unique per map in Tiled):
+var spawn = tilemap.GetObjectById(4);
+
+// By type/class:
+var enemies = tilemap.GetObjectsByType("Enemy");
+
+// Read a custom property:
+string dialogue = spawn?.CustomProperties.Get<string>("dialogue") ?? "";
+~~~
+
+**Coordinate conversion**
+
+~~~csharp
+// World position → tile grid coords (accounts for layer offset + parallax):
+var (tx, ty) = tilemap.WorldToTile(player.X, player.Y, layer, camera.Position);
+
+// Tile grid → world position:
+var (wx, wy) = tilemap.TileToWorld(tx, ty, layer);
+~~~
 - UI framework: canvas, buttons, labels, scroll views
 
 ### Developer Experience

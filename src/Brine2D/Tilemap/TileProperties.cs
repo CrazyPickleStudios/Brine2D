@@ -1,28 +1,22 @@
 namespace Brine2D.Tilemap;
 
-/// <summary>
-/// Properties and metadata for a specific tile ID in the tileset.
-/// </summary>
 public class TileProperties
 {
-    /// <summary>
-    /// Tile ID this property set applies to.
-    /// </summary>
     public int TileId { get; set; }
 
     /// <summary>
-    /// Whether this tile is solid (blocks movement).
+    /// Set this to true in Tiled via a boolean custom property named <c>solid</c> or <c>isSolid</c>.
+    /// Used by <see cref="Tilemap.GenerateCollisionRects"/> and <see cref="Tilemap.MergeCollisionRects"/>.
     /// </summary>
     public bool IsSolid { get; set; }
 
     /// <summary>
-    /// Whether this tile is a one-way platform (can jump through from below).
+    /// Passable from below; blocks only from above. Set in Tiled via a boolean custom property
+    /// named <c>onewayplatform</c> or <c>isOneWayPlatform</c>.
+    /// Used by <see cref="Tilemap.GenerateOneWayPlatformRects"/> and <see cref="Tilemap.MergeOneWayPlatformRects"/>.
     /// </summary>
     public bool IsOneWayPlatform { get; set; }
 
-    /// <summary>
-    /// Custom properties from Tiled (e.g., "damage", "slippery", etc.).
-    /// </summary>
     public Dictionary<string, string> CustomProperties { get; set; } = new();
 
     public TileProperties(int tileId)
