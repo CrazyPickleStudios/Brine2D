@@ -79,4 +79,7 @@ internal sealed class HeadlessInputContext : IInputContext
     public bool IsBackspacePressed() => false;
     public bool IsReturnPressed() => false;
     public bool IsDeletePressed() => false;
+
+    public string GetClipboardText() => string.Empty;
+    public void SetClipboardText(string text) { }
 }

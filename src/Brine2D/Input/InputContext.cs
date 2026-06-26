@@ -727,6 +727,12 @@ internal sealed class InputContext : IInputContext, IDisposable
     public bool IsReturnPressed()    { lock (_stateLock) return _returnPressedThisFrame; }
     public bool IsDeletePressed()    { lock (_stateLock) return _deletePressedThisFrame; }
 
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 clipboard subsystem.")]
+    public string GetClipboardText() => SDL3.SDL.GetClipboardText() ?? string.Empty;
+
+    [ExcludeFromCodeCoverage(Justification = "Requires SDL3 clipboard subsystem.")]
+    public void SetClipboardText(string text) => SDL3.SDL.SetClipboardText(text);
+
     private uint? GetDeviceIdByIndex(int index)
     {
         if (index < 0 || index >= _gamepadSlots.Count) return null;

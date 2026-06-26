@@ -217,6 +217,12 @@ internal sealed class HeadlessRenderer : IRenderer
         ArgumentNullException.ThrowIfNull(texture);
     }
 
+    public void DrawNineSlice(ITexture texture, Rectangle destination, NineSliceBorder border, Color? tint = null)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(texture);
+    }
+
     public void EndFrame()
     {
         if (Volatile.Read(ref _disposed) == 1)

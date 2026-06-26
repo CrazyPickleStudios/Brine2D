@@ -250,4 +250,15 @@ public interface IInputContext : IDisposable
     /// to provide expected text-editing behavior.
     /// </summary>
     bool IsDeletePressed();
+
+    /// <summary>
+    /// Gets the current contents of the system clipboard as a string.
+    /// Returns an empty string if the clipboard is empty or contains non-text data.
+    /// </summary>
+    string GetClipboardText();
+
+    /// <summary>
+    /// Sets the system clipboard to the given text.
+    /// </summary>
+    void SetClipboardText(string text);
 }

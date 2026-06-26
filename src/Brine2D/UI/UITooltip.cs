@@ -1,12 +1,13 @@
 using Brine2D.Core;
 using System.Numerics;
 using Brine2D.Rendering;
+using Brine2D.Rendering.Text;
 
 namespace Brine2D.UI;
 
 /// <summary>
-/// Tooltip that appears when hovering over UI components.
-/// This is metadata about components, not an interactive component itself.
+/// Tooltip shown while hovering over a UI component.
+/// Attach one to any component via its <c>Tooltip</c> property.
 /// </summary>
 public class UITooltip
 {
@@ -54,6 +55,11 @@ public class UITooltip
     /// </summary>
     public float MaxWidth { get; set; } = 200f;
 
+    /// <summary>
+    /// Optional font for rendering tooltip text (null = renderer default).
+    /// </summary>
+    public IFont? Font { get; set; }
+
     private float _hoverTime;
     private bool _isHovering;
 
@@ -85,6 +91,9 @@ public class UITooltip
     {
         if (!Visible || string.IsNullOrEmpty(Text)) return;
 
+        // Recalculate size using renderer metrics
+        CalculateSize(renderer);
+
         // Draw background
         renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
@@ -98,21 +107,15 @@ public class UITooltip
         // Draw text
         var textX = Position.X + Padding;
         var textY = Position.Y + Padding;
-        renderer.DrawText(Text, textX, textY, TextColor);
+        renderer.DrawText(Text, textX, textY, new TextRenderOptions { Color = TextColor, Font = Font });
     }
 
-    /// <summary>
-    /// Called by UICanvas when mouse hovers over target component.
-    /// </summary>
     internal void OnHoverStart(Vector2 mousePosition)
     {
         _isHovering = true;
         UpdatePosition(mousePosition);
     }
 
-    /// <summary>
-    /// Called by UICanvas when mouse leaves target component.
-    /// </summary>
     internal void OnHoverEnd()
     {
         _isHovering = false;
@@ -120,15 +123,23 @@ public class UITooltip
         Visible = false;
     }
 
-    /// <summary>
-    /// Updates tooltip position based on mouse cursor.
-    /// </summary>
-    internal void UpdatePosition(Vector2 mousePosition)
+    internal void UpdatePosition(Vector2 mousePosition, Vector2? screenSize = null)
     {
         Position = mousePosition + CursorOffset;
 
-        // TODO: Add screen bounds clamping to keep tooltip on screen
-        // This would require knowing screen dimensions
+        // Clamp to screen bounds if provided
+        if (screenSize.HasValue)
+        {
+            var ss = screenSize.Value;
+            var pos = Position;
+            if (pos.X + Size.X > ss.X)
+                pos.X = Math.Max(0, ss.X - Size.X - 4);
+            if (pos.Y + Size.Y > ss.Y)
+                pos.Y = Math.Max(0, ss.Y - Size.Y - 4);
+            if (pos.X < 0) pos.X = 4;
+            if (pos.Y < 0) pos.Y = 4;
+            Position = pos;
+        }
     }
 
     /// <summary>
@@ -136,14 +147,12 @@ public class UITooltip
     /// </summary>
     private void CalculateSize()
     {
-        // Rough estimation: 8 pixels per character width, 16 pixels height
+        // Fallback estimate when no renderer is available
         float textWidth = Text.Length * 8;
         float textHeight = 16;
 
-        // Apply max width
         if (MaxWidth > 0 && textWidth > MaxWidth - (Padding * 2))
         {
-            // Estimate number of lines needed
             int estimatedLines = (int)Math.Ceiling(textWidth / (MaxWidth - (Padding * 2)));
             textWidth = MaxWidth - (Padding * 2);
             textHeight *= estimatedLines;
@@ -152,5 +161,12 @@ public class UITooltip
         Size = new Vector2(
             textWidth + (Padding * 2),
             textHeight + (Padding * 2));
+    }
+
+    private void CalculateSize(IRenderer renderer)
+    {
+        var options = new TextRenderOptions { MaxWidth = MaxWidth > 0 ? MaxWidth - (Padding * 2) : (float?)null, Font = Font };
+        var measured = renderer.MeasureText(Text, options);
+        Size = new Vector2(measured.X + (Padding * 2), measured.Y + (Padding * 2));
     }
 }

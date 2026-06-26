@@ -192,7 +192,73 @@ internal sealed class SDL3TextRenderer : IDisposable
             ? (options.MarkupParser ?? _defaultMarkupParser).Parse(text, options)
             : new[] { new TextRun { Text = text, FontSize = options.FontSize } };
 
+        if (options.MaxWidth.HasValue && _defaultFontAtlas != null)
+            return MeasureTextRunsWrapped(runs, options.MaxWidth.Value, options.LineSpacing);
+
         return MeasureTextRuns(runs, options.LineSpacing);
+    }
+
+    private Vector2 MeasureTextRunsWrapped(IReadOnlyList<TextRun> runs, float maxWidth, float lineSpacing = 1.2f)
+    {
+        if (_defaultFontAtlas == null)
+            return MeasureTextRuns(runs, lineSpacing);
+
+        float lineHeight = _defaultFontAtlas.LineHeight * lineSpacing;
+        float cx = 0f;
+        int lineCount = 1;
+
+        foreach (var run in runs)
+        {
+            if (string.IsNullOrEmpty(run.Text)) continue;
+
+            float scale = _defaultFont != null ? run.FontSize / _defaultFont.Size : 1f;
+            var span = run.Text.AsSpan();
+            int ws = 0;
+
+            while (ws < span.Length)
+            {
+                if (span[ws] == '\n')
+                {
+                    cx = 0f;
+                    lineCount++;
+                    ws++;
+                    continue;
+                }
+
+                var rem = span[ws..];
+                int si = rem.IndexOf(' ');
+                int ni = rem.IndexOf('\n');
+                ReadOnlySpan<char> word;
+                bool atEnd;
+                if (si >= 0 && (ni < 0 || si < ni))
+                {
+                    word = rem[..(si + 1)];
+                    atEnd = false;
+                }
+                else if (ni >= 0)
+                {
+                    word = rem[..ni];
+                    atEnd = false;
+                }
+                else
+                {
+                    word = rem;
+                    atEnd = true;
+                }
+
+                var wordSize = MeasureGlyphSpan(word, scale);
+                if (cx + wordSize.X > maxWidth && cx > 0f)
+                {
+                    cx = 0f;
+                    lineCount++;
+                }
+                cx += wordSize.X;
+                ws += word.Length;
+                if (atEnd) break;
+            }
+        }
+
+        return new Vector2(maxWidth, lineHeight * lineCount);
     }
     
     public Vector2 MeasureTextRuns(IReadOnlyList<TextRun> runs, float lineSpacing = 1.2f)

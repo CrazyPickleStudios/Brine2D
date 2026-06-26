@@ -215,6 +215,82 @@ internal sealed partial class SDL3Renderer
         DrawLine(start.X, start.Y, end.X, end.Y, color, thickness);
     }
 
+    /// <summary>
+    /// Draws a nine-slice (9-patch) texture scaled into <paramref name="destination"/>.
+    /// Corners are drawn at their natural texel size; edges and center are stretched.
+    /// </summary>
+    public void DrawNineSlice(ITexture texture, Rectangle destination, NineSliceBorder border, Color? tint = null)
+    {
+        ThrowIfNotInitialized();
+        if (!_frameManager.HasActiveFrame) return;
+        ArgumentNullException.ThrowIfNull(texture);
+
+        if (!texture.IsLoaded || texture.Width <= 0 || texture.Height <= 0)
+            return;
+
+        if (destination.Width <= 0f || destination.Height <= 0f)
+            return;
+
+        var c = tint ?? Color.White;
+        float tw = texture.Width;
+        float th = texture.Height;
+
+        // Source cut coordinates (texels)
+        float sl = border.Left;
+        float st = border.Top;
+        float sr = tw - border.Right;
+        float sb = th - border.Bottom;
+
+        // Destination cut coordinates (pixels)
+        float dl = destination.X + border.Left;
+        float dt = destination.Y + border.Top;
+        float dr = destination.X + destination.Width - border.Right;
+        float db = destination.Y + destination.Height - border.Bottom;
+
+        // Clamp cuts so the dest corners never exceed the available space
+        dl = MathF.Min(dl, destination.X + destination.Width);
+        dt = MathF.Min(dt, destination.Y + destination.Height);
+        dr = MathF.Max(dr, destination.X);
+        db = MathF.Max(db, destination.Y);
+
+        // Helper: draw one cell by mapping src texels → dest pixels directly via the batch.
+        void Cell(float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh)
+        {
+            if (dw <= 0f || dh <= 0f || sw <= 0f || sh <= 0f)
+                return;
+
+            var textureHandle = GetTextureHandle(texture);
+            float u1 = sx / tw;
+            float v1 = sy / th;
+            float u2 = (sx + sw) / tw;
+            float v2 = (sy + sh) / th;
+            _batchRenderer.DrawTexturedQuad(
+                textureHandle,
+                texture.ScaleMode,
+                dx, dy, dw, dh,
+                c,
+                u1, v1, u2, v2,
+                0f, Vector2.Zero,
+                _flushBatchAction,
+                textureRef: texture);
+        }
+
+        // Row 0
+        Cell(0,  0,  sl, st, destination.X,       destination.Y,       border.Left,              border.Top);               // top-left corner
+        Cell(sl, 0,  sr - sl, st, dl,             destination.Y,       dr - dl,                  border.Top);               // top edge
+        Cell(sr, 0,  border.Right, st, dr,         destination.Y,       border.Right,             border.Top);               // top-right corner
+
+        // Row 1 – middle
+        Cell(0,  st, sl, sb - st, destination.X,  dt,                  border.Left,              db - dt);                  // left edge
+        Cell(sl, st, sr - sl, sb - st, dl,         dt,                  dr - dl,                  db - dt);                  // center
+        Cell(sr, st, border.Right, sb - st, dr,    dt,                  border.Right,             db - dt);                  // right edge
+
+        // Row 2 – bottom
+        Cell(0,  sb, sl, border.Bottom, destination.X, db,             border.Left,              border.Bottom);            // bottom-left corner
+        Cell(sl, sb, sr - sl, border.Bottom, dl,   db,                  dr - dl,                  border.Bottom);            // bottom edge
+        Cell(sr, sb, border.Right, border.Bottom, dr, db,              border.Right,             border.Bottom);            // bottom-right corner
+    }
+
     private nint GetTextureHandle(ITexture texture)
     {
         return texture switch

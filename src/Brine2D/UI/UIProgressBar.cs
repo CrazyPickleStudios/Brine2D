@@ -1,26 +1,72 @@
 using Brine2D.Core;
 using System.Numerics;
 using Brine2D.Rendering;
+using Brine2D.Rendering.Text;
 
 namespace Brine2D.UI;
 
 /// <summary>
 /// Progress bar UI component for displaying progress/percentage.
 /// </summary>
-public class UIProgressBar : IUIComponent
+public class UIProgressBar : IUIComponent, IAnchoredUIComponent
 {
     public Vector2 Position { get; set; }
     public Vector2 Size { get; set; }
     public bool Visible { get; set; } = true;
     public bool Enabled { get; set; } = true;
+    public int TabIndex { get; set; } = int.MaxValue;
+    public int ZOrder { get; set; } = 0;
+    public string? Name { get; set; }
+
+    /// <inheritdoc />
+    public UIAnchor Anchor { get; set; } = UIAnchor.TopLeft;
+
+    /// <inheritdoc />
+    public Vector2 AnchorOffset { get; set; }
 
     /// <summary>
-    /// Current value (0.0 to 1.0, representing 0% to 100%).
+    /// Current value, clamped to [<see cref="MinValue"/>, <see cref="MaxValue"/>].
+    /// Setting this property fires <see cref="OnValueChanged"/> when the clamped value differs.
     /// </summary>
     public float Value
     {
         get => _value;
-        set => _value = Math.Clamp(value, 0f, 1f);
+        set
+        {
+            var clamped = Math.Clamp(value, MinValue, MaxValue);
+            if (Math.Abs(_value - clamped) > 0.0001f)
+            {
+                _value = clamped;
+                OnValueChanged?.Invoke(_value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Minimum value of the range. Defaults to 0.
+    /// </summary>
+    public float MinValue
+    {
+        get => _minValue;
+        set
+        {
+            _minValue = value;
+            _value = Math.Clamp(_value, _minValue, _maxValue);
+        }
+    }
+
+    /// <summary>
+    /// Maximum value of the range. Defaults to 1.
+    /// Setting this below <see cref="MinValue"/> is not supported.
+    /// </summary>
+    public float MaxValue
+    {
+        get => _maxValue;
+        set
+        {
+            _maxValue = value;
+            _value = Math.Clamp(_value, _minValue, _maxValue);
+        }
     }
 
     /// <summary>
@@ -46,6 +92,19 @@ public class UIProgressBar : IUIComponent
     public bool ShowPercentage { get; set; } = true;
 
     /// <summary>
+    /// Format string for the progress text. The token <c>{0}</c> is replaced with the
+    /// current percentage (0–100). Defaults to <c>"{0:0}%"</c>.
+    /// Ignored when <see cref="ProgressTextProvider"/> is set.
+    /// </summary>
+    public string PercentageFormat { get; set; } = "{0:0}%";
+
+    /// <summary>
+    /// Custom text provider for the progress label. Receives <c>(currentValue, maxValue)</c>
+    /// and returns the display string. Overrides <see cref="PercentageFormat"/> when set.
+    /// </summary>
+    public Func<float, float, string>? ProgressTextProvider { get; set; }
+
+    /// <summary>
     /// Text color for percentage display.
     /// </summary>
     public Color TextColor { get; set; } = Color.White;
@@ -61,9 +120,19 @@ public class UIProgressBar : IUIComponent
     public Color LabelColor { get; set; } = Color.White;
 
     /// <summary>
+    /// Optional font for rendering text (null = renderer default).
+    /// </summary>
+    public IFont? Font { get; set; }
+
+    /// <summary>
     /// Direction the bar fills.
     /// </summary>
     public ProgressBarDirection Direction { get; set; } = ProgressBarDirection.LeftToRight;
+
+    /// <summary>
+    /// Border thickness in pixels. Defaults to 2.
+    /// </summary>
+    public float BorderThickness { get; set; } = 2f;
 
     /// <summary>
     /// Event fired when value changes.
@@ -71,6 +140,8 @@ public class UIProgressBar : IUIComponent
     public event Action<float>? OnValueChanged;
 
     private float _value;
+    private float _minValue = 0f;
+    private float _maxValue = 1f;
 
     public UIProgressBar(Vector2 position, Vector2 size)
     {
@@ -91,7 +162,8 @@ public class UIProgressBar : IUIComponent
         renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, Size.Y, BackgroundColor);
 
         // Draw fill based on direction
-        float fillAmount = _value;
+        float range = Math.Max(0.0001f, MaxValue - MinValue);
+        float fillAmount = Math.Clamp((_value - MinValue) / range, 0f, 1f);
         switch (Direction)
         {
             case ProgressBarDirection.LeftToRight:
@@ -133,27 +205,35 @@ public class UIProgressBar : IUIComponent
         }
 
         // Draw border
-        float borderThickness = 2f;
-        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, borderThickness, BorderColor); // Top
-        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - borderThickness, Size.X, borderThickness, BorderColor); // Bottom
-        renderer.DrawRectangleFilled(Position.X, Position.Y, borderThickness, Size.Y, BorderColor); // Left
-        renderer.DrawRectangleFilled(Position.X + Size.X - borderThickness, Position.Y, borderThickness, Size.Y, BorderColor); // Right
+        renderer.DrawRectangleFilled(Position.X, Position.Y, Size.X, BorderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y + Size.Y - BorderThickness, Size.X, BorderThickness, BorderColor);
+        renderer.DrawRectangleFilled(Position.X, Position.Y, BorderThickness, Size.Y, BorderColor);
+        renderer.DrawRectangleFilled(Position.X + Size.X - BorderThickness, Position.Y, BorderThickness, Size.Y, BorderColor);
 
         // Draw percentage text if enabled
         if (ShowPercentage)
         {
-            var percentageText = $"{(_value * 100):0}%";
-            var textX = Position.X + (Size.X / 2) - (percentageText.Length * 4);
-            var textY = Position.Y + (Size.Y / 2) - 8;
-            renderer.DrawText(percentageText, textX, textY, TextColor);
+            var percentageText = ProgressTextProvider != null
+                ? ProgressTextProvider(_value, MaxValue)
+                : string.Format(PercentageFormat, fillAmount * 100f);
+            Vector2 textSize;
+            float textX, textY;
+            {
+                var opts = new TextRenderOptions { Color = TextColor, Font = Font, LineSpacing = 1.0f };
+                textSize = renderer.MeasureText(percentageText, opts);
+                textX = MathF.Round(Position.X + (Size.X - textSize.X) / 2f);
+                textY = MathF.Round(Position.Y + (Size.Y - textSize.Y) / 2f);
+                renderer.DrawText(percentageText, textX, textY, opts);
+            }
         }
 
-        // Draw label if provided
         if (!string.IsNullOrEmpty(Label))
         {
+            var labelOpts = new TextRenderOptions { Color = LabelColor, Font = Font };
+            var labelSize = renderer.MeasureText(Label, labelOpts);
             var labelX = Position.X;
-            var labelY = Position.Y - 20; // Above the bar
-            renderer.DrawText(Label, labelX, labelY, LabelColor);
+            var labelY = Position.Y - labelSize.Y - 4f;
+            renderer.DrawText(Label, labelX, labelY, labelOpts);
         }
     }
 
@@ -166,24 +246,20 @@ public class UIProgressBar : IUIComponent
     }
 
     /// <summary>
-    /// Sets the value and fires the OnValueChanged event.
+    /// Sets the value and fires <see cref="OnValueChanged"/> when the value differs.
+    /// Equivalent to setting the <see cref="Value"/> property directly.
     /// </summary>
     public void SetValue(float newValue)
     {
-        var clampedValue = Math.Clamp(newValue, 0f, 1f);
-        if (Math.Abs(_value - clampedValue) > 0.0001f)
-        {
-            _value = clampedValue;
-            OnValueChanged?.Invoke(_value);
-        }
+        Value = newValue;
     }
 
     /// <summary>
-    /// Sets the value from a percentage (0-100).
+    /// Sets the value from a percentage (0–100), mapped onto [<see cref="MinValue"/>, <see cref="MaxValue"/>].
     /// </summary>
     public void SetPercentage(float percentage)
     {
-        SetValue(percentage / 100f);
+        Value = MinValue + (percentage / 100f) * (MaxValue - MinValue);
     }
 }
 

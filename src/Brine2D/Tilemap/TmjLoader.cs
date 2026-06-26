@@ -240,7 +240,8 @@ public class TmjLoader : ITilemapLoader
             {
                 Id = tmjObj.Id,
                 Name = tmjObj.Name,
-                Type = tmjObj.Type,
+                // Tiled 1.9+ renamed the "type" user field to "class". Fall back to Class when Type is empty.
+                Type = !string.IsNullOrEmpty(tmjObj.Type) ? tmjObj.Type : (tmjObj.Class ?? string.Empty),
                 X = tmjObj.X + offsetX,
                 // Tiled places tile object Y at the bottom-left of the tile; normalize to top-left.
                 Y = tmjObj.Y + offsetY - (cleanGid.HasValue ? tmjObj.Height : 0),

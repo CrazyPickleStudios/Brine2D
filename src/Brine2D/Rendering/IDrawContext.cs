@@ -93,6 +93,16 @@ public interface IDrawContext
     /// <returns>Width and height in pixels</returns>
     Vector2 MeasureText(string text, TextRenderOptions options);
 
+    /// <summary>
+    /// Draw a nine-slice (9-patch) texture scaled to the destination rectangle.
+    /// The four corners are drawn at their natural texel size; edges and center are stretched.
+    /// </summary>
+    /// <param name="texture">The source texture.</param>
+    /// <param name="destination">Target rectangle in screen/world space.</param>
+    /// <param name="border">Pixel insets defining the nine-slice cut lines in the source texture.</param>
+    /// <param name="tint">Optional tint color (null = white, no tint).</param>
+    void DrawNineSlice(ITexture texture, Rectangle destination, NineSliceBorder border, Color? tint = null);
+
     void DrawRectangleFilled(float x, float y, float width, float height, Color color, float rotation = 0f);
     void DrawRectangleOutline(float x, float y, float width, float height, Color color, float thickness = 1f, float rotation = 0f);
     void DrawCircleFilled(float centerX, float centerY, float radius, Color color);

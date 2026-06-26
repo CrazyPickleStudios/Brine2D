@@ -126,8 +126,19 @@ internal class TmjObject
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The object's user-defined type/class. Tiled 1.8 and earlier export this as "type";
+    /// Tiled 1.9+ exports it as "class". Both are read so maps from any Tiled version load correctly.
+    /// </summary>
     [JsonPropertyName("type")]
     public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Tiled 1.9+ renamed the "type" field to "class". Populated when loading newer maps.
+    /// <see cref="TmjLoader"/> uses <see cref="Type"/> first and falls back to this.
+    /// </summary>
+    [JsonPropertyName("class")]
+    public string? Class { get; set; }
 
     [JsonPropertyName("x")]
     public float X { get; set; }

@@ -648,6 +648,44 @@ public sealed class TmjLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAsync_ObjectLayer_Tiled19ClassField_IsReadAsType()
+    {
+        // Tiled 1.9+ exports "class" instead of "type" for the user-defined object class.
+        var mapPath = WriteFile("map.tmj", MapWithObjectLayerJson("Entities",
+            """{"id":1,"name":"enemy","class":"Goblin","x":0.0,"y":0.0,"width":16.0,"height":16.0,"visible":true}"""));
+        var loader = new TmjLoader();
+
+        var tilemap = await loader.LoadAsync(mapPath);
+
+        tilemap.ObjectLayers["Entities"][0].Type.Should().Be("Goblin");
+    }
+
+    [Fact]
+    public async Task LoadAsync_ObjectLayer_Tiled19BothFields_TypeTakesPrecedence()
+    {
+        // When both "type" and "class" are present, the "type" value wins.
+        var mapPath = WriteFile("map.tmj", MapWithObjectLayerJson("Entities",
+            """{"id":1,"name":"x","type":"Legacy","class":"New","x":0.0,"y":0.0,"width":0.0,"height":0.0,"visible":true}"""));
+        var loader = new TmjLoader();
+
+        var tilemap = await loader.LoadAsync(mapPath);
+
+        tilemap.ObjectLayers["Entities"][0].Type.Should().Be("Legacy");
+    }
+
+    [Fact]
+    public async Task LoadAsync_ObjectLayer_Tiled19ClassField_GetObjectsByType_Works()
+    {
+        var mapPath = WriteFile("map.tmj", MapWithObjectLayerJson("Entities",
+            """{"id":1,"name":"boss","class":"Dragon","x":0.0,"y":0.0,"width":32.0,"height":32.0,"visible":true}"""));
+        var loader = new TmjLoader();
+
+        var tilemap = await loader.LoadAsync(mapPath);
+
+        tilemap.GetObjectsByType("Dragon").Should().HaveCount(1);
+    }
+
+    [Fact]
     public async Task LoadAsync_ObjectLayer_LoadsObjectPositionAndSize()
     {
         var mapPath = WriteFile("map.tmj", MapWithObjectLayerJson("Entities",

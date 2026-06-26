@@ -19,13 +19,11 @@ public class UIRadioButtonGroup
     public int SelectedIndex => _selectedButton != null ? _buttons.IndexOf(_selectedButton) : -1;
 
     /// <summary>
-    /// Event fired when selection changes.
+    /// Event fired when selection changes. The newly selected button already has
+    /// <see cref="UIRadioButton.IsChecked"/> set to <c>true</c> when this fires.
     /// </summary>
     public event Action<UIRadioButton?>? OnSelectionChanged;
 
-    /// <summary>
-    /// Registers a radio button with this group.
-    /// </summary>
     internal void RegisterButton(UIRadioButton button)
     {
         if (!_buttons.Contains(button))
@@ -34,9 +32,6 @@ public class UIRadioButtonGroup
         }
     }
 
-    /// <summary>
-    /// Unregisters a radio button from this group.
-    /// </summary>
     internal void UnregisterButton(UIRadioButton button)
     {
         _buttons.Remove(button);
@@ -47,20 +42,20 @@ public class UIRadioButtonGroup
     }
 
     /// <summary>
-    /// Selects a button in the group (deselects all others).
+    /// Selects a button (deselecting all others) and fires <see cref="OnSelectionChanged"/>.
     /// </summary>
     internal void SelectButton(UIRadioButton button)
     {
         if (_selectedButton == button) return;
 
-        // Deselect previous button
         if (_selectedButton != null)
         {
             _selectedButton.IsChecked = false;
         }
 
-        // Select new button
         _selectedButton = button;
+        _selectedButton.IsChecked = true;
+
         OnSelectionChanged?.Invoke(_selectedButton);
     }
 
