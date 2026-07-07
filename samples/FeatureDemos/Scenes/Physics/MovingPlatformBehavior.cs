@@ -17,7 +17,7 @@ public class MovingPlatformBehavior : Behavior
     public float Amplitude { get; set; } = 100f;
     public float Speed { get; set; } = 1f;
 
-    protected override void OnAttached()
+    protected override void OnAdded()
         => _transform = Entity.GetRequiredComponent<TransformComponent>();
 
     public override void FixedUpdate(GameTime fixedTime)

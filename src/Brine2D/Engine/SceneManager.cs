@@ -313,7 +313,7 @@ internal sealed class SceneManager : ISceneManager, ISceneLoop, IAsyncDisposable
             _activeLoadingScreen.OnRender(gameTime);
         else if (currentScene != null)
         {
-            currentScene.World.Render(renderer);
+            currentScene.World.Render(renderer, gameTime);
             currentScene.OnRender(gameTime);
         }
 

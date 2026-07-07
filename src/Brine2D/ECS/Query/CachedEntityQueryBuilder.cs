@@ -1,5 +1,9 @@
 namespace Brine2D.ECS.Query;
 
+using System.Numerics;
+using Brine2D.Core;
+using Brine2D.ECS.Components;
+
 /// <summary>
 /// Abstract base for cached query builders. Holds shared filter state and provides
 /// fluent methods that are identical across all arities. Subclasses only add
@@ -19,6 +23,7 @@ public abstract class CachedEntityQueryBuilderBase<TSelf>
     private protected readonly List<Type> _withoutBehaviorTypes = new();
     private protected bool _onlyActive = true;
     private protected bool _onlyEnabled;
+    private protected readonly Dictionary<Type, Func<Component, bool>> _componentFilters = new();
 
     internal CachedEntityQueryBuilderBase(IEntityWorld world, ECSOptions? options)
     {
@@ -100,6 +105,54 @@ public abstract class CachedEntityQueryBuilderBase<TSelf>
     }
 
     /// <summary>
+    /// Filters entities whose <see cref="TransformComponent.Position"/> is within
+    /// <paramref name="radius"/> of <paramref name="center"/>.
+    /// </summary>
+    /// <remarks>
+    /// The position check runs when the cache rebuilds (i.e. on the next structural
+    /// change after a prior <c>Execute()</c> or <c>ForEach()</c> call). Because position
+    /// updates do not trigger structural invalidation, the cached result may be stale if
+    /// entities move between structural changes. Use the one-shot
+    /// <see cref="EntityQuery.WithinRadius"/> for queries that must reflect the current
+    /// frame's positions every frame.
+    /// </remarks>
+    public TSelf WithinRadius(Vector2 center, float radius)
+    {
+        var radiusSq = radius * radius;
+        _predicates.Add(entity =>
+        {
+            var t = entity.GetComponent<TransformComponent>();
+            if (t == null) return false;
+            var dx = t.Position.X - center.X;
+            var dy = t.Position.Y - center.Y;
+            return dx * dx + dy * dy <= radiusSq;
+        });
+        return (TSelf)this;
+    }
+
+    /// <summary>
+    /// Filters entities whose <see cref="TransformComponent.Position"/> is contained
+    /// within <paramref name="bounds"/>.
+    /// </summary>
+    /// <remarks>
+    /// The bounds check runs when the cache rebuilds (i.e. on the next structural
+    /// change after a prior <c>Execute()</c> or <c>ForEach()</c> call). Because position
+    /// updates do not trigger structural invalidation, the cached result may be stale if
+    /// entities move between structural changes. Use the one-shot
+    /// <see cref="EntityQuery.WithinBounds"/> for queries that must reflect the current
+    /// frame's positions every frame.
+    /// </remarks>
+    public TSelf WithinBounds(Rectangle bounds)
+    {
+        _predicates.Add(entity =>
+        {
+            var t = entity.GetComponent<TransformComponent>();
+            return t != null && bounds.Contains(t.Position);
+        });
+        return (TSelf)this;
+    }
+
+    /// <summary>
     /// Adds a custom filter predicate.
     /// </summary>
     public TSelf Where(Func<Entity, bool> predicate)
@@ -132,6 +185,19 @@ public abstract class CachedEntityQueryBuilderBase<TSelf>
         _onlyEnabled = true;
         return (TSelf)this;
     }
+
+    /// <summary>
+    /// Adds a filter that is evaluated on the resolved component value when the cache rebuilds.
+    /// Unlike <see cref="Where"/>, which operates at the entity level, this filter has direct
+    /// access to the already-resolved component, avoiding an extra pool lookup.
+    /// </summary>
+    /// <typeparam name="TComponent">The component type to filter on.</typeparam>
+    /// <param name="filter">Predicate that receives the resolved component and returns <see langword="true"/> to include the entity.</param>
+    public TSelf WithComponentFilter<TComponent>(Func<TComponent, bool> filter) where TComponent : Component
+    {
+        _componentFilters[typeof(TComponent)] = c => filter((TComponent)c);
+        return (TSelf)this;
+    }
 }
 
 /// <summary>
@@ -148,7 +214,7 @@ public class CachedEntityQueryBuilder<T1>
     /// Builds and returns the cached query.
     /// </summary>
     public CachedEntityQuery<T1> Build()
-        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _options);
+        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _componentFilters, _options);
 }
 
 /// <summary>
@@ -163,7 +229,7 @@ public class CachedEntityQueryBuilder<T1, T2>
         : base(world, options) { }
 
     public CachedEntityQuery<T1, T2> Build()
-        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _options);
+        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _componentFilters, _options);
 }
 
 /// <summary>
@@ -179,7 +245,7 @@ public class CachedEntityQueryBuilder<T1, T2, T3>
         : base(world, options) { }
 
     public CachedEntityQuery<T1, T2, T3> Build()
-        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _options);
+        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _componentFilters, _options);
 }
 
 /// <summary>
@@ -196,5 +262,23 @@ public class CachedEntityQueryBuilder<T1, T2, T3, T4>
         : base(world, options) { }
 
     public CachedEntityQuery<T1, T2, T3, T4> Build()
-        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _options);
+        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _componentFilters, _options);
+}
+
+/// <summary>
+/// Builder for creating cached entity queries with five components.
+/// </summary>
+public class CachedEntityQueryBuilder<T1, T2, T3, T4, T5>
+    : CachedEntityQueryBuilderBase<CachedEntityQueryBuilder<T1, T2, T3, T4, T5>>
+    where T1 : Component
+    where T2 : Component
+    where T3 : Component
+    where T4 : Component
+    where T5 : Component
+{
+    internal CachedEntityQueryBuilder(IEntityWorld world, ECSOptions? options = null)
+        : base(world, options) { }
+
+    public CachedEntityQuery<T1, T2, T3, T4, T5> Build()
+        => new(_world, _tags, _predicates, _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes, _withoutTags, _withAnyTags, _onlyActive, _onlyEnabled, _componentFilters, _options);
 }

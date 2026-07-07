@@ -73,6 +73,19 @@ internal class DeferredList<T>
     public bool Contains(T item) => _itemSet.Contains(item);
 
     /// <summary>
+    /// Returns the first pending-add item that matches <paramref name="predicate"/>,
+    /// or <see langword="default"/> if none match. O(n) over pending adds only.
+    /// Used by callers that need to find a not-yet-committed item without requiring a
+    /// <see cref="ProcessChanges"/> call first.
+    /// </summary>
+    public T? FindPendingAdd(Func<T, bool> predicate)
+    {
+        foreach (var item in _itemsToAdd)
+            if (predicate(item)) return item;
+        return default;
+    }
+
+    /// <summary>
     /// Checks if an item is queued for removal or is actively being removed. O(1).
     /// Checks both the pending buffer and the active-processing buffer so callers inside
     /// a removal callback (e.g., Entity.OnDestroy) cannot accidentally re-queue the same item.

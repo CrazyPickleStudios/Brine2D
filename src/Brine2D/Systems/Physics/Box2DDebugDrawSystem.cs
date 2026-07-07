@@ -62,7 +62,7 @@ public sealed unsafe class Box2DDebugDrawSystem : RenderSystemBase, IDisposable
     /// </summary>
     public bool DrawStrings { get; set; }
 
-    public override void Render(IEntityWorld world, IRenderer renderer)
+    public override void Render(IEntityWorld world, IRenderer renderer, GameTime gameTime)
     {
         if (!_physicsWorld.IsValid)
             return;

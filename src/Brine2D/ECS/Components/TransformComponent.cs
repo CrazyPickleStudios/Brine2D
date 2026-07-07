@@ -9,6 +9,8 @@ namespace Brine2D.ECS.Components;
 /// </summary>
 public class TransformComponent : Component
 {
+    // Guards Position and Scale setters against division-by-zero when a parent's scale is zero.
+    private const float ScaleEpsilon = 1e-6f;
     public Vector2 LocalPosition { get; set; }
 
     public float LocalRotation { get; set; }
@@ -45,7 +47,11 @@ public class TransformComponent : Component
             }
 
             var offset = value - parent.Position;
-            var unscaled = offset / parent.Scale;
+            var parentScale = parent.Scale;
+            var safeScale = new Vector2(
+                MathF.Abs(parentScale.X) < ScaleEpsilon ? ScaleEpsilon : parentScale.X,
+                MathF.Abs(parentScale.Y) < ScaleEpsilon ? ScaleEpsilon : parentScale.Y);
+            var unscaled = offset / safeScale;
             LocalPosition = Vector2.Transform(unscaled, Matrix3x2.CreateRotation(-parent.Rotation));
         }
     }
@@ -82,7 +88,16 @@ public class TransformComponent : Component
         set
         {
             var parent = GetParentTransform();
-            LocalScale = parent == null ? value : value / parent.Scale;
+            if (parent == null)
+            {
+                LocalScale = value;
+                return;
+            }
+            var parentScale = parent.Scale;
+            var safeScale = new Vector2(
+                MathF.Abs(parentScale.X) < ScaleEpsilon ? ScaleEpsilon : parentScale.X,
+                MathF.Abs(parentScale.Y) < ScaleEpsilon ? ScaleEpsilon : parentScale.Y);
+            LocalScale = value / safeScale;
         }
     }
 

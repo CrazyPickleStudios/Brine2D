@@ -237,6 +237,29 @@ public class EntityQueryTests : TestBase
     }
 
     [Fact]
+    public void WithinRadius_EntityExactlyOnBoundary_IsIncluded()
+    {
+        // Arrange — entity is positioned exactly at the radius distance
+        var world = CreateTestWorld();
+        var radius = 50f;
+        var entityOnBoundary = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(radius, 0));
+        var entityJustOutside = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new Vector2(radius + 0.001f, 0));
+        world.Flush();
+
+        // Act
+        var results = world.Query()
+            .WithinRadius(Vector2.Zero, radius)
+            .Execute()
+            .ToList();
+
+        // Assert
+        Assert.Contains(entityOnBoundary, results);
+        Assert.DoesNotContain(entityJustOutside, results);
+    }
+
+    [Fact]
     public void WithinRadius_RequiresTransformComponent()
     {
         // Arrange

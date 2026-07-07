@@ -144,7 +144,7 @@ public sealed class TilemapSystemTests : TestBase
         var system = new TilemapSystem(Substitute.For<ITextureLoader>());
         var renderer = Substitute.For<IRenderer>();
 
-        var act = () => system.Render(world, renderer);
+        var act = () => system.Render(world, renderer, default);
 
         act.Should().NotThrow();
     }

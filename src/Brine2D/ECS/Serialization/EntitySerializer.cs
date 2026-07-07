@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Text.Json;
@@ -11,8 +13,42 @@ namespace Brine2D.ECS.Serialization;
 /// Uses System.Text.Json with support for custom converters.
 /// Works automatically with ANY component type - no hardcoding needed!
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Behaviors are not serialized.</b> Only components are persisted. Re-add behaviors
+/// after restore (e.g., by instantiating through a prefab) or add them manually.
+/// </para>
+/// <para>
+/// <b>Entity ID remapping.</b> When a world is restored, every entity receives a new
+/// runtime ID assigned by the global counter. The original IDs captured in the snapshot
+/// are used only to reconstruct the parent–child hierarchy and are discarded afterwards.
+/// Any component that stores a cross-entity reference as a <see langword="long"/> entity ID
+/// will hold a stale value after restore. Re-resolve such references by entity name or tag
+/// after calling <see cref="RestoreWorldFromSnapshot"/>.
+/// </para>
+/// <para>
+/// <b>NativeAOT / trimming.</b> This class uses runtime reflection and dynamic JSON
+/// serialization to handle arbitrary component types. It is not compatible with
+/// NativeAOT or IL trimming as-is; use source-generated <c>JsonSerializerContext</c>
+/// with explicit type registration if either of those targets is required.
+/// </para>
+/// </remarks>
+[RequiresDynamicCode("EntitySerializer uses runtime reflection and dynamic JSON serialization. Not compatible with NativeAOT.")]
+[RequiresUnreferencedCode("EntitySerializer discovers component types at runtime via AppDomain assembly scanning. Not compatible with IL trimming.")]
 public class EntitySerializer
 {
+    // Locates the open-generic AddComponent<T>(T component) overload — the one that takes
+    // a single parameter of the generic type T (not Action<T> and not parameterless).
+    private static readonly MethodInfo AddComponentMethod =
+        typeof(Entity)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .First(m =>
+                m.Name == nameof(Entity.AddComponent) &&
+                m.IsGenericMethodDefinition &&
+                m.GetGenericArguments().Length == 1 &&
+                m.GetParameters() is { Length: 1 } p &&
+                p[0].ParameterType == m.GetGenericArguments()[0]);
+
     private readonly ILogger<EntitySerializer>? _logger;
     private readonly JsonSerializerOptions _options;
 
@@ -69,24 +105,45 @@ public class EntitySerializer
     /// <summary>
     /// Creates a snapshot of an entity.
     /// </summary>
+    /// <remarks>
+    /// Only components are persisted. Behaviors are not serialized; they must be
+    /// re-applied after restore (e.g., by instantiating through a prefab and then
+    /// restoring component state, or by re-adding behaviors manually).
+    /// <para>
+    /// <b>ID remapping:</b> <see cref="EntitySnapshot.Id"/> captures the entity's runtime ID
+    /// so that <see cref="RestoreWorldFromSnapshot"/> can rebuild parent–child hierarchy.
+    /// Restored entities receive brand-new runtime IDs; the snapshot ID is not re-injected.
+    /// Any component that stores a cross-entity reference as a <see cref="long"/> ID will
+    /// hold a stale value after restore. Re-resolve such references by name or tag instead.
+    /// </para>
+    /// </remarks>
     public EntitySnapshot CreateSnapshot(Entity entity)
     {
         var snapshot = new EntitySnapshot
         {
+            Id = entity.Id,
             Name = entity.Name,
-            IsEnabled = entity.IsActive
+            IsActive = entity.IsActive,
+            ParentId = entity.Parent?.Id ?? 0L
         };
 
         snapshot.Tags.AddRange(entity.Tags);
 
-        // Serialize each component using System.Text.Json
+        var behaviors = entity.GetAllBehaviors();
+        if (behaviors.Count > 0)
+            _logger?.LogWarning(
+                "Entity '{EntityName}' has {Count} behavior(s) ({Types}) that will not be serialized. " +
+                "Re-add behaviors after restore, or instantiate the entity from a prefab.",
+                entity.Name,
+                behaviors.Count,
+                string.Join(", ", behaviors.Select(b => b.GetType().Name)));
+
         foreach (var component in entity.GetAllComponents())
         {
             var componentType = component.GetType();
 
             try
             {
-                // Just use JsonSerializer directly - it handles everything!
                 var jsonElement = JsonSerializer.SerializeToElement(component, componentType, _options);
                 snapshot.Components[componentType.FullName ?? componentType.Name] = jsonElement;
             }
@@ -153,20 +210,45 @@ public class EntitySerializer
     }
 
     /// <summary>
-    /// Restores entities from a snapshot into the world.
-    /// CLEARS the existing world first!
+    /// Restores entities from a snapshot into the world, preserving the parent–child hierarchy.
+    /// CLEARS the existing world's entities first, but leaves registered systems intact.
     /// </summary>
+    /// <remarks>
+    /// Uses a two-pass strategy: all entities are created in the first pass, then parent–child
+    /// relationships are re-established in the second pass using the snapshot IDs recorded by
+    /// <see cref="CreateSnapshot"/>. This means <see cref="EntitySnapshot.Id"/> values are
+    /// used as keys during restore but are not injected back into the restored entities' runtime IDs.
+    /// </remarks>
     public void RestoreWorldFromSnapshot(IEntityWorld world, WorldSnapshot snapshot)
     {
-        // Clear existing entities
-        world.Clear();
+        world.ClearEntities();
+        world.Flush();
 
+        // Pass 1 — create all entities and map snapshot ID -> restored entity
+        var idMap = new Dictionary<long, Entity>(snapshot.Entities.Count);
         foreach (var entitySnapshot in snapshot.Entities)
         {
-            RestoreEntity(world, entitySnapshot);
+            var entity = RestoreEntity(world, entitySnapshot);
+            if (entitySnapshot.Id != 0)
+                idMap[entitySnapshot.Id] = entity;
+        }
+
+        world.Flush();
+
+        // Pass 2 — re-parent using the snapshot ID map
+        foreach (var entitySnapshot in snapshot.Entities)
+        {
+            if (entitySnapshot.ParentId == 0) continue;
+            if (!idMap.TryGetValue(entitySnapshot.Id, out var child)) continue;
+            if (!idMap.TryGetValue(entitySnapshot.ParentId, out var parent)) continue;
+            child.SetParent(parent);
         }
 
         _logger?.LogInformation("Restored {Count} entities from snapshot", snapshot.Entities.Count);
+        if (snapshot.Entities.Count > 0)
+            _logger?.LogDebug(
+                "Behaviors are not persisted in snapshots and have not been restored. " +
+                "Re-add behaviors after restore (e.g., via prefab instantiation) or apply them manually.");
     }
 
     /// <summary>
@@ -176,7 +258,7 @@ public class EntitySerializer
     {
         // Create entity
         var entity = world.CreateEntity(snapshot.Name);
-        entity.IsActive = snapshot.IsEnabled;
+        entity.IsActive = snapshot.IsActive;
 
         // Restore tags
         foreach (var tag in snapshot.Tags)
@@ -206,10 +288,11 @@ public class EntitySerializer
 
     /// <summary>
     /// Restores a component from JSON data onto an entity.
+    /// The component is fully deserialized before being attached so that
+    /// <see cref="Component.OnAdded"/> fires with all restored values in place.
     /// </summary>
-    private void RestoreComponent(Entity entity, string componentTypeName, object componentData)
+    private void RestoreComponent(Entity entity, string componentTypeName, JsonElement componentData)
     {
-        // Find the component type by name
         var componentType = FindComponentType(componentTypeName);
         if (componentType == null)
         {
@@ -217,9 +300,7 @@ public class EntitySerializer
             return;
         }
 
-        // Deserialize the component data
-        var jsonElement = (JsonElement)componentData;
-        var component = JsonSerializer.Deserialize(jsonElement.GetRawText(), componentType, _options);
+        var component = JsonSerializer.Deserialize(componentData.GetRawText(), componentType, _options) as Component;
 
         if (component == null)
         {
@@ -227,23 +308,8 @@ public class EntitySerializer
             return;
         }
 
-        // Add component to entity using reflection
-        var addComponentMethod = typeof(Entity).GetMethod(nameof(Entity.AddComponent), 
-            BindingFlags.Public | BindingFlags.Instance, 
-            Type.EmptyTypes);
-
-        if (addComponentMethod == null)
-        {
-            _logger?.LogError("AddComponent method not found on Entity");
-            return;
-        }
-
-        // Create generic method for this component type
-        var genericMethod = addComponentMethod.MakeGenericMethod(componentType);
-        var addedComponent = genericMethod.Invoke(entity, null);
-
-        // Copy properties from deserialized component to added component
-        CopyComponentProperties(component, addedComponent);
+        var genericMethod = AddComponentMethod.MakeGenericMethod(componentType);
+        genericMethod.Invoke(entity, [component]);
     }
 
     /// <summary>
@@ -264,47 +330,23 @@ public class EntitySerializer
             if (type != null)
                 return type;
 
-            // Try simple name match (without namespace)
-            var simpleNameMatch = assembly.GetTypes()
-                .FirstOrDefault(t => t.Name == typeName || t.FullName == typeName);
-            
-            if (simpleNameMatch != null)
-                return simpleNameMatch;
+            // Try simple name match (without namespace). GetTypes() can throw on
+            // assemblies with unresolvable type references (e.g. native-interop glue),
+            // so use GetLoadedModules / catch the specific exception and keep searching.
+            Type[]? allTypes = null;
+            try { allTypes = assembly.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { allTypes = ex.Types!; }
+
+            if (allTypes != null)
+            {
+                var simpleNameMatch = Array.Find(allTypes,
+                    t => t != null && (t.Name == typeName || t.FullName == typeName));
+                if (simpleNameMatch != null)
+                    return simpleNameMatch;
+            }
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Copies all public properties from source to destination component.
-    /// </summary>
-    private void CopyComponentProperties(object source, object? destination)
-    {
-        if (destination == null) return;
-
-        var sourceType = source.GetType();
-        var destType = destination.GetType();
-
-        var properties = sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead && p.CanWrite && p.Name != "Entity");
-
-        foreach (var property in properties)
-        {
-            try
-            {
-                var destProperty = destType.GetProperty(property.Name, BindingFlags.Public | BindingFlags.Instance);
-                if (destProperty != null && destProperty.CanWrite)
-                {
-                    var value = property.GetValue(source);
-                    destProperty.SetValue(destination, value);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Failed to copy property {Property} on {Type}",
-                    property.Name, sourceType.Name);
-            }
-        }
     }
 
     /// <summary>

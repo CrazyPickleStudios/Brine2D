@@ -284,7 +284,7 @@ public class PlayerMovementBehavior : Behavior
 
     public PlayerMovementBehavior(IInputContext input) => _input = input;
 
-    protected override void OnAttached()
+    protected override void OnAdded()
         => _transform = Entity.GetRequiredComponent<TransformComponent>();
 
     public override void Update(GameTime gameTime)
@@ -947,7 +947,7 @@ public class PlayerMovementBehavior : Behavior
 
     public PlayerMovementBehavior(IInputContext input) => _input = input;
 
-    protected override void OnAttached()
+    protected override void OnAdded()
         => _character = Entity.GetRequiredComponent<KinematicCharacterBody>();
 
     public override void FixedUpdate(GameTime fixedTime)

@@ -1,3 +1,4 @@
+using Brine2D.Core;
 using Brine2D.ECS.Systems;
 using Brine2D.Rendering;
 
@@ -30,5 +31,14 @@ public interface IRenderSystem : ISystem
     /// </summary>
     /// <param name="world">The entity world to process.</param>
     /// <param name="renderer">The renderer to draw with.</param>
-    void Render(IEntityWorld world, IRenderer renderer);
+    /// <param name="gameTime">
+    ///     Render-phase game time. <see cref="GameTime.Alpha"/> holds the physics interpolation
+    ///     factor (0–1) representing how far the current frame sits between the last two fixed
+    ///     timesteps. Use it to lerp rendered positions between previous and current physics state.
+    /// </param>
+    /// <remarks>
+    ///     For a first-frame initialization hook, extend <see cref="Systems.RenderSystemBase"/>
+    ///     and override <see cref="Systems.RenderSystemBase.OnStart"/>.
+    /// </remarks>
+    void Render(IEntityWorld world, IRenderer renderer, GameTime gameTime);
 }

@@ -17,8 +17,14 @@ public class ECSOptions
     public int InitialEntityCapacity { get; set; } = 1000;
 
     /// <summary>
-    /// When <see langword="true"/>, systems execute in parallel across worker threads.
+    /// When <see langword="true"/>, cached query iteration runs in parallel across worker threads
+    /// for queries that exceed <see cref="ParallelEntityThreshold"/>.
     /// </summary>
+    /// <remarks>
+    /// This controls <b>query-iteration parallelism only</b> — system and behavior dispatch
+    /// always executes sequentially on the calling thread. Individual systems can additionally
+    /// opt out of parallel query iteration by applying <see cref="Systems.SequentialAttribute"/>.
+    /// </remarks>
     public bool EnableMultiThreading { get; set; } = true;
 
     /// <summary>
@@ -58,6 +64,44 @@ public class ECSOptions
     /// </summary>
     [Range(1, 60, ErrorMessage = "MaxFixedStepsPerFrame must be between 1 and 60")]
     public int MaxFixedStepsPerFrame { get; set; } = 8;
+
+    /// <summary>
+    /// When <see langword="true"/>, exceptions thrown by systems or behaviors are
+    /// re-thrown after logging instead of being swallowed. Defaults to
+    /// <see langword="true"/> in DEBUG builds and <see langword="false"/> in release
+    /// so that a single faulting system does not crash the game in production, but
+    /// crashes are surfaced immediately during development.
+    /// </summary>
+    public bool PropagateExceptions { get; set; } =
+#if DEBUG
+        true;
+#else
+        false;
+#endif
+
+    /// <summary>
+    /// Optional callback invoked when an exception is swallowed because
+    /// <see cref="PropagateExceptions"/> is <see langword="false"/>.
+    /// Use this to route errors to a crash reporter or telemetry service in release builds
+    /// without forcing the exception to propagate and crash the game loop.
+    /// </summary>
+    /// <remarks>
+    /// The callback receives the exception and a context string describing where the
+    /// exception originated (e.g., system type name or behavior type name + entity name).
+    /// The callback itself must not throw; any exception it raises is silently ignored.
+    /// </remarks>
+    public Action<Exception, string>? OnExceptionSwallowed { get; set; }
+
+    /// <summary>
+    /// Optional callback invoked when the fixed-update accumulator is clamped because
+    /// a frame took longer than <see cref="MaxFixedStepsPerFrame"/> × <see cref="FixedTimeStepMs"/>.
+    /// The argument is the number of milliseconds of simulation time that were discarded.
+    /// </summary>
+    /// <remarks>
+    /// Use this to route simulation stall events to telemetry or logging in release builds.
+    /// The callback must not throw; any exception it raises is silently ignored.
+    /// </remarks>
+    public Action<double>? OnFixedStepsDiscarded { get; set; }
 
     /// <summary>
     /// Returns a cached <see cref="ParallelOptions"/> instance derived from

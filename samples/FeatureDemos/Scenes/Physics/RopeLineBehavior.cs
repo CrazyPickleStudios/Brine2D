@@ -17,7 +17,7 @@ public class RopeLineBehavior : Behavior
     public Entity? Anchor { get; set; }
     public Entity? Target { get; set; }
 
-    protected override void OnAttached()
+    protected override void OnAdded()
     {
         _ownTransform = Entity.GetRequiredComponent<TransformComponent>();
         _line = Entity.GetRequiredComponent<LineShapeComponent>();

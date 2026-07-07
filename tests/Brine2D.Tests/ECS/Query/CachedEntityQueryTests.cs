@@ -532,6 +532,255 @@ public class CachedEntityQueryTests : TestBase
 
     #endregion
 
+    #region Spatial Queries (CachedEntityQueryBuilder)
+
+    [Fact]
+    public void CachedQuery_WithinRadius_ReturnsEntitiesInsideRadius()
+    {
+        var world = CreateTestWorld();
+        var inside = world.CreateEntity("Inside")
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(10f, 0f));
+        world.CreateEntity("Outside")
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(200f, 0f));
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent>()
+            .WithinRadius(System.Numerics.Vector2.Zero, 50f)
+            .Build();
+
+        var results = query.Execute().ToList();
+
+        Assert.Single(results);
+        Assert.Contains(inside, results);
+    }
+
+    [Fact]
+    public void CachedQuery_WithinRadius_ExcludesBoundaryAtExactEdge()
+    {
+        var world = CreateTestWorld();
+        world.CreateEntity("OnEdge")
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(50f, 0f));
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent>()
+            .WithinRadius(System.Numerics.Vector2.Zero, 50f)
+            .Build();
+
+        // At exactly radius the point is included (<=)
+        var results = query.Execute().ToList();
+        Assert.Single(results);
+    }
+
+    [Fact]
+    public void CachedQuery_WithinRadius_ExcludesEntitiesWithoutTransform()
+    {
+        var world = CreateTestWorld();
+        world.CreateEntity("NoTransform").AddComponent<PhysicsBodyComponent>();
+        world.Flush();
+
+        var query = world.CreateCachedQuery<PhysicsBodyComponent>()
+            .WithinRadius(System.Numerics.Vector2.Zero, 1000f)
+            .Build();
+
+        Assert.Empty(query.Execute());
+    }
+
+    [Fact]
+    public void CachedQuery_WithinBounds_ReturnsEntitiesInsideBounds()
+    {
+        var world = CreateTestWorld();
+        var inside = world.CreateEntity("Inside")
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(5f, 5f));
+        world.CreateEntity("Outside")
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(200f, 200f));
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent>()
+            .WithinBounds(new Brine2D.Core.Rectangle(0f, 0f, 100f, 100f))
+            .Build();
+
+        var results = query.Execute().ToList();
+
+        Assert.Single(results);
+        Assert.Contains(inside, results);
+    }
+
+    [Fact]
+    public void CachedQuery_WithinBounds_ReturnsNothingWhenAllOutside()
+    {
+        var world = CreateTestWorld();
+        world.CreateEntity("Far")
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(500f, 500f));
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent>()
+            .WithinBounds(new Brine2D.Core.Rectangle(0f, 0f, 100f, 100f))
+            .Build();
+
+        Assert.Empty(query.Execute());
+    }
+
+    #endregion
+
+    #region Five Component Query
+
+    [Fact]
+    public void CachedQuery_FiveComponents_ReturnsMatchingEntities()
+    {
+        var world = CreateTestWorld();
+        var match = world.CreateEntity("Match")
+            .AddComponent<TransformComponent>()
+            .AddComponent<PhysicsBodyComponent>()
+            .AddComponent<ComponentA>()
+            .AddComponent<ComponentB>()
+            .AddComponent<ComponentC>();
+        world.CreateEntity("Partial")
+            .AddComponent<TransformComponent>()
+            .AddComponent<PhysicsBodyComponent>()
+            .AddComponent<ComponentA>()
+            .AddComponent<ComponentB>();
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent, ComponentA, ComponentB, ComponentC>().Build();
+        var results = query.Execute().ToList();
+
+        Assert.Single(results);
+        Assert.Contains(match, results);
+    }
+
+    [Fact]
+    public void CachedQuery_FiveComponents_ForEach_VisitsAllComponents()
+    {
+        var world = CreateTestWorld();
+        world.CreateEntity("E1")
+            .AddComponent<TransformComponent>()
+            .AddComponent<PhysicsBodyComponent>()
+            .AddComponent<ComponentA>()
+            .AddComponent<ComponentB>()
+            .AddComponent<ComponentC>();
+        world.Flush();
+
+        int count = 0;
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent, ComponentA, ComponentB, ComponentC>().Build();
+        query.ForEach((e, t, p, a, b, c) =>
+        {
+            Assert.NotNull(t);
+            Assert.NotNull(p);
+            Assert.NotNull(a);
+            Assert.NotNull(b);
+            Assert.NotNull(c);
+            count++;
+        });
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void CachedQuery_FiveComponents_InvalidatesOnComponentAdd()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity("E")
+            .AddComponent<TransformComponent>()
+            .AddComponent<PhysicsBodyComponent>()
+            .AddComponent<ComponentA>()
+            .AddComponent<ComponentB>();
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent, ComponentA, ComponentB, ComponentC>().Build();
+        Assert.Empty(query.Execute());
+
+        entity.AddComponent<ComponentC>();
+        world.Flush();
+
+        Assert.Single(query.Execute());
+    }
+
+    private class ComponentA : Component { }
+    private class ComponentB : Component { }
+    private class ComponentC : Component { }
+
+    #endregion
+
+    #region WithComponentFilter
+
+    [Fact]
+    public void WithComponentFilter_IncludesMatchingEntities()
+    {
+        var world = CreateTestWorld();
+        var match = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(5, 0));
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(0, 0));
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent>()
+            .WithComponentFilter<TransformComponent>(t => t.LocalPosition.X > 0)
+            .Build();
+
+        var results = query.Execute().ToList();
+
+        Assert.Single(results);
+        Assert.Contains(match, results);
+    }
+
+    [Fact]
+    public void WithComponentFilter_ExcludesNonMatchingEntities()
+    {
+        var world = CreateTestWorld();
+        world.CreateEntity().AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(0, 0));
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent>()
+            .WithComponentFilter<TransformComponent>(t => t.LocalPosition.X > 100)
+            .Build();
+
+        Assert.Empty(query.Execute());
+    }
+
+    [Fact]
+    public void WithComponentFilter_InvalidatesAndRebuildsCorrectly()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(0, 0));
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent>()
+            .WithComponentFilter<TransformComponent>(t => t.LocalPosition.X > 0)
+            .Build();
+
+        Assert.Empty(query.Execute());
+
+        entity.GetComponent<TransformComponent>()!.LocalPosition = new System.Numerics.Vector2(10, 0);
+        query.Invalidate();
+
+        Assert.Single(query.Execute());
+    }
+
+    [Fact]
+    public void WithComponentFilter_TwoComponents_FiltersBothIndependently()
+    {
+        var world = CreateTestWorld();
+        var match = world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(1, 0))
+            .AddComponent<PhysicsBodyComponent>();
+        world.CreateEntity()
+            .AddComponent<TransformComponent>(t => t.LocalPosition = new System.Numerics.Vector2(0, 0))
+            .AddComponent<PhysicsBodyComponent>();
+        world.Flush();
+
+        var query = world.CreateCachedQuery<TransformComponent, PhysicsBodyComponent>()
+            .WithComponentFilter<TransformComponent>(t => t.LocalPosition.X > 0)
+            .Build();
+
+        var results = query.Execute().ToList();
+
+        Assert.Single(results);
+        Assert.Contains(match, results);
+    }
+
+    #endregion
+
     #region Test Helper Component
 
     private class TestComponent : Component

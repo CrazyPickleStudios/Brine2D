@@ -16,6 +16,7 @@ public abstract class CachedEntityQueryBase : ICachedQuery, IDisposable
     private protected readonly List<Type> _withoutTypes;
     private protected readonly List<Type> _withBehaviorTypes;
     private protected readonly List<Type> _withoutBehaviorTypes;
+    private protected readonly Dictionary<Type, Func<Component, bool>> _componentFilters;
     private protected readonly bool _onlyActive;
     private protected readonly bool _onlyEnabled;
     private protected bool _isDirty = true;
@@ -38,6 +39,7 @@ public abstract class CachedEntityQueryBase : ICachedQuery, IDisposable
         List<string> withAnyTags,
         bool onlyActive,
         bool onlyEnabled,
+        Dictionary<Type, Func<Component, bool>>? componentFilters,
         ECSOptions? options)
     {
         _world = world;
@@ -52,6 +54,9 @@ public abstract class CachedEntityQueryBase : ICachedQuery, IDisposable
         _withAnyTags = new List<string>(withAnyTags);
         _onlyActive = onlyActive;
         _onlyEnabled = onlyEnabled;
+        _componentFilters = componentFilters != null && componentFilters.Count > 0
+            ? new Dictionary<Type, Func<Component, bool>>(componentFilters)
+            : [];
 
         _filterState = new EntityFilterState(
             _withoutTypes, _withBehaviorTypes, _withoutBehaviorTypes,
@@ -161,8 +166,15 @@ public abstract class CachedEntityQueryBase : ICachedQuery, IDisposable
         return true;
     }
 
+    private protected bool ComponentMatchesFilter(Type componentType, Component component)
+        => !_componentFilters.TryGetValue(componentType, out var filter) || filter(component);
+
     private protected bool ShouldParallelize(int count)
-        => _options.EnableMultiThreading && count >= _options.ParallelEntityThreshold;
+    {
+        if (!_options.EnableMultiThreading) return false;
+        if (_entityWorld != null && _entityWorld.IsCurrentSystemSequential()) return false;
+        return count >= _options.ParallelEntityThreshold;
+    }
 }
 
 /// <summary>
@@ -188,11 +200,12 @@ public class CachedEntityQuery<T1> : CachedEntityQueryBase where T1 : Component
         List<string> withAnyTags,
         bool onlyActive,
         bool onlyEnabled,
+        Dictionary<Type, Func<Component, bool>>? componentFilters,
         ECSOptions? options = null)
-        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, options) { }
+        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, componentFilters, options) { }
 
     internal CachedEntityQuery(IEntityWorld world)
-        : this(world, [], [], [], [], [], [], [], true, false, null) { }
+        : this(world, [], [], [], [], [], [], [], true, false, null, null) { }
 
     private protected override IReadOnlyCollection<Type> RequiredTypes { get; } = [typeof(T1)];
     private protected override int CachedCount => _cachedPairs?.Count ?? 0;
@@ -273,7 +286,8 @@ public class CachedEntityQuery<T1> : CachedEntityQueryBase where T1 : Component
                         var (entityId, c1) = snapshot[i];
                         var entity = _entityWorld.GetEntityById(entityId);
                         if (entity != null && (!_onlyActive || entity.IsActive) &&
-                            (!_onlyEnabled || c1.IsEnabled) && MatchesFilters(entity))
+                            (!_onlyEnabled || c1.IsEnabled) &&
+                            ComponentMatchesFilter(typeof(T1), c1) && MatchesFilters(entity))
                             _cachedPairs.Add((entity, c1));
                     }
                 }
@@ -291,7 +305,7 @@ public class CachedEntityQuery<T1> : CachedEntityQueryBase where T1 : Component
                             var entity = _entityWorld.GetEntityById(ids[i]);
                             if (entity == null || (_onlyActive && !entity.IsActive) || !MatchesFilters(entity)) continue;
                             var c1 = (T1?)pool.Get(ids[i]);
-                            if (c1 != null && (!_onlyEnabled || c1.IsEnabled))
+                            if (c1 != null && (!_onlyEnabled || c1.IsEnabled) && ComponentMatchesFilter(typeof(T1), c1))
                                 _cachedPairs.Add((entity, c1));
                         }
                     }
@@ -306,7 +320,7 @@ public class CachedEntityQuery<T1> : CachedEntityQueryBase where T1 : Component
                 if (!_onlyActive || entity.IsActive)
                 {
                     var c1 = entity.GetComponent<T1>();
-                    if (c1 != null && (!_onlyEnabled || c1.IsEnabled) && MatchesFilters(entity))
+                    if (c1 != null && (!_onlyEnabled || c1.IsEnabled) && ComponentMatchesFilter(typeof(T1), c1) && MatchesFilters(entity))
                         _cachedPairs.Add((entity, c1));
                 }
             }
@@ -338,11 +352,12 @@ public class CachedEntityQuery<T1, T2> : CachedEntityQueryBase
         List<string> withAnyTags,
         bool onlyActive,
         bool onlyEnabled,
+        Dictionary<Type, Func<Component, bool>>? componentFilters,
         ECSOptions? options = null)
-        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, options) { }
+        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, componentFilters, options) { }
 
     internal CachedEntityQuery(IEntityWorld world)
-        : this(world, [], [], [], [], [], [], [], true, false, null) { }
+        : this(world, [], [], [], [], [], [], [], true, false, null, null) { }
 
     private protected override IReadOnlyCollection<Type> RequiredTypes { get; } = [typeof(T1), typeof(T2)];
     private protected override int CachedCount => _cachedPairs?.Count ?? 0;
@@ -429,9 +444,9 @@ public class CachedEntityQuery<T1, T2> : CachedEntityQueryBase
                             var entity = _entityWorld.GetEntityById(ids[i]);
                             if (entity == null || (_onlyActive && !entity.IsActive) || !MatchesFilters(entity)) continue;
                             var c1 = _entityWorld.GetComponentFromPool<T1>(ids[i]);
-                            if (c1 == null || (_onlyEnabled && !c1.IsEnabled)) continue;
+                            if (c1 == null || (_onlyEnabled && !c1.IsEnabled) || !ComponentMatchesFilter(typeof(T1), c1)) continue;
                             var c2 = _entityWorld.GetComponentFromPool<T2>(ids[i]);
-                            if (c2 != null && (!_onlyEnabled || c2.IsEnabled))
+                            if (c2 != null && (!_onlyEnabled || c2.IsEnabled) && ComponentMatchesFilter(typeof(T2), c2))
                                 _cachedPairs.Add((entity, c1, c2));
                         }
                     }
@@ -449,6 +464,7 @@ public class CachedEntityQuery<T1, T2> : CachedEntityQueryBase
                     var c2 = entity.GetComponent<T2>();
                     if (c1 != null && c2 != null &&
                         (!_onlyEnabled || (c1.IsEnabled && c2.IsEnabled)) &&
+                        ComponentMatchesFilter(typeof(T1), c1) && ComponentMatchesFilter(typeof(T2), c2) &&
                         MatchesFilters(entity))
                         _cachedPairs.Add((entity, c1, c2));
                 }
@@ -482,11 +498,12 @@ public class CachedEntityQuery<T1, T2, T3> : CachedEntityQueryBase
         List<string> withAnyTags,
         bool onlyActive,
         bool onlyEnabled,
+        Dictionary<Type, Func<Component, bool>>? componentFilters,
         ECSOptions? options = null)
-        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, options) { }
+        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, componentFilters, options) { }
 
     internal CachedEntityQuery(IEntityWorld world)
-        : this(world, [], [], [], [], [], [], [], true, false, null) { }
+        : this(world, [], [], [], [], [], [], [], true, false, null, null) { }
 
     private protected override IReadOnlyCollection<Type> RequiredTypes { get; } = [typeof(T1), typeof(T2), typeof(T3)];
     private protected override int CachedCount => _cachedPairs?.Count ?? 0;
@@ -578,11 +595,11 @@ public class CachedEntityQuery<T1, T2, T3> : CachedEntityQueryBase
                             var entity = _entityWorld.GetEntityById(ids[i]);
                             if (entity == null || (_onlyActive && !entity.IsActive) || !MatchesFilters(entity)) continue;
                             var c1 = _entityWorld.GetComponentFromPool<T1>(ids[i]);
-                            if (c1 == null || (_onlyEnabled && !c1.IsEnabled)) continue;
+                            if (c1 == null || (_onlyEnabled && !c1.IsEnabled) || !ComponentMatchesFilter(typeof(T1), c1)) continue;
                             var c2 = _entityWorld.GetComponentFromPool<T2>(ids[i]);
-                            if (c2 == null || (_onlyEnabled && !c2.IsEnabled)) continue;
+                            if (c2 == null || (_onlyEnabled && !c2.IsEnabled) || !ComponentMatchesFilter(typeof(T2), c2)) continue;
                             var c3 = _entityWorld.GetComponentFromPool<T3>(ids[i]);
-                            if (c3 != null && (!_onlyEnabled || c3.IsEnabled))
+                            if (c3 != null && (!_onlyEnabled || c3.IsEnabled) && ComponentMatchesFilter(typeof(T3), c3))
                                 _cachedPairs.Add((entity, c1, c2, c3));
                         }
                     }
@@ -601,6 +618,7 @@ public class CachedEntityQuery<T1, T2, T3> : CachedEntityQueryBase
                     var c3 = entity.GetComponent<T3>();
                     if (c1 != null && c2 != null && c3 != null &&
                         (!_onlyEnabled || (c1.IsEnabled && c2.IsEnabled && c3.IsEnabled)) &&
+                        ComponentMatchesFilter(typeof(T1), c1) && ComponentMatchesFilter(typeof(T2), c2) && ComponentMatchesFilter(typeof(T3), c3) &&
                         MatchesFilters(entity))
                         _cachedPairs.Add((entity, c1, c2, c3));
                 }
@@ -635,11 +653,12 @@ public class CachedEntityQuery<T1, T2, T3, T4> : CachedEntityQueryBase
         List<string> withAnyTags,
         bool onlyActive,
         bool onlyEnabled,
+        Dictionary<Type, Func<Component, bool>>? componentFilters,
         ECSOptions? options = null)
-        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, options) { }
+        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, componentFilters, options) { }
 
     internal CachedEntityQuery(IEntityWorld world)
-        : this(world, [], [], [], [], [], [], [], true, false, null) { }
+        : this(world, [], [], [], [], [], [], [], true, false, null, null) { }
 
     private protected override IReadOnlyCollection<Type> RequiredTypes { get; } = [typeof(T1), typeof(T2), typeof(T3), typeof(T4)];
     private protected override int CachedCount => _cachedPairs?.Count ?? 0;
@@ -733,13 +752,13 @@ public class CachedEntityQuery<T1, T2, T3, T4> : CachedEntityQueryBase
                             var entity = _entityWorld.GetEntityById(ids[i]);
                             if (entity == null || (_onlyActive && !entity.IsActive) || !MatchesFilters(entity)) continue;
                             var c1 = _entityWorld.GetComponentFromPool<T1>(ids[i]);
-                            if (c1 == null || (_onlyEnabled && !c1.IsEnabled)) continue;
+                            if (c1 == null || (_onlyEnabled && !c1.IsEnabled) || !ComponentMatchesFilter(typeof(T1), c1)) continue;
                             var c2 = _entityWorld.GetComponentFromPool<T2>(ids[i]);
-                            if (c2 == null || (_onlyEnabled && !c2.IsEnabled)) continue;
+                            if (c2 == null || (_onlyEnabled && !c2.IsEnabled) || !ComponentMatchesFilter(typeof(T2), c2)) continue;
                             var c3 = _entityWorld.GetComponentFromPool<T3>(ids[i]);
-                            if (c3 == null || (_onlyEnabled && !c3.IsEnabled)) continue;
+                            if (c3 == null || (_onlyEnabled && !c3.IsEnabled) || !ComponentMatchesFilter(typeof(T3), c3)) continue;
                             var c4 = _entityWorld.GetComponentFromPool<T4>(ids[i]);
-                            if (c4 != null && (!_onlyEnabled || c4.IsEnabled))
+                            if (c4 != null && (!_onlyEnabled || c4.IsEnabled) && ComponentMatchesFilter(typeof(T4), c4))
                                 _cachedPairs.Add((entity, c1, c2, c3, c4));
                         }
                     }
@@ -759,8 +778,177 @@ public class CachedEntityQuery<T1, T2, T3, T4> : CachedEntityQueryBase
                     var c4 = entity.GetComponent<T4>();
                     if (c1 != null && c2 != null && c3 != null && c4 != null &&
                         (!_onlyEnabled || (c1.IsEnabled && c2.IsEnabled && c3.IsEnabled && c4.IsEnabled)) &&
+                        ComponentMatchesFilter(typeof(T1), c1) && ComponentMatchesFilter(typeof(T2), c2) &&
+                        ComponentMatchesFilter(typeof(T3), c3) && ComponentMatchesFilter(typeof(T4), c4) &&
                         MatchesFilters(entity))
                         _cachedPairs.Add((entity, c1, c2, c3, c4));
+                }
+            }
+        }
+
+        _isDirty = false;
+    }
+}
+
+/// <summary>
+/// Cached query for entities with five components.
+/// Iterates the smallest pool and cross-resolves the remaining four.
+/// </summary>
+public class CachedEntityQuery<T1, T2, T3, T4, T5> : CachedEntityQueryBase
+    where T1 : Component
+    where T2 : Component
+    where T3 : Component
+    where T4 : Component
+    where T5 : Component
+{
+    private List<(Entity Entity, T1 C1, T2 C2, T3 C3, T4 C4, T5 C5)>? _cachedPairs;
+    private EntityProjection<(Entity Entity, T1 C1, T2 C2, T3 C3, T4 C4, T5 C5)>? _entityProjection;
+
+    internal CachedEntityQuery(
+        IEntityWorld world,
+        List<string> tags,
+        List<Func<Entity, bool>> predicates,
+        List<Type> withoutTypes,
+        List<Type> withBehaviorTypes,
+        List<Type> withoutBehaviorTypes,
+        List<string> withoutTags,
+        List<string> withAnyTags,
+        bool onlyActive,
+        bool onlyEnabled,
+        Dictionary<Type, Func<Component, bool>>? componentFilters,
+        ECSOptions? options = null)
+        : base(world, tags, predicates, withoutTypes, withBehaviorTypes, withoutBehaviorTypes, withoutTags, withAnyTags, onlyActive, onlyEnabled, componentFilters, options) { }
+
+    internal CachedEntityQuery(IEntityWorld world)
+        : this(world, [], [], [], [], [], [], [], true, false, null, null) { }
+
+    private protected override IReadOnlyCollection<Type> RequiredTypes { get; } = [typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5)];
+    private protected override int CachedCount => _cachedPairs?.Count ?? 0;
+
+    /// <summary>
+    /// Executes the query and returns matching entities.
+    /// The returned list is cached; no allocation occurs per call.
+    /// </summary>
+    public IReadOnlyList<Entity> Execute()
+    {
+        EnsureCache();
+        return _entityProjection ??= new(_cachedPairs!, static pair => pair.Entity);
+    }
+
+    /// <summary>
+    /// Executes an action for each cached entity and its components.
+    /// Automatically parallelizes when entity count exceeds ECSOptions.ParallelEntityThreshold.
+    /// </summary>
+    /// <remarks>
+    /// <b>Thread safety:</b> When parallelized, the <paramref name="action"/> delegate runs
+    /// on multiple threads simultaneously. The caller is responsible for ensuring thread-safe
+    /// access to any shared or mutable state, including component properties.
+    /// </remarks>
+    public void ForEach(Action<Entity, T1, T2, T3, T4, T5> action)
+    {
+        EnsureCache();
+
+        var pairs = _cachedPairs!;
+        var count = pairs.Count;
+        if (count == 0) return;
+
+        if (ShouldParallelize(count))
+        {
+            Parallel.For(0, count, _options.GetParallelOptions(), i =>
+            {
+                var (entity, c1, c2, c3, c4, c5) = pairs[i];
+                action(entity, c1, c2, c3, c4, c5);
+            });
+        }
+        else
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var (entity, c1, c2, c3, c4, c5) = pairs[i];
+                action(entity, c1, c2, c3, c4, c5);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns a struct enumerator over the cached (Entity, C1, C2, C3, C4, C5) tuples.
+    /// Use with foreach for zero-allocation iteration; no delegate or closure is created.
+    /// </summary>
+    public List<(Entity Entity, T1 C1, T2 C2, T3 C3, T4 C4, T5 C5)>.Enumerator GetEnumerator()
+    {
+        EnsureCache();
+        return (_cachedPairs ??= new()).GetEnumerator();
+    }
+
+    private protected override void EnsureCache()
+    {
+        ThrowIfDisposed();
+        if (!_isDirty) return;
+
+        (_cachedPairs ??= new()).Clear();
+
+        if (_entityWorld != null)
+        {
+            int totalT1 = _entityWorld.GetTotalPoolCount(typeof(T1));
+            int totalT2 = _entityWorld.GetTotalPoolCount(typeof(T2));
+            int totalT3 = _entityWorld.GetTotalPoolCount(typeof(T3));
+            int totalT4 = _entityWorld.GetTotalPoolCount(typeof(T4));
+            int totalT5 = _entityWorld.GetTotalPoolCount(typeof(T5));
+
+            if (totalT1 > 0 && totalT2 > 0 && totalT3 > 0 && totalT4 > 0 && totalT5 > 0)
+            {
+                int smallest = totalT1;
+                Type smallestType = typeof(T1);
+                if (totalT2 < smallest) { smallest = totalT2; smallestType = typeof(T2); }
+                if (totalT3 < smallest) { smallest = totalT3; smallestType = typeof(T3); }
+                if (totalT4 < smallest) { smallest = totalT4; smallestType = typeof(T4); }
+                if (totalT5 < smallest) { smallest = totalT5; smallestType = typeof(T5); }
+
+                _entityWorld.GetPoolsAssignableTo(smallestType, _poolBuffer);
+
+                foreach (var pool in _poolBuffer)
+                {
+                    var (ids, length) = pool.GetEntityIdSnapshot();
+                    try
+                    {
+                        for (int i = 0; i < length; i++)
+                        {
+                            var entity = _entityWorld.GetEntityById(ids[i]);
+                            if (entity == null || (_onlyActive && !entity.IsActive) || !MatchesFilters(entity)) continue;
+                            var c1 = _entityWorld.GetComponentFromPool<T1>(ids[i]);
+                            if (c1 == null || (_onlyEnabled && !c1.IsEnabled) || !ComponentMatchesFilter(typeof(T1), c1)) continue;
+                            var c2 = _entityWorld.GetComponentFromPool<T2>(ids[i]);
+                            if (c2 == null || (_onlyEnabled && !c2.IsEnabled) || !ComponentMatchesFilter(typeof(T2), c2)) continue;
+                            var c3 = _entityWorld.GetComponentFromPool<T3>(ids[i]);
+                            if (c3 == null || (_onlyEnabled && !c3.IsEnabled) || !ComponentMatchesFilter(typeof(T3), c3)) continue;
+                            var c4 = _entityWorld.GetComponentFromPool<T4>(ids[i]);
+                            if (c4 == null || (_onlyEnabled && !c4.IsEnabled) || !ComponentMatchesFilter(typeof(T4), c4)) continue;
+                            var c5 = _entityWorld.GetComponentFromPool<T5>(ids[i]);
+                            if (c5 != null && (!_onlyEnabled || c5.IsEnabled) && ComponentMatchesFilter(typeof(T5), c5))
+                                _cachedPairs.Add((entity, c1, c2, c3, c4, c5));
+                        }
+                    }
+                    finally { pool.ReturnEntityIdSnapshot(ids); }
+                }
+            }
+        }
+        else
+        {
+            foreach (var entity in _world.Entities)
+            {
+                if (!_onlyActive || entity.IsActive)
+                {
+                    var c1 = entity.GetComponent<T1>();
+                    var c2 = entity.GetComponent<T2>();
+                    var c3 = entity.GetComponent<T3>();
+                    var c4 = entity.GetComponent<T4>();
+                    var c5 = entity.GetComponent<T5>();
+                    if (c1 != null && c2 != null && c3 != null && c4 != null && c5 != null &&
+                        (!_onlyEnabled || (c1.IsEnabled && c2.IsEnabled && c3.IsEnabled && c4.IsEnabled && c5.IsEnabled)) &&
+                        ComponentMatchesFilter(typeof(T1), c1) && ComponentMatchesFilter(typeof(T2), c2) &&
+                        ComponentMatchesFilter(typeof(T3), c3) && ComponentMatchesFilter(typeof(T4), c4) && ComponentMatchesFilter(typeof(T5), c5) &&
+                        MatchesFilters(entity))
+                        _cachedPairs.Add((entity, c1, c2, c3, c4, c5));
                 }
             }
         }

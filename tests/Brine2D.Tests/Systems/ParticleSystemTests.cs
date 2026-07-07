@@ -1,4 +1,4 @@
-ï»¿using Brine2D.Core;
+using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.Pooling;
@@ -1235,16 +1235,16 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // tick 1 â€” spawn particles at (50, 50); no movement yet (spawn happens after UpdateParticles)
+        // tick 1 — spawn particles at (50, 50); no movement yet (spawn happens after UpdateParticles)
         _particleSystem.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.05)));
         emitter.IsEmitting = false;
         emitter.ParticleCount.Should().BeGreaterThan(0);
 
-        // tick 2 â€” particles survive (life = 0.15 - 0.05 = 0.10) and move: x += 100 * 0.05 = 5 â†’ x = 55
+        // tick 2 — particles survive (life = 0.15 - 0.05 = 0.10) and move: x += 100 * 0.05 = 5 ? x = 55
         _particleSystem.Update(_world, new GameTime(TimeSpan.FromSeconds(0.05), TimeSpan.FromSeconds(0.05)));
         emitter.ParticleCount.Should().BeGreaterThan(0, "particles must still be alive after second tick");
 
-        // tick 3 â€” particles expire; callback fires with x = 55 (position from previous tick)
+        // tick 3 — particles expire; callback fires with x = 55 (position from previous tick)
         _particleSystem.Update(_world, new GameTime(TimeSpan.FromSeconds(0.10), TimeSpan.FromSeconds(0.5)));
 
         float.IsNaN(capturedX).Should().BeFalse("OnParticleDied must have fired at least once");
@@ -1333,7 +1333,7 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)));
         emitter.ParticleCount.Should().BeGreaterThan(0);
 
-        var act = () => system.Render(_world, renderer);
+        var act = () => system.Render(_world, renderer, default);
         act.Should().NotThrow("ParticleFrames present must not cause errors even when ParticleAtlasRegion is also set");
 
         renderer.Received().DrawTexture(
@@ -1379,7 +1379,7 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
         emitter.ParticleCount.Should().Be(1);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderer.Received().DrawTexture(
             Arg.Any<ITexture>(),
@@ -1396,7 +1396,7 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016), TimeSpan.FromSeconds(0.6)));
         emitter.ParticleCount.Should().Be(1, "particle should still be alive");
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderer.Received().DrawTexture(
             Arg.Any<ITexture>(),
@@ -1435,7 +1435,7 @@ public class ParticleSystemTests : TestBase
 
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)));
 
-        var act = () => system.Render(_world, renderer);
+        var act = () => system.Render(_world, renderer, default);
         act.Should().NotThrow();
 
         renderer.Received().DrawTexture(
@@ -1764,7 +1764,7 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // Spawn on first tick â€” TrailFilled should be 0, so no trail segments render.
+        // Spawn on first tick — TrailFilled should be 0, so no trail segments render.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
         emitter.ParticleCount.Should().Be(1);
 
@@ -1907,7 +1907,7 @@ public class ParticleSystemTests : TestBase
         _world.Flush();
 
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderer.Received().DrawCircleFilled(
             Arg.Any<float>(),
@@ -1938,7 +1938,7 @@ public class ParticleSystemTests : TestBase
         _world.Flush();
 
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderer.Received().DrawCircleFilled(
             Arg.Any<float>(),
@@ -2198,12 +2198,12 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // Spawn + expire the trailed particle â€” it goes back to the pool with TrailLength=20.
+        // Spawn + expire the trailed particle — it goes back to the pool with TrailLength=20.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016), TimeSpan.FromSeconds(0.5)));
         emitter.ParticleCount.Should().Be(0);
 
-        // Re-arm with TrailLength = 5, trails disabled â†’ the recycled particle should not carry
+        // Re-arm with TrailLength = 5, trails disabled ? the recycled particle should not carry
         // the old 20-slot arrays.
         emitter.EnableTrails = false;
         emitter.TrailLength = 5;
@@ -2284,9 +2284,9 @@ public class ParticleSystemTests : TestBase
         foreach (var particle in emitter.ActiveParticles)
         {
             particle.Velocity.X.Should().BeApproximately(0f, 1f,
-                "rotated 90Â° entity must redirect horizontal velocity to vertical");
+                "rotated 90° entity must redirect horizontal velocity to vertical");
             particle.Velocity.Y.Should().BeGreaterThan(0f,
-                "particles should travel downward (+Y) after 90Â° entity rotation");
+                "particles should travel downward (+Y) after 90° entity rotation");
         }
     }
 
@@ -2388,7 +2388,7 @@ public class ParticleSystemTests : TestBase
                 Arg.Is<float>(s => MathF.Abs(s - 1f) < 0.01f), Arg.Any<Color>()))
             .Do(_ => renderOrder.Add(10));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderOrder.Should().HaveCount(2);
         renderOrder[0].Should().Be(1, "layer 1 (emitterB) must render before layer 10 (emitterA)");
@@ -2649,7 +2649,7 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // First tick â€” establishes PreviousPosition, no burst yet.
+        // First tick — establishes PreviousPosition, no burst yet.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1)));
 
         // Move the emitter 300 px/s to the right, then fire a burst.
@@ -2710,7 +2710,7 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // Tick 1 â€” establishes PreviousPosition at (100, 100).
+        // Tick 1 — establishes PreviousPosition at (100, 100).
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
         emitter.ParticleCount.Should().Be(10);
 
@@ -2810,8 +2810,8 @@ public class ParticleSystemTests : TestBase
         rendererB.When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => capturedSizeScale3 = ci.ArgAt<float>(2));
 
-        systemA.Render(worldA, rendererA);
-        systemB.Render(worldB, rendererB);
+        systemA.Render(worldA, rendererA, default);
+        systemB.Render(worldB, rendererB, default);
 
         capturedSizeScale3.Should().BeApproximately(capturedSizeScale1 * 3f, 0.5f,
             "a 3x scaled entity should render particles at 3x the size");
@@ -2861,7 +2861,7 @@ public class ParticleSystemTests : TestBase
         particle.TrailFilled.Should().BeGreaterThan(0, "trail must have filled at least one slot");
 
         renderer.ClearReceivedCalls();
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // Head and trail segments should both use frame1 (X=16), not frame0 (X=0).
         renderer.DidNotReceive().DrawTexture(
@@ -2895,7 +2895,7 @@ public class ParticleSystemTests : TestBase
         var system = new ParticleSystem(new DefaultObjectPoolProvider(), seed: 0);
         var renderer = Substitute.For<IRenderer>();
 
-        // Three emitters all on layer 0 â€” stable sort must preserve insertion order.
+        // Three emitters all on layer 0 — stable sort must preserve insertion order.
         for (int i = 0; i < 3; i++)
         {
             var entity = _world.CreateEntity();
@@ -2919,11 +2919,11 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => allDrawXPositions.Add(ci.ArgAt<float>(0)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
         var drawOrder1 = allDrawXPositions.ToList();
 
         allDrawXPositions.Clear();
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
         var drawOrder2 = allDrawXPositions.ToList();
 
         drawOrder1.Should().HaveCount(3, "each emitter has one live particle");
@@ -3026,14 +3026,14 @@ public class ParticleSystemTests : TestBase
 
         emitter.ActiveParticles.Should().NotBeEmpty();
 
-        // A box rotated 90Â° with width=100 and heightâ‰ˆ0 should spawn along the Y axis,
+        // A box rotated 90° with width=100 and height˜0 should spawn along the Y axis,
         // so X positions must be near zero and Y positions must vary.
         foreach (var p in emitter.ActiveParticles)
             p.Position.X.Should().BeApproximately(0f, 1f,
-                "box rotated 90Â° should produce near-zero X offsets");
+                "box rotated 90° should produce near-zero X offsets");
 
         var yRange = emitter.ActiveParticles.Max(p => p.Position.Y) - emitter.ActiveParticles.Min(p => p.Position.Y);
-        yRange.Should().BeGreaterThan(10f, "box rotated 90Â° should spread particles along Y");
+        yRange.Should().BeGreaterThan(10f, "box rotated 90° should spread particles along Y");
     }
 
     [Fact]
@@ -3063,13 +3063,13 @@ public class ParticleSystemTests : TestBase
         emitter.ActiveParticles.Should().NotBeEmpty();
         foreach (var p in emitter.ActiveParticles)
             p.Position.Y.Should().BeApproximately(0f, 1f,
-                "axis-aligned box with heightâ‰ˆ0 should produce near-zero Y offsets");
+                "axis-aligned box with height˜0 should produce near-zero Y offsets");
     }
 
     [Fact]
     public void LocalSpaceEmitterShouldNotPreRotateVelocity()
     {
-        // World-space emitter with entity rotated 90Â° should rotate velocity.
+        // World-space emitter with entity rotated 90° should rotate velocity.
         // Local-space emitter should NOT pre-rotate velocity (rotation is deferred to render time).
         var system = new ParticleSystem(new DefaultObjectPoolProvider(), seed: 0);
 
@@ -3111,12 +3111,12 @@ public class ParticleSystemTests : TestBase
         var worldParticle = worldEmitter.ActiveParticles[0];
         var localParticle = localEmitter.ActiveParticles[0];
 
-        // World-space emitter: velocity rotated 90Â° â†’ mostly Y, near-zero X.
+        // World-space emitter: velocity rotated 90° ? mostly Y, near-zero X.
         worldParticle.Velocity.X.Should().BeApproximately(0f, 1f,
             "world-space particle velocity should be rotated by entity rotation");
         worldParticle.Velocity.Y.Should().BeApproximately(100f, 1f);
 
-        // Local-space emitter: velocity NOT rotated at spawn â†’ mostly X.
+        // Local-space emitter: velocity NOT rotated at spawn ? mostly X.
         localParticle.Velocity.X.Should().BeApproximately(100f, 1f,
             "local-space particle velocity must not be pre-rotated at spawn");
         localParticle.Velocity.Y.Should().BeApproximately(0f, 1f);
@@ -3452,7 +3452,7 @@ public class ParticleSystemTests : TestBase
         // Complete first cycle (Duration=0.2 + particles expire in 0.1): ~0.4 s total.
         _particleSystem.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.5)));
 
-        // Now in second cycle â€” should be inside the delay window, so no particles yet.
+        // Now in second cycle — should be inside the delay window, so no particles yet.
         emitter.IsEmitting.Should().BeTrue("emission re-armed");
         emitter.ParticleCount.Should().Be(0, "delay must re-apply at the start of each loop cycle");
     }
@@ -3911,7 +3911,7 @@ public class ParticleSystemTests : TestBase
 
         _particleSystem.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
 
-        // 10 particles/s Ã— 3 s = 30 particles
+        // 10 particles/s × 3 s = 30 particles
         emitter.ParticleCount.Should().BeCloseTo(30, 3,
             "zero delay must not affect warmup emission");
     }
@@ -4008,12 +4008,12 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016)));
         emitter.ParticleCount.Should().Be(1);
 
-        // Frame 2: first UpdateParticles call on the live particle â€” writes trail slot 0
-        // while the particle is still near t=0 (alpha â‰ˆ 253).
+        // Frame 2: first UpdateParticles call on the live particle — writes trail slot 0
+        // while the particle is still near t=0 (alpha ˜ 253).
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016), TimeSpan.FromSeconds(0.016)));
         emitter.ActiveParticles[0].TrailFilled.Should().Be(1, "slot 0 must be written on first update");
 
-        // Frame 3: jump near end of life (t â‰ˆ 0.9) â€” writes slot 1 at low alpha.
+        // Frame 3: jump near end of life (t ˜ 0.9) — writes slot 1 at low alpha.
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.032), TimeSpan.FromSeconds(1.77f)));
         emitter.ParticleCount.Should().Be(1, "particle must still be alive");
         emitter.ActiveParticles[0].TrailFilled.Should().BeGreaterThanOrEqualTo(2);
@@ -4023,11 +4023,11 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => capturedAlphas.Add(ci.ArgAt<Color>(3).A));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
-        // Slot 0 was recorded at tâ‰ˆ0.016, alphaâ‰ˆ252. Even after the alpha-fade multiplier
+        // Slot 0 was recorded at t˜0.016, alpha˜252. Even after the alpha-fade multiplier
         // (both head/tail = 1.0) it must remain well above 150.
-        // Without the historical-color fix all slots would use the current tâ‰ˆ0.9 color (alphaâ‰ˆ25).
+        // Without the historical-color fix all slots would use the current t˜0.9 color (alpha˜25).
         capturedAlphas.Should().Contain(a => a > 150,
             "trail slot 0 was written when the particle was nearly opaque; it must not be overwritten by the current faded color");
     }
@@ -4059,8 +4059,8 @@ public class ParticleSystemTests : TestBase
 
         var hasPositiveY = emitter.ActiveParticles.Any(p => p.Velocity.Y > 10f);
         var hasNegativeY = emitter.ActiveParticles.Any(p => p.Velocity.Y < -10f);
-        hasPositiveY.Should().BeTrue("360Â° spread in degrees must produce particles going in +Y direction");
-        hasNegativeY.Should().BeTrue("360Â° spread in degrees must produce particles going in -Y direction");
+        hasPositiveY.Should().BeTrue("360° spread in degrees must produce particles going in +Y direction");
+        hasNegativeY.Should().BeTrue("360° spread in degrees must produce particles going in -Y direction");
     }
 
     [Fact]
@@ -4091,10 +4091,10 @@ public class ParticleSystemTests : TestBase
     [Fact]
     public void ConeAngleIsInDegrees()
     {
-        // A 360Â° cone (degrees) distributes particles in all directions.
-        // If ConeAngle were misread as radians, 360 rad â‰ˆ 57 full rotations which is
-        // also omnidirectional â€” so instead we assert the spread is bounded correctly:
-        // a 90Â° cone centred on +X must keep all particles in the right hemisphere.
+        // A 360° cone (degrees) distributes particles in all directions.
+        // If ConeAngle were misread as radians, 360 rad ˜ 57 full rotations which is
+        // also omnidirectional — so instead we assert the spread is bounded correctly:
+        // a 90° cone centred on +X must keep all particles in the right hemisphere.
         var system = new ParticleSystem(new DefaultObjectPoolProvider(), seed: 2);
         var entity = _world.CreateEntity();
         entity.AddComponent<TransformComponent>();
@@ -4115,17 +4115,17 @@ public class ParticleSystemTests : TestBase
 
         emitter.ActiveParticles.Should().NotBeEmpty();
 
-        // A 90Â° cone in degrees spans Â±45Â°, so every particle must have positive X.
-        // If the value were interpreted as radians (90 rad â‰ˆ 14 rotations) particles
+        // A 90° cone in degrees spans ±45°, so every particle must have positive X.
+        // If the value were interpreted as radians (90 rad ˜ 14 rotations) particles
         // would scatter in all directions, causing this assertion to fail.
         foreach (var p in emitter.ActiveParticles)
             p.Velocity.X.Should().BeGreaterThan(0f,
-                "a 90Â° cone centred on +X must keep all particles in the right hemisphere");
+                "a 90° cone centred on +X must keep all particles in the right hemisphere");
 
         // Also confirm spread actually happens (not a degenerate zero-spread emitter).
         var angles = emitter.ActiveParticles.Select(p => MathF.Atan2(p.Velocity.Y, p.Velocity.X)).ToList();
         var spread = angles.Max() - angles.Min();
-        spread.Should().BeGreaterThan(0.1f, "a 90Â° cone must produce a non-trivial angular spread");
+        spread.Should().BeGreaterThan(0.1f, "a 90° cone must produce a non-trivial angular spread");
     }
 
     #endregion
@@ -4347,7 +4347,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => capturedPositions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         capturedPositions.Should().NotBeEmpty("sub-emitter particles must be rendered");
         foreach (var pos in capturedPositions)
@@ -4400,13 +4400,13 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
         drawCalls.Should().BeGreaterThan(0, "sub-particles should still be alive");
 
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.516), TimeSpan.FromSeconds(5.0)));
 
         drawCalls = 0;
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
         drawCalls.Should().Be(0, "sub-particles must expire after their lifetime");
     }
 
@@ -4478,7 +4478,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawCalls.Should().BeLessThanOrEqualTo(30,
             "each of 10 parent particles triggers MaxParticles=3 sub-particles; total must be capped");
@@ -4529,7 +4529,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawCalls.Should().BeLessThanOrEqualTo(subCfg.MaxParticles,
             "global MaxParticles cap must hold even when many parent particles die in the same frame");
@@ -4584,7 +4584,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => drawOrder.Add(ci.ArgAt<float>(2)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawOrder.Should().HaveCount(1, "only the sub-emitter particle remains (parent expired)");
     }
@@ -4595,7 +4595,7 @@ public class ParticleSystemTests : TestBase
         var system = new ParticleSystem(new DefaultObjectPoolProvider(), seed: 0);
         var renderer = Substitute.For<IRenderer>();
 
-        // Front emitter â€” layer 10, large particle
+        // Front emitter — layer 10, large particle
         var frontEntity = _world.CreateEntity();
         frontEntity.AddComponent<TransformComponent>();
         frontEntity.AddComponent<ParticleEmitterComponent>();
@@ -4612,7 +4612,7 @@ public class ParticleSystemTests : TestBase
         frontEmitter.StartSize = 10f;
         frontEmitter.EndSize = 10f;
 
-        // Back emitter â€” fires, dies quickly, triggers a sub-emitter at layer 5 (behind front)
+        // Back emitter — fires, dies quickly, triggers a sub-emitter at layer 5 (behind front)
         var backEntity = _world.CreateEntity();
         backEntity.AddComponent<TransformComponent>();
         backEntity.AddComponent<ParticleEmitterComponent>();
@@ -4654,7 +4654,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => drawSizes.Add(ci.ArgAt<float>(2)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawSizes.Should().HaveCount(2, "sub-emitter particle (layer 5) and front emitter particle (layer 10) should both render");
         drawSizes[0].Should().BeApproximately(7f, 0.5f, "sub-emitter at layer 5 must render before front emitter at layer 10");
@@ -4710,7 +4710,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawCalls.Should().BeGreaterThan(0, "birth sub-emitter particles must be alive immediately after parent spawns");
     }
@@ -4761,7 +4761,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => capturedPositions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         capturedPositions.Should().NotBeEmpty();
         capturedPositions.Should().Contain(p =>
@@ -4809,9 +4809,9 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
-        // Subtract parent particles from the count â€” sub-particles must not exceed MaxParticles.
+        // Subtract parent particles from the count — sub-particles must not exceed MaxParticles.
         var subDrawCalls = drawCalls - emitter.ParticleCount;
         subDrawCalls.Should().BeLessThanOrEqualTo(subCfg.MaxParticles,
             "birth sub-emitter must respect its MaxParticles global cap");
@@ -4858,7 +4858,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCallsAfterSpawn++);
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
         drawCallsAfterSpawn.Should().BeGreaterThan(0, "birth sub-particles must be visible right after spawn");
 
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016), TimeSpan.FromSeconds(5f)));
@@ -4867,7 +4867,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCallsAfterExpiry++);
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
         drawCallsAfterExpiry.Should().Be(0, "birth sub-particles must expire after their lifetime");
     }
 
@@ -4963,7 +4963,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => positions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         positions.Should().NotBeEmpty();
         positions.Should().Contain(p => p != Vector2.Zero,
@@ -5019,7 +5019,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => positions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         positions.Should().NotBeEmpty();
         positions.Should().OnlyContain(p => MathF.Abs(p.Length() - radius) < 0.5f,
@@ -5072,7 +5072,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => positions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         positions.Should().NotBeEmpty();
         positions.Should().OnlyContain(p => MathF.Abs(p.X) <= 20f + 0.01f && MathF.Abs(p.Y) <= 10f + 0.01f,
@@ -5147,8 +5147,8 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => stillY = ci.ArgAt<float>(1));
 
-        systemTurb.Render(worldTurb, rendererTurb);
-        systemStill.Render(worldStill, rendererStill);
+        systemTurb.Render(worldTurb, rendererTurb, default);
+        systemStill.Render(worldStill, rendererStill, default);
 
         rendererTurb.Received().DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>());
 
@@ -5199,7 +5199,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => xPositionsFirst.Add(ci.ArgAt<float>(0)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.516), TimeSpan.FromSeconds(0.1f)));
 
@@ -5207,7 +5207,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => xPositionsSecond.Add(ci.ArgAt<float>(0)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         xPositionsSecond.Should().NotBeEmpty();
         for (int i = 0; i < Math.Min(xPositionsFirst.Count, xPositionsSecond.Count); i++)
@@ -5256,7 +5256,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCallCount++);
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // 5 burst particles + 5*3 = 15 sub-particles must all render on the very first frame.
         drawCallCount.Should().Be(20,
@@ -5315,7 +5315,7 @@ public class ParticleSystemTests : TestBase
                 Arg.Any<Vector2>(), Arg.Any<float>(), Arg.Any<Vector2>(),
                 Arg.Any<Color>(), Arg.Any<SpriteFlip>()))
             .Do(ci => renderedTexture = ci.ArgAt<ITexture>(0));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderedTexture.Should().NotBeNull("sub-emitter with ParticleFrames must render a texture");
     }
@@ -5355,7 +5355,7 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // First frame â€” spawns parent + sub-particle (birth).
+        // First frame — spawns parent + sub-particle (birth).
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016f)));
         // Several more ticks so the trail history fills up.
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(0.016f)));
@@ -5368,7 +5368,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCallCount++);
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // The sub-particle itself + at least some trail segments must be rendered.
         drawCallCount.Should().BeGreaterThan(1,
@@ -5379,7 +5379,7 @@ public class ParticleSystemTests : TestBase
     public void TexturedParticleShouldScaleEachAxisIndependently()
     {
         // size is a radius applied independently per axis: scaleX = size*2/width, scaleY = size*2/height.
-        // A 16Ã—32 sprite at size=8 renders 16Ã—16 world pixels wide and 16Ã—32*0.5=16 tall â€” correct.
+        // A 16×32 sprite at size=8 renders 16×16 world pixels wide and 16×32*0.5=16 tall — correct.
         var system = new ParticleSystem(new DefaultObjectPoolProvider(), seed: 7);
 
         var entity = _world.CreateEntity();
@@ -5412,9 +5412,9 @@ public class ParticleSystemTests : TestBase
                 Arg.Any<Vector2>(), Arg.Any<float>(), Arg.Any<Vector2>(),
                 Arg.Any<Color>(), Arg.Any<SpriteFlip>()))
             .Do(ci => capturedScale = ci.ArgAt<Vector2>(5));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
-        // size=8 â†’ size*2=16; scaleX = 16/16 = 1.0, scaleY = 16/32 = 0.5
+        // size=8 ? size*2=16; scaleX = 16/16 = 1.0, scaleY = 16/32 = 0.5
         capturedScale.X.Should().BeApproximately(1.0f, 0.001f);
         capturedScale.Y.Should().BeApproximately(0.5f, 0.001f);
     }
@@ -5478,7 +5478,7 @@ public class ParticleSystemTests : TestBase
         // Move entity to (500, 0) before the frame where particles expire
         transform.Position = new Vector2(500, 0);
 
-        // Frame 2: particles expire â†’ death sub-emitters should spawn near (500, 0)
+        // Frame 2: particles expire ? death sub-emitters should spawn near (500, 0)
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(0.1f)));
 
         var renderer = Substitute.For<IRenderer>();
@@ -5488,7 +5488,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => spawnedPositions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         spawnedPositions.Should().NotBeEmpty();
         spawnedPositions.All(p => p.X > 400f).Should()
@@ -5534,7 +5534,7 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // First update triggers warmup â€” sub-emits must be drained per step, not all at once.
+        // First update triggers warmup — sub-emits must be drained per step, not all at once.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016f)));
 
         var renderer = Substitute.For<IRenderer>();
@@ -5543,12 +5543,12 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCallsAfterWarmup++);
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // Do a second update without warmup to get a "steady-state" frame count
         drawCallsAfterWarmup = 0;
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(0.016f)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
         var steadyStateDrawCalls = drawCallsAfterWarmup;
 
         // Reset and measure draw calls on the very first post-warmup render again
@@ -5607,10 +5607,10 @@ public class ParticleSystemTests : TestBase
         // Let the parent particle expire to trigger the death sub-emitter
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(2.1f)));
 
-        // Sub-particles are now live. Sample speed at tâ‰ˆ0.25 and tâ‰ˆ0.75 of their lifetime.
+        // Sub-particles are now live. Sample speed at t˜0.25 and t˜0.75 of their lifetime.
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(2.116f), TimeSpan.FromSeconds(0.5f)));
         float? earlySpeed = null;
-        // Expose via renderer capture â€” check that position advances less in later steps
+        // Expose via renderer capture — check that position advances less in later steps
         // by measuring how far particles travel per unit time at different life stages.
         // Simpler: just verify that the sub-particle's speed has decreased by the final step.
 
@@ -5623,12 +5623,12 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => latePositions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // With EndSpeedMultiplier=0 the particle decelerates toward zero.
-        // The displacement per unit time at tâ‰ˆ0.9 must be much less than at tâ‰ˆ0.1.
-        // Verify indirectly: at tâ‰ˆ0.9 lifetime the particle must not have travelled 90% of
-        // the naive constant-velocity distance (100 units/s Ã— 1.8s = 180 units).
+        // The displacement per unit time at t˜0.9 must be much less than at t˜0.1.
+        // Verify indirectly: at t˜0.9 lifetime the particle must not have travelled 90% of
+        // the naive constant-velocity distance (100 units/s × 1.8s = 180 units).
         latePositions.Should().NotBeEmpty("sub-emitter death should have triggered sub-particles");
         latePositions.All(p => p.X < 150f).Should()
             .BeTrue("sub-particle with EndSpeedMultiplier=0 must decelerate and not reach full constant-velocity distance");
@@ -5683,7 +5683,7 @@ public class ParticleSystemTests : TestBase
         renderer
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(ci => positions.Add(new Vector2(ci.ArgAt<float>(0), ci.ArgAt<float>(1))));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         positions.Should().NotBeEmpty();
         positions.All(p => p.X > 40f && p.X < 60f).Should()
@@ -5720,7 +5720,7 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016f)));
 
         var camera = Substitute.For<ICamera>();
-        // Camera sees only the area around (0,0) â€” particles are at (10000,10000)
+        // Camera sees only the area around (0,0) — particles are at (10000,10000)
         camera.GetVisibleBounds().Returns(new Rectangle { X = -500, Y = -500, Width = 1000, Height = 1000 });
 
         var renderer = Substitute.For<IRenderer>();
@@ -5731,7 +5731,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawCalls.Should().Be(0, "all particles are outside the camera's visible bounds and must be culled");
     }
@@ -5772,7 +5772,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawCalls.Should().Be(5, "all particles are inside the camera bounds and must be rendered");
     }
@@ -5810,7 +5810,7 @@ public class ParticleSystemTests : TestBase
             .When(r => r.DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>()))
             .Do(_ => drawCalls++);
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         drawCalls.Should().Be(3, "with no camera all particles must render regardless of position");
     }
@@ -5858,7 +5858,7 @@ public class ParticleSystemTests : TestBase
         var system = new ParticleSystem(new DefaultObjectPoolProvider(), seed: 1002);
         var entity = _world.CreateEntity();
         entity.AddComponent<TransformComponent>();
-        // Spawn particles at origin, repeller sits to the right â€” particles should move left.
+        // Spawn particles at origin, repeller sits to the right — particles should move left.
         entity.GetComponent<TransformComponent>().Position = Vector2.Zero;
 
         entity.AddComponent<ParticleEmitterComponent>();
@@ -5991,7 +5991,7 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // Spawn burst particle (tâ‰ˆ0, trigger should not fire yet).
+        // Spawn burst particle (t˜0, trigger should not fire yet).
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016f)));
         emitter.ParticleCount.Should().Be(1);
 
@@ -6003,7 +6003,7 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.9f), TimeSpan.FromSeconds(0.2f)));
         GetSubParticleCount(system, subCfg).Should().Be(5, "trigger must fire exactly once and spawn BurstCount sub-particles");
 
-        // Advance further â€” must not re-fire.
+        // Advance further — must not re-fire.
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(1.1f), TimeSpan.FromSeconds(0.2f)));
         GetSubParticleCount(system, subCfg).Should().Be(5, "trigger must not re-fire after the threshold is already crossed");
     }
@@ -6095,7 +6095,7 @@ public class ParticleSystemTests : TestBase
         // One large step crosses both 0.25 and 0.75 simultaneously.
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(1.8f)));
 
-        // Each trigger fires once â†’ 4 + 4 = 8 sub-particles.
+        // Each trigger fires once ? 4 + 4 = 8 sub-particles.
         GetSubParticleCount(system, subCfg).Should().Be(8,
             "each fraction trigger must fire exactly once even when a single delta-time step crosses both thresholds");
     }
@@ -6148,7 +6148,7 @@ public class ParticleSystemTests : TestBase
 
         _world.Flush();
 
-        // Run three frames â€” warning must appear exactly once across all of them.
+        // Run three frames — warning must appear exactly once across all of them.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1f)));
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.1f), TimeSpan.FromSeconds(0.1f)));
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.2f), TimeSpan.FromSeconds(0.1f)));
@@ -6177,7 +6177,7 @@ public class ParticleSystemTests : TestBase
         emitter.ParticleLifetime = 5f;
         emitter.LifetimeVariation = 0f;
         emitter.ColorGradient = [Color.Red, Color.Blue];
-        // No variation set â€” default is (0,0,0,0).
+        // No variation set — default is (0,0,0,0).
 
         _world.Flush();
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1f)));
@@ -6214,7 +6214,7 @@ public class ParticleSystemTests : TestBase
         // First update: fires warning and adds emitter to warned set.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1f)));
 
-        // Stop clears the entry â€” a re-enabled emitter should warn again on next update.
+        // Stop clears the entry — a re-enabled emitter should warn again on next update.
         emitter.Stop();
         emitter.IsEnabled = true;
         emitter.IsEmitting = true;
@@ -6256,7 +6256,7 @@ public class ParticleSystemTests : TestBase
 
         emitter.IsEnabled.Should().BeFalse();
 
-        // Re-arm and fire again â€” entry must have been cleaned up so warning fires a second time.
+        // Re-arm and fire again — entry must have been cleaned up so warning fires a second time.
         emitter.ResetBurst();
         emitter.ColorGradient = [Color.Red, Color.Blue];
         emitter.StartColorVariation = new Color(10, 0, 0, 0);
@@ -6357,9 +6357,9 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.01f)));
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.01f), TimeSpan.FromSeconds(0.1f)));
 
-        // Advance sub-emitter particles â€” force should have moved them in +X.
+        // Advance sub-emitter particles — force should have moved them in +X.
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.11f), TimeSpan.FromSeconds(0.1f)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // Verify DrawCircleFilled was called with a positive X position (force applied).
         renderer.Received().DrawCircleFilled(
@@ -6430,7 +6430,7 @@ public class ParticleSystemTests : TestBase
         emitter.DeathSubEmitters = [cfg];
         _world.Flush();
 
-        // Parent dies â†’ sub-emitter spawns 3 particles.
+        // Parent dies ? sub-emitter spawns 3 particles.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.01f)));
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.01f), TimeSpan.FromSeconds(0.1f)));
         // Sub-particles die.
@@ -6506,12 +6506,12 @@ public class ParticleSystemTests : TestBase
         for (int f = 0; f < 8; f++)
             system.Update(_world, new GameTime(TimeSpan.FromSeconds(f * 0.1f), TimeSpan.FromSeconds(0.1f)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // The trail must use DrawLine, not DrawCircleFilled.
         renderer.Received().DrawLine(Arg.Any<Vector2>(), Arg.Any<Vector2>(), Arg.Any<Color>(), Arg.Any<float>());
 
-        // The particle head is still rendered as a circle â€” that is correct and expected.
+        // The particle head is still rendered as a circle — that is correct and expected.
         // We verify DrawLine count exceeds DrawCircleFilled to confirm the trail went through the line path.
         var lineCallCount = renderer.ReceivedCalls()
             .Count(c => c.GetMethodInfo().Name == nameof(IRenderer.DrawLine));
@@ -6550,7 +6550,7 @@ public class ParticleSystemTests : TestBase
         for (int f = 0; f < 8; f++)
             system.Update(_world, new GameTime(TimeSpan.FromSeconds(f * 0.1f), TimeSpan.FromSeconds(0.1f)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderer.DidNotReceive().DrawLine(Arg.Any<Vector2>(), Arg.Any<Vector2>(), Arg.Any<Color>(), Arg.Any<float>());
         renderer.Received().DrawCircleFilled(Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>());
@@ -6587,7 +6587,7 @@ public class ParticleSystemTests : TestBase
         for (int f = 0; f < 8; f++)
             system.Update(_world, new GameTime(TimeSpan.FromSeconds(f * 0.1f), TimeSpan.FromSeconds(0.1f)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // Lines mode is silently ignored when a texture is set; DrawTexture is used instead.
         renderer.DidNotReceive().DrawLine(Arg.Any<Vector2>(), Arg.Any<Vector2>(), Arg.Any<Color>(), Arg.Any<float>());
@@ -6632,7 +6632,7 @@ public class ParticleSystemTests : TestBase
         for (int f = 0; f < 10; f++)
             system.Update(_world, new GameTime(TimeSpan.FromSeconds(f * 0.1f), TimeSpan.FromSeconds(0.1f)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         var trailAlphas = renderer.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == nameof(IRenderer.DrawCircleFilled))
@@ -6674,9 +6674,9 @@ public class ParticleSystemTests : TestBase
         emitter.TrailTailAlpha = 0.0f;
         _world.Flush();
 
-        // One frame â†’ TrailFilled == 1; the single slot must be treated as the head (segT = 1).
+        // One frame ? TrailFilled == 1; the single slot must be treated as the head (segT = 1).
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1f)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         var trailAlphas = renderer.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == nameof(IRenderer.DrawCircleFilled))
@@ -6719,7 +6719,7 @@ public class ParticleSystemTests : TestBase
         for (int f = 0; f < 10; f++)
             system.Update(_world, new GameTime(TimeSpan.FromSeconds(f * 0.1f), TimeSpan.FromSeconds(0.1f)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         var lineColors = renderer.ReceivedCalls()
             .Where(c => c.GetMethodInfo().Name == nameof(IRenderer.DrawLine))
@@ -6742,7 +6742,7 @@ public class ParticleSystemTests : TestBase
         var renderer = Substitute.For<IRenderer>();
 
         var camera = Substitute.For<ICamera>();
-        // 200Ã—200 viewport centred at origin: x âˆˆ [-100, 100], y âˆˆ [-100, 100].
+        // 200×200 viewport centred at origin: x ? [-100, 100], y ? [-100, 100].
         camera.GetVisibleBounds().Returns(new Rectangle { X = -100, Y = -100, Width = 200, Height = 200 });
         renderer.Camera.Returns(camera);
 
@@ -6755,7 +6755,7 @@ public class ParticleSystemTests : TestBase
         emitter.BurstCount = 1;
         emitter.ParticleLifetime = 10f;
         emitter.LifetimeVariation = 0f;
-        // Moving right at 30 u/s â€” after 5 s the head is at x=150, just outside the 100-wide half.
+        // Moving right at 30 u/s — after 5 s the head is at x=150, just outside the 100-wide half.
         emitter.InitialVelocity = new Vector2(30f, 0f);
         emitter.VelocitySpread = 0f;
         emitter.SpeedVariation = 0f;
@@ -6766,11 +6766,11 @@ public class ParticleSystemTests : TestBase
         emitter.EndSize = 4f;
         _world.Flush();
 
-        // 50 frames Ã— 0.1 s = 5 s. Head at xâ‰ˆ150 (off screen), tail slots back at xâ‰ˆ90 (on screen).
+        // 50 frames × 0.1 s = 5 s. Head at x˜150 (off screen), tail slots back at x˜90 (on screen).
         for (int f = 0; f < 50; f++)
             system.Update(_world, new GameTime(TimeSpan.FromSeconds(f * 0.1), TimeSpan.FromSeconds(0.1)));
 
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         // Trail sprites (DrawCircleFilled) must still be emitted even though the particle head is off-screen.
         renderer.Received().DrawCircleFilled(
@@ -6904,7 +6904,7 @@ public class ParticleSystemTests : TestBase
 
         // Particles should be visible on the next update + render.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.1f)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderer.Received().DrawCircleFilled(
             Arg.Is<float>(x => x > 40f && x < 60f),
@@ -6937,10 +6937,10 @@ public class ParticleSystemTests : TestBase
 
         system.Burst(Vector2.Zero, cfg);
 
-        // Advance past lifetime â€” particles should be gone.
+        // Advance past lifetime — particles should be gone.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.05f)));
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.05f), TimeSpan.FromSeconds(0.2f)));
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         renderer.DidNotReceive().DrawCircleFilled(
             Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>());
@@ -7417,7 +7417,7 @@ public class ParticleSystemTests : TestBase
         var act = () =>
         {
             _particleSystem.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016f)));
-            _particleSystem.Render(_world, renderer);
+            _particleSystem.Render(_world, renderer, default);
         };
         act.Should().NotThrow("extremely fast/long-lived trail emitters must not cause rendering errors");
     }
@@ -7466,7 +7466,7 @@ public class ParticleSystemTests : TestBase
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.116f), TimeSpan.FromSeconds(0.016f)));
 
         var renderer = Substitute.For<IRenderer>();
-        system.Render(_world, renderer);
+        system.Render(_world, renderer, default);
 
         foreach (var p in emitter.ActiveParticles)
             p.Velocity.X.Should().BeApproximately(0f, 1f,
@@ -7585,7 +7585,7 @@ public class ParticleSystemTests : TestBase
         emitter.Gravity = Vector2.Zero;
         emitter.WarmupDuration = 1f;
 
-        // Sub-lifetime is 0.5s â€” all sub-particles spawned before the last 0.5s of
+        // Sub-lifetime is 0.5s — all sub-particles spawned before the last 0.5s of
         // warmup must have expired by the time warmup completes.
         var subCfg = new SubEmitterConfig
         {
@@ -7720,7 +7720,7 @@ public class ParticleSystemTests : TestBase
 
         system.Dispose();
 
-        // A second Dispose must not throw â€” all state was already cleared.
+        // A second Dispose must not throw — all state was already cleared.
         var act = system.Dispose;
         act.Should().NotThrow();
     }
@@ -7785,7 +7785,7 @@ public class ParticleSystemTests : TestBase
 
         emitter.Pause();
 
-        // Advance well past sub-particle lifetime â€” they must not age while paused.
+        // Advance well past sub-particle lifetime — they must not age while paused.
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.116f), TimeSpan.FromSeconds(20f)));
 
         GetActiveSubParticleCount(system).Should().Be(countBeforePause,
@@ -7896,7 +7896,7 @@ public class ParticleSystemTests : TestBase
     {
         var system = new ParticleSystem(new DefaultObjectPoolProvider(), seed: 13);
 
-        // Spawn a free-standing burst via the public API â€” no owner emitter.
+        // Spawn a free-standing burst via the public API — no owner emitter.
         var freeCfg = new SubEmitterConfig
         {
             BurstCount = 5,
@@ -8027,7 +8027,7 @@ public class ParticleSystemTests : TestBase
         // First update records PreviousPosition = (0, 0) without firing the burst.
         system.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016f)));
 
-        // Move then arm â€” burst must spawn at the current position, not smeared across the arc.
+        // Move then arm — burst must spawn at the current position, not smeared across the arc.
         transform.Position = new Vector2(500f, 0f);
         emitter.IsEmitting = true;
 
@@ -8072,7 +8072,7 @@ public class ParticleSystemTests : TestBase
 
         var prevX = emitter.ActiveParticles.Min(p => p.Position.X);
 
-        // Move entity and update â€” continuous emitters should fill the gap.
+        // Move entity and update — continuous emitters should fill the gap.
         transform.Position = new Vector2(200f, 0f);
         system.Update(_world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(0.016f)));
 
@@ -8287,7 +8287,7 @@ public class ParticleSystemTests : TestBase
         world.Flush();
 
         // First update: burst fires, particle spawns at local (50, 0).
-        // With rotation Ï€/2 the world position is (100, 50) â€” entity X=100 + rotated local offset.
+        // With rotation p/2 the world position is (100, 50) — entity X=100 + rotated local offset.
         system.Update(world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.016f)));
 
         // Second update: particle expires, death sub-emitter fires.
@@ -8298,9 +8298,9 @@ public class ParticleSystemTests : TestBase
         foreach (var pos in spawnedPositions)
         {
             pos.X.Should().BeApproximately(100f, 2f,
-                "rotation Ï€/2 maps local X to world Y, so world X stays near the entity origin");
+                "rotation p/2 maps local X to world Y, so world X stays near the entity origin");
             pos.Y.Should().BeApproximately(50f, 2f,
-                "rotation Ï€/2 maps local X offset to world Y");
+                "rotation p/2 maps local X offset to world Y");
         }
     }
 
@@ -8349,13 +8349,13 @@ public class ParticleSystemTests : TestBase
 
         spawnedPositions.Should().NotBeEmpty("birth sub-emitter must have fired");
 
-        // Local spawn offset (50, 0) rotated Ï€/2 around origin (0, 0) â†’ world (0, 50).
+        // Local spawn offset (50, 0) rotated p/2 around origin (0, 0) ? world (0, 50).
         foreach (var pos in spawnedPositions)
         {
             pos.X.Should().BeApproximately(0f, 1f,
-                "rotation Ï€/2 maps local X offset to world Y axis");
+                "rotation p/2 maps local X offset to world Y axis");
             pos.Y.Should().BeApproximately(50f, 1f,
-                "rotation Ï€/2 maps local X offset to world Y axis");
+                "rotation p/2 maps local X offset to world Y axis");
         }
     }
 
@@ -8404,7 +8404,7 @@ public class ParticleSystemTests : TestBase
 
         spawnedPositions.Should().NotBeEmpty("death sub-emitter must have fired");
 
-        // Local offset (30, 0) Ã— scale (2, 2) + origin (0, 0) = world (60, 0).
+        // Local offset (30, 0) × scale (2, 2) + origin (0, 0) = world (60, 0).
         foreach (var pos in spawnedPositions)
         {
             pos.X.Should().BeApproximately(60f, 2f,
@@ -8463,13 +8463,13 @@ public class ParticleSystemTests : TestBase
 
         spawnedPositions.Should().NotBeEmpty("fraction-trigger sub-emitter must have fired");
 
-        // Local offset (50, 0) rotated Ï€/2 â†’ world (0, 50).
+        // Local offset (50, 0) rotated p/2 ? world (0, 50).
         foreach (var pos in spawnedPositions)
         {
             pos.X.Should().BeApproximately(0f, 2f,
-                "rotation Ï€/2 maps local X offset to world Y axis");
+                "rotation p/2 maps local X offset to world Y axis");
             pos.Y.Should().BeApproximately(50f, 2f,
-                "rotation Ï€/2 maps local X offset to world Y axis");
+                "rotation p/2 maps local X offset to world Y axis");
         }
     }
 
@@ -8511,12 +8511,12 @@ public class ParticleSystemTests : TestBase
         _particleSystem.Update(world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(0.016f)));
 
         evaluatedPositions.Should().NotBeEmpty();
-        // Local spawn offset (50, 0) rotated Ï€/2 around entity origin (100, 0):
+        // Local spawn offset (50, 0) rotated p/2 around entity origin (100, 0):
         // Rotated local = (0, 50), world = (100, 0) + (0, 50) = (100, 50).
         foreach (var pos in evaluatedPositions)
         {
             pos.X.Should().BeApproximately(100f, 1f, "entity X plus rotated offset");
-            pos.Y.Should().BeApproximately(50f, 1f, "rotation Ï€/2 maps local X to world Y");
+            pos.Y.Should().BeApproximately(50f, 1f, "rotation p/2 maps local X to world Y");
         }
     }
 
@@ -8554,7 +8554,7 @@ public class ParticleSystemTests : TestBase
         _particleSystem.Update(world, new GameTime(TimeSpan.FromSeconds(0.016f), TimeSpan.FromSeconds(0.016f)));
 
         evaluatedPositions.Should().NotBeEmpty();
-        // Local spawn offset (10, 0) Ã— scale (3, 3) = world (30, 0).
+        // Local spawn offset (10, 0) × scale (3, 3) = world (30, 0).
         foreach (var pos in evaluatedPositions)
         {
             pos.X.Should().BeApproximately(30f, 1f, "scale 3 triples the local X offset in world space");
@@ -8585,7 +8585,7 @@ public class ParticleSystemTests : TestBase
         // Emit for the full duration; residual accumulates in EmissionTimer (non-integer rate).
         _particleSystem.Update(_world, new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(0.3)));
 
-        // Particles have 0.01 s life â€” expire on this step, triggering the loop restart.
+        // Particles have 0.01 s life — expire on this step, triggering the loop restart.
         _particleSystem.Update(_world, new GameTime(TimeSpan.FromSeconds(0.3), TimeSpan.FromSeconds(0.05)));
 
         emitter.EmissionTimer.Should().Be(0f,

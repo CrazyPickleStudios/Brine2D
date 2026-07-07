@@ -32,5 +32,9 @@ public interface IFixedUpdateSystem : ISystem
     /// Game time with a constant <see cref="GameTime.ElapsedTime"/> equal to the configured
     /// fixed timestep, and a <see cref="GameTime.TotalTime"/> tracking total simulated fixed time.
     /// </param>
+    /// <remarks>
+    /// For a first-frame initialization hook, extend <see cref="FixedUpdateSystemBase"/>
+    /// and override <see cref="FixedUpdateSystemBase.OnStart"/>.
+    /// </remarks>
     void FixedUpdate(IEntityWorld world, GameTime fixedTime);
 }

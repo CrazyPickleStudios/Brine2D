@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using Brine2D.Core;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Systems;
@@ -35,7 +35,7 @@ public class ShapeRenderSystemTests : TestBase
         world.Flush();
 
         var system = new ShapeRenderSystem();
-        system.Render(world, renderer);
+        system.Render(world, renderer, default);
 
         renderer.Received(1).DrawRectangleFilled(80f, 40f, 40f, 20f, Color.White);
     }
@@ -59,7 +59,7 @@ public class ShapeRenderSystemTests : TestBase
         world.Flush();
 
         var system = new ShapeRenderSystem();
-        system.Render(world, renderer);
+        system.Render(world, renderer, default);
 
         renderer.Received(1).DrawRectangleFilled(80f, 40f, 40f, 20f, Color.White);
         renderer.Received(1).DrawRectangleOutline(80f, 40f, 40f, 20f, Color.Red, 2f);
@@ -81,7 +81,7 @@ public class ShapeRenderSystemTests : TestBase
         world.Flush();
 
         var system = new ShapeRenderSystem();
-        system.Render(world, renderer);
+        system.Render(world, renderer, default);
 
         renderer.Received(1).DrawCircleFilled(new Vector2(200f, 100f), 30f, Color.Green);
     }
@@ -103,7 +103,7 @@ public class ShapeRenderSystemTests : TestBase
         world.Flush();
 
         var system = new ShapeRenderSystem();
-        system.Render(world, renderer);
+        system.Render(world, renderer, default);
 
         renderer.Received(1).DrawCircleFilled(new Vector2(200f, 100f), 30f, Color.White);
         renderer.Received(1).DrawCircleOutline(new Vector2(200f, 100f), 30f, Color.Yellow, 4f);
@@ -126,7 +126,7 @@ public class ShapeRenderSystemTests : TestBase
         world.Flush();
 
         var system = new ShapeRenderSystem();
-        system.Render(world, renderer);
+        system.Render(world, renderer, default);
 
         renderer.DidNotReceive().DrawRectangleOutline(
             Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(),
@@ -151,7 +151,7 @@ public class ShapeRenderSystemTests : TestBase
         //world.Flush();
 
         //var system = new ShapeRenderSystem();
-        //system.Render(world, renderer);
+        //system.Render(world, renderer, default);
 
         //renderer.DidNotReceive().DrawRectangleFilled(
         //    Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(),
@@ -173,7 +173,7 @@ public class ShapeRenderSystemTests : TestBase
         world.Flush();
 
         var system = new ShapeRenderSystem();
-        system.Render(world, renderer);
+        system.Render(world, renderer, default);
 
         renderer.DidNotReceive().DrawRectangleFilled(
             Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(),
@@ -202,7 +202,7 @@ public class ShapeRenderSystemTests : TestBase
         world.Flush();
 
         var system = new ShapeRenderSystem();
-        system.Render(world, renderer);
+        system.Render(world, renderer, default);
 
         renderer.Received(1).DrawRectangleFilled(
             Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(),

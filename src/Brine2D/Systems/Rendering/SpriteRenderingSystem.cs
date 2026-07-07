@@ -1,4 +1,5 @@
-﻿using Brine2D.ECS;
+﻿using Brine2D.Core;
+using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Query;
 using Brine2D.ECS.Systems;
@@ -73,7 +74,7 @@ public class SpriteRenderingSystem : RenderSystemBase
     /// Renders all entities with SpriteComponent using batching.
     /// Automatically culls off-screen sprites when a camera is present.
     /// </summary>
-    public override void Render(IEntityWorld world, IRenderer renderer)
+    public override void Render(IEntityWorld world, IRenderer renderer, GameTime gameTime)
     {
         _spriteQuery ??= world.CreateCachedQuery<SpriteComponent>().Build();
         _cachedSprites.Clear();

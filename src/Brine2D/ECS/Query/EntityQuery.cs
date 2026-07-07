@@ -667,7 +667,9 @@ public class EntityQuery
             }
 
             bool useParallel = forceParallel ||
-                (_options.EnableMultiThreading && count >= _options.ParallelEntityThreshold);
+                (_options.EnableMultiThreading &&
+                 !(_entityWorld?.IsCurrentSystemSequential() ?? false) &&
+                 count >= _options.ParallelEntityThreshold);
 
             if (useParallel)
             {
@@ -742,7 +744,7 @@ public class EntityQuery
 
             if (_spatialCenter.HasValue && _spatialRadius.HasValue)
             {
-                if (Vector2.Distance(transform.Position, _spatialCenter.Value) > _spatialRadius.Value)
+                if (Vector2.DistanceSquared(transform.Position, _spatialCenter.Value) > _spatialRadius.Value * _spatialRadius.Value)
                     return false;
             }
 

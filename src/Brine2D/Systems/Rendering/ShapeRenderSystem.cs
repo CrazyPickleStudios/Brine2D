@@ -1,4 +1,5 @@
 using System.Numerics;
+using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.ECS.Components;
 using Brine2D.ECS.Query;
@@ -13,7 +14,7 @@ public class ShapeRenderSystem : RenderSystemBase, IDisposable
 
     public override int RenderOrder => SystemRenderOrder.Sprites;
 
-    public override void Render(IEntityWorld world, IRenderer renderer)
+    public override void Render(IEntityWorld world, IRenderer renderer, GameTime gameTime)
     {
         _query ??= world.CreateCachedQuery<ShapeComponent, TransformComponent>()
             .OnlyEnabled()

@@ -21,7 +21,7 @@ public class PlayerInputBehavior : Behavior
         _input = input;
     }
 
-    protected override void OnAttached()
+    protected override void OnAdded()
         => _character = Entity.GetRequiredComponent<KinematicCharacterBody>();
 
     public void ResetVelocity() => _velY = 0f;

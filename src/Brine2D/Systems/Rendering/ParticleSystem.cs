@@ -1140,7 +1140,7 @@ public class ParticleSystem : IUpdateSystem, IRenderSystem, IDisposable
             localX * MathF.Sin(angleRadians));
     }
 
-    public void Render(IEntityWorld world, IRenderer renderer)
+    public void Render(IEntityWorld world, IRenderer renderer, GameTime gameTime)
     {
         _emitterQuery ??= world.CreateCachedQuery<ParticleEmitterComponent>().Build();
 

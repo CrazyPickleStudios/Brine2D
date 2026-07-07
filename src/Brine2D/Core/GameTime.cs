@@ -12,11 +12,19 @@
 /// Systems that synchronize with wall-clock time (audio, animation) can use this to skip
 /// resynchronization rather than jumping forward.
 /// </param>
+/// <param name="Alpha">
+/// Physics interpolation factor in the range [0, 1]. Only meaningful during the render pass.
+/// Represents how far the current frame is between the last two fixed timesteps:
+/// 0 = exactly at the last fixed step, 1 = exactly at the next step.
+/// Use this to lerp rendered positions between the previous and current physics state
+/// for smooth visuals at any frame rate. Always 0 during Update and FixedUpdate.
+/// </param>
 public readonly record struct GameTime(
     TimeSpan TotalTime,
     TimeSpan ElapsedTime,
     long FrameCount = 0,
-    bool IsTimeClamped = false)
+    bool IsTimeClamped = false,
+    float Alpha = 0f)
 {
     /// <summary>Gets the elapsed time as seconds (convenience property).</summary>
     public double DeltaTime => ElapsedTime.TotalSeconds;

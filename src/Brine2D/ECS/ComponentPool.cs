@@ -1,4 +1,3 @@
-using Brine2D.Animation;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -9,6 +8,13 @@ namespace Brine2D.ECS;
 /// All access is game-thread-only via EntityWorld; no synchronization is required.
 /// Provides ArrayPool-based snapshots for zero-allocation iteration.
 /// </summary>
+/// <remarks>
+/// <b>Iteration order.</b> The underlying storage is a <see cref="Dictionary{TKey,TValue}"/>,
+/// whose enumeration order is unspecified and may vary between runs, runtime versions, and
+/// insertion sequences. Do not rely on iteration order for correctness. If your system applies
+/// cumulative effects where order affects the result (e.g., damage stacking, collision priority),
+/// sort the results explicitly or use a deterministic data structure.
+/// </remarks>
 /// <typeparam name="T">The component type.</typeparam>
 internal sealed class ComponentPool<T> : IComponentPool where T : Component
 {
@@ -24,20 +30,6 @@ internal sealed class ComponentPool<T> : IComponentPool where T : Component
             !_components.ContainsKey(entityId),
             $"ComponentPool<{typeof(T).Name}> already contains entity {entityId}; duplicate AddComponent bypassed Entity's guard.");
         _components[entityId] = (T)component;
-    }
-
-    /// <summary>
-    /// Inserts <paramref name="t"/> into <paramref name="list"/> in stable priority order
-    /// (lower <see cref="AnimationTransition.Priority"/> = evaluated first).
-    /// Equal-priority transitions are appended after existing ones at the same priority,
-    /// preserving insertion order within a priority band.
-    /// </summary>
-    private static void InsertSorted(List<AnimationTransition> list, AnimationTransition t)
-    {
-        int i = list.Count;
-        while (i > 0 && list[i - 1].Priority > t.Priority)
-            i--;
-        list.Insert(i, t);
     }
 
     public Component? Get(long entityId)

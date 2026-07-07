@@ -36,6 +36,8 @@ public abstract class Component
     /// entity and its other components continue processing.
     /// Cached queries built with <c>OnlyEnabled()</c> are automatically
     /// invalidated when this value changes.
+    /// When changed, <see cref="OnEnabled"/> or <see cref="OnDisabled"/> is called
+    /// so that subclasses can react without overriding the property.
     /// </remarks>
     public bool IsEnabled
     {
@@ -44,9 +46,33 @@ public abstract class Component
         {
             if (_isEnabled == value) return;
             _isEnabled = value;
-            Entity?.NotifyComponentEnabledChanged();
+            Entity?.NotifyEnabledChanged();
+            if (_isEnabled)
+                OnEnabled();
+            else
+                OnDisabled();
         }
     }
+
+    /// <summary>
+    /// Called when this component transitions from disabled to enabled
+    /// (i.e., <see cref="IsEnabled"/> changes to <see langword="true"/>).
+    /// Also called when the owning entity transitions from inactive to active
+    /// (<see cref="Entity.IsActive"/> changes to <see langword="true"/>) and this
+    /// component's <see cref="IsEnabled"/> is already <see langword="true"/>.
+    /// Override to resume state or restart effects.
+    /// </summary>
+    protected internal virtual void OnEnabled() { }
+
+    /// <summary>
+    /// Called when this component transitions from enabled to disabled
+    /// (i.e., <see cref="IsEnabled"/> changes to <see langword="false"/>).
+    /// Also called when the owning entity transitions from active to inactive
+    /// (<see cref="Entity.IsActive"/> changes to <see langword="false"/>) and this
+    /// component's <see cref="IsEnabled"/> is already <see langword="true"/>.
+    /// Override to pause state, stop effects, or clear accumulators.
+    /// </summary>
+    protected internal virtual void OnDisabled() { }
 
     /// <summary>
     /// Called when the component is added to an entity.

@@ -44,6 +44,8 @@ internal sealed partial class GameLoop
     // Low enough to yield frequently, high enough to avoid excessive loop overhead.
     private const int FrameSpinWaitIterations = 20;
 
+    private readonly Action<double>? _onFixedStepsDiscarded;
+
     /// <summary>Gets whether the game loop is currently running.</summary>
     public bool IsRunning => _isRunning;
 
@@ -96,6 +98,7 @@ internal sealed partial class GameLoop
         var ecs = ecsOptions ?? throw new ArgumentNullException(nameof(ecsOptions));
         _fixedTimeStep = TimeSpan.FromMilliseconds(ecs.FixedTimeStepMs);
         _maxFixedStepsPerFrame = ecs.MaxFixedStepsPerFrame;
+        _onFixedStepsDiscarded = ecs.OnFixedStepsDiscarded;
     }
 
     /// <summary>
@@ -200,10 +203,20 @@ internal sealed partial class GameLoop
                 }
 
                 if (_fixedTimeAccumulator > _fixedTimeStep * _maxFixedStepsPerFrame)
+                {
+                    var discardedMs = _fixedTimeAccumulator.TotalMilliseconds;
                     _fixedTimeAccumulator = TimeSpan.Zero;
+                    _logger.LogWarning(
+                        "Fixed-update accumulator clamped: {DiscardedMs:F1}ms of simulation time discarded. " +
+                        "Frame was too long or MaxFixedStepsPerFrame ({Max}) is too low.",
+                        discardedMs, _maxFixedStepsPerFrame);
+                    try { _onFixedStepsDiscarded?.Invoke(discardedMs); } catch { }
+                }
 
                 _sceneLoop.Update(gameTime);
-                _sceneLoop.Render(gameTime);
+                var alpha = (float)(_fixedTimeAccumulator.TotalSeconds / _fixedTimeStep.TotalSeconds);
+                var renderTime = new GameTime(totalTime, elapsedTime, _frameCount - 1, wasClamped, alpha);
+                _sceneLoop.Render(renderTime);
 
                 _sceneLoop.ProcessDeferredTransitions(token);
                 // End-of-frame: captures any task just launched by ProcessDeferredTransitions.

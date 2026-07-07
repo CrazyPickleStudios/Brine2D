@@ -23,7 +23,7 @@ public class DebugRenderer : RenderSystemBase
     public bool ShowAIDebug { get; set; } = true;
     public bool ShowEntityNames { get; set; } = true;
 
-    public override void Render(IEntityWorld world, IRenderer renderer)
+    public override void Render(IEntityWorld world, IRenderer renderer, GameTime gameTime)
     {
         foreach (var entity in world.Entities)
         {

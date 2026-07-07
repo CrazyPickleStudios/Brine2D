@@ -31,5 +31,9 @@ public interface IUpdateSystem : ISystem
     /// </summary>
     /// <param name="world">The entity world to process.</param>
     /// <param name="gameTime">Current game time.</param>
+    /// <remarks>
+    ///     For a first-frame initialization hook, extend <see cref="Systems.UpdateSystemBase"/>
+    ///     and override <see cref="Systems.UpdateSystemBase.OnStart"/>.
+    /// </remarks>
     void Update(IEntityWorld world, GameTime gameTime);
 }

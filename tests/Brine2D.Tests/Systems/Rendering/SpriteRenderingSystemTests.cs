@@ -30,7 +30,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
 
         // Assert
         Assert.Equal(1, system.GetBatchStats().RenderedCount);
@@ -64,7 +64,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
 
         // Assert
         Assert.Equal(3, system.GetBatchStats().RenderedCount);
@@ -87,7 +87,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
 
         // Assert
         Assert.Equal(0, system.GetBatchStats().RenderedCount);
@@ -111,7 +111,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
 
         // Assert
         Assert.Equal(0, system.GetTotalSpriteCount());
@@ -138,7 +138,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
 
         // Assert
         Assert.Equal(0, system.GetBatchStats().RenderedCount);
@@ -175,7 +175,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader, mockCamera);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
 
         // Assert
         Assert.Equal(1, system.GetBatchStats().RenderedCount);
@@ -280,7 +280,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
         var stats = system.GetBatchStats();
 
         // Assert
@@ -309,7 +309,7 @@ public class SpriteRenderingSystemTests : TestBase
         var system = new SpriteRenderingSystem(mockTextureLoader);
 
         // Act
-        system.Render(world, mockRenderer);
+        system.Render(world, mockRenderer, default);
 
         // Assert
         Assert.Equal(10, system.GetTotalSpriteCount());

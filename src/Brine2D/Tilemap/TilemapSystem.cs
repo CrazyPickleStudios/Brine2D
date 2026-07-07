@@ -68,7 +68,7 @@ public sealed class TilemapSystem : IUpdateSystem, IRenderSystem, IDisposable
         }
     }
 
-    public void Render(IEntityWorld world, IRenderer renderer)
+    public void Render(IEntityWorld world, IRenderer renderer, GameTime gameTime)
     {
         if (_query == null) return;
 
