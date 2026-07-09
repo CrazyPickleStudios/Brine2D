@@ -29,6 +29,7 @@ internal sealed class HeadlessRenderer : IRenderer
 
     public ICamera? Camera { get; set; }
     public Color ClearColor { get; set; }
+    public bool PixelSnapping { get; set; } = true;
 
     /// <inheritdoc />
     /// <remarks>
@@ -422,6 +423,17 @@ internal sealed class HeadlessRenderer : IRenderer
         }
 
         _scissorRect = null;
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="NotSupportedException">
+    ///     Always thrown — pixel readback requires GPU infrastructure unavailable in headless mode.
+    /// </exception>
+    public Task<byte[]> ReadPixelsAsync(ITexture texture, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        throw new NotSupportedException(
+            "ReadPixelsAsync requires GPU infrastructure unavailable in headless mode.");
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed == 1, this);

@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Serialization;
 using Brine2D.Collision;
 using Brine2D.Physics;
 
@@ -91,6 +92,7 @@ public class KinematicCharacterBody : Component
     /// <summary>
     /// <c>true</c> when the character is resting on a floor surface this tick.
     /// </summary>
+    [JsonIgnore]
     public bool IsGrounded { get; internal set; }
 
     /// <summary>
@@ -103,39 +105,46 @@ public class KinematicCharacterBody : Component
     /// <summary>
     /// <c>true</c> when the character is touching a wall surface this tick.
     /// </summary>
+    [JsonIgnore]
     public bool IsOnWall { get; internal set; }
 
     /// <summary>
     /// <c>true</c> when the character is touching a ceiling surface this tick.
     /// </summary>
+    [JsonIgnore]
     public bool IsOnCeiling { get; internal set; }
 
     /// <summary>
     /// <c>true</c> when the character is touching a wall but is not on the floor or ceiling this tick.
     /// </summary>
+    [JsonIgnore]
     public bool IsOnWallOnly => IsOnWall && !IsGrounded && !IsOnCeiling;
 
     /// <summary>
     /// The averaged floor contact normal from the last step, or <see cref="Vector2.Zero"/>
     /// when <see cref="IsGrounded"/> is <c>false</c>.
     /// </summary>
+    [JsonIgnore]
     public Vector2 FloorNormal { get; internal set; }
 
     /// <summary>
     /// The averaged wall contact normal from the last step, or <see cref="Vector2.Zero"/>
     /// when <see cref="IsOnWall"/> is <c>false</c>.
     /// </summary>
+    [JsonIgnore]
     public Vector2 WallNormal { get; internal set; }
 
     /// <summary>
     /// The ceiling contact normal from the last step, or <see cref="Vector2.Zero"/> when none.
     /// </summary>
+    [JsonIgnore]
     public Vector2 CeilingNormal { get; internal set; }
 
     /// <summary>
     /// The linear velocity of the moving platform the character is standing on, or
     /// <see cref="Vector2.Zero"/> when not on a moving platform. Updated each post-physics step.
     /// </summary>
+    [JsonIgnore]
     public Vector2 PlatformVelocity { get; internal set; }
 
     /// <summary>
@@ -144,6 +153,7 @@ public class KinematicCharacterBody : Component
     /// after deflection against contact surfaces. Set by the pre-physics step each tick.
     /// Useful for animation blending and air/ground speed readouts.
     /// </summary>
+    [JsonIgnore]
     public Vector2 EffectiveVelocity { get; internal set; }
 
     /// <summary>
@@ -187,6 +197,7 @@ public class KinematicCharacterBody : Component
     /// no collision. Set by the pre-step system after processing <see cref="PendingMoveAndCollide"/>.
     /// Contains full shape-cast detail including sub-shape information on compound bodies.
     /// </summary>
+    [JsonIgnore]
     public ShapeCastHit? LastMoveAndCollideHit { get; internal set; }
 
     /// <summary>
@@ -206,6 +217,7 @@ public class KinematicCharacterBody : Component
     /// <see cref="Vector2.Zero"/> when no collision occurred or the full motion was consumed.
     /// Available after the next pre-physics step.
     /// </summary>
+    [JsonIgnore]
     public Vector2 MotionRemainder { get; internal set; }
 
     internal void RaiseLanded() => OnLanded?.Invoke(this);

@@ -26,10 +26,13 @@ public class SpriteComponentTests : TestBase
         Assert.Null(sprite.SourceRect);
         Assert.Equal(Color.White, sprite.Tint);
         Assert.Equal(Vector2.Zero, sprite.Offset);
-        Assert.Equal(1.0f, sprite.Scale);
+        Assert.Equal(Vector2.One, sprite.Scale);
         Assert.False(sprite.FlipX);
         Assert.False(sprite.FlipY);
         Assert.Equal(0, sprite.Layer);
+        Assert.Equal(0, sprite.OrderInLayer);
+        Assert.Equal(BlendMode.Alpha, sprite.BlendMode);
+        Assert.Equal(TextureScaleMode.Nearest, sprite.TextureScaleMode);
     }
 
     #endregion
@@ -163,10 +166,27 @@ public class SpriteComponentTests : TestBase
         var sprite = entity.GetComponent<SpriteComponent>()!;
 
         // Act
-        sprite.Scale = 2.5f;
+        sprite.Scale = new Vector2(2.5f, 3f);
 
         // Assert
-        Assert.Equal(2.5f, sprite.Scale);
+        Assert.Equal(new Vector2(2.5f, 3f), sprite.Scale);
+    }
+
+    [Fact]
+    public void Scale_NonUniform_WorksCorrectly()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity();
+        entity.AddComponent<SpriteComponent>();
+        var sprite = entity.GetComponent<SpriteComponent>()!;
+
+        // Act — squash on Y, stretch on X
+        sprite.Scale = new Vector2(2f, 0.5f);
+
+        // Assert
+        Assert.Equal(2f, sprite.Scale.X);
+        Assert.Equal(0.5f, sprite.Scale.Y);
     }
 
     #endregion
@@ -277,6 +297,72 @@ public class SpriteComponentTests : TestBase
 
     #endregion
 
+    #region BlendMode, OrderInLayer, and TextureScaleMode Properties
+
+    [Fact]
+    public void BlendMode_DefaultIsAlpha()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        Assert.Equal(BlendMode.Alpha, entity.GetComponent<SpriteComponent>()!.BlendMode);
+    }
+
+    [Fact]
+    public void BlendMode_SetAndGet_WorksCorrectly()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        var sprite = entity.GetComponent<SpriteComponent>()!;
+
+        sprite.BlendMode = BlendMode.Additive;
+
+        Assert.Equal(BlendMode.Additive, sprite.BlendMode);
+    }
+
+    [Fact]
+    public void OrderInLayer_DefaultIsZero()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        Assert.Equal(0, entity.GetComponent<SpriteComponent>()!.OrderInLayer);
+    }
+
+    [Fact]
+    public void OrderInLayer_SetAndGet_WorksCorrectly()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        var sprite = entity.GetComponent<SpriteComponent>()!;
+
+        sprite.OrderInLayer = -5;
+        Assert.Equal(-5, sprite.OrderInLayer);
+
+        sprite.OrderInLayer = 100;
+        Assert.Equal(100, sprite.OrderInLayer);
+    }
+
+    [Fact]
+    public void TextureScaleMode_DefaultIsNearest()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        Assert.Equal(TextureScaleMode.Nearest, entity.GetComponent<SpriteComponent>()!.TextureScaleMode);
+    }
+
+    [Fact]
+    public void TextureScaleMode_SetAndGet_WorksCorrectly()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        var sprite = entity.GetComponent<SpriteComponent>()!;
+
+        sprite.TextureScaleMode = TextureScaleMode.Linear;
+
+        Assert.Equal(TextureScaleMode.Linear, sprite.TextureScaleMode);
+    }
+
+    #endregion
+
     #region Integration Scenarios
 
     [Fact]
@@ -294,9 +380,11 @@ public class SpriteComponentTests : TestBase
                 s.SourceRect = new Rectangle(0, 0, 32, 32);
                 s.Tint = new Color(255, 128, 128);
                 s.Offset = new Vector2(16, 16);
-                s.Scale = 2.0f;
+                s.Scale = new Vector2(2.0f, 2.0f);
                 s.FlipX = true;
                 s.Layer = 10;
+                s.OrderInLayer = 3;
+                s.BlendMode = BlendMode.Additive;
             });
 
         var sprite = entity.GetComponent<SpriteComponent>()!;
@@ -307,9 +395,63 @@ public class SpriteComponentTests : TestBase
         Assert.Equal(new Rectangle(0, 0, 32, 32), sprite.SourceRect);
         Assert.Equal(new Color(255, 128, 128), sprite.Tint);
         Assert.Equal(new Vector2(16, 16), sprite.Offset);
-        Assert.Equal(2.0f, sprite.Scale);
+        Assert.Equal(new Vector2(2.0f, 2.0f), sprite.Scale);
         Assert.True(sprite.FlipX);
         Assert.Equal(10, sprite.Layer);
+        Assert.Equal(3, sprite.OrderInLayer);
+        Assert.Equal(BlendMode.Additive, sprite.BlendMode);
+    }
+
+    #endregion
+
+    #region Material Property
+
+    [Fact]
+    public void Material_DefaultIsNull()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        Assert.Null(entity.GetComponent<SpriteComponent>()!.Material);
+    }
+
+    [Fact]
+    public void Material_SetAndGet_WorksCorrectly()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        var sprite = entity.GetComponent<SpriteComponent>()!;
+        var material = Substitute.For<IMaterial>();
+        material.Name.Returns("TestMaterial");
+
+        sprite.Material = material;
+
+        Assert.Same(material, sprite.Material);
+        Assert.Equal("TestMaterial", sprite.Material!.Name);
+    }
+
+    [Fact]
+    public void Material_CanBeSetToNull()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        var sprite = entity.GetComponent<SpriteComponent>()!;
+        sprite.Material = Substitute.For<IMaterial>();
+
+        sprite.Material = null;
+
+        Assert.Null(sprite.Material);
+    }
+
+    #endregion
+
+    #region CrossFadeGhosts and Material defaults
+
+    [Fact]
+    public void Constructor_CrossFadeGhosts_DefaultsToEmpty()
+    {
+        var world = CreateTestWorld();
+        var entity = world.CreateEntity().AddComponent<SpriteComponent>();
+        Assert.Empty(entity.GetComponent<SpriteComponent>()!.CrossFadeGhosts);
     }
 
     #endregion

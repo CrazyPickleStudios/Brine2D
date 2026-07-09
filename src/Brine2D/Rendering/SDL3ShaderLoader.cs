@@ -39,8 +39,17 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         };
 
         if (!success || bytecode == null)
+        {
+            var sdlError = SDL3.SDL.GetError();
             throw new InvalidOperationException(
-                $"Shader compilation failed: {source.Language} \u2192 {targetFormat}, stage={source.Stage}, driver={driverName}");
+                $"Shader compilation failed.\n" +
+                $"  Language : {source.Language}\n" +
+                $"  Target   : {targetFormat}\n" +
+                $"  Stage    : {source.Stage}\n" +
+                $"  Driver   : {driverName}\n" +
+                $"  SDL error: {sdlError}\n" +
+                "Ensure SDL_gpu_shadercross is installed and the HLSL source is valid for the target backend.");
+        }
 
         return LoadFromBytecodeInternal($"{source.Stage}Shader", source.Stage, bytecode,
             source.EntryPoint, GetShaderFormat(targetFormat));
@@ -90,7 +99,8 @@ public class SDL3ShaderLoader : IShaderLoader, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception during HLSL compilation to {Target}", target);
+            _logger.LogError(ex, "Exception during HLSL compilation to {Target} (stage={Stage}): {Message}",
+                target, source.Stage, ex.Message);
             return false;
         }
         finally

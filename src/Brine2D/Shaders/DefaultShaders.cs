@@ -41,7 +41,11 @@ VSOutput main(VSInput input)
 
     /// <summary>
     /// Fragment shader HLSL source.
-    /// Handles textured quads, font rendering, and SDF circles (TexCoord in [2,3] sentinel).
+    /// Handles textured quads, font rendering, and SDF circles.
+    /// UV sentinel ranges:
+    /// [0,1]   — normal texture/sprite quad (sample UVs directly).
+    /// [2,3]   — SDF filled circle (TexCoord emitted by DrawCircleFilled).
+    /// [4,5]   — font atlas glyph (TexCoord = actual UV + (4,4), decoded here).
     /// </summary>
     public const string SimpleFragmentShaderHLSL = @"
 struct PSInput
@@ -58,7 +62,7 @@ float4 main(PSInput input) : SV_Target
 {
     float2 uv = input.TexCoord;
 
-    if (uv.x >= 1.5)
+    if (uv.x >= 1.5 && uv.x < 3.5)
     {
         float2 circleUV = uv - 2.0;
         float dist = length(circleUV - 0.5);
@@ -68,18 +72,14 @@ float4 main(PSInput input) : SV_Target
         return float4(input.Color.rgb, input.Color.a * alpha);
     }
 
-    float4 texColor = Texture.Sample(Sampler, uv);
-
-    float grayscale = (texColor.r + texColor.g + texColor.b) / 3.0;
-    bool isFont = grayscale > 0.95 &&
-                  abs(texColor.r - texColor.g) < 0.01 &&
-                  abs(texColor.g - texColor.b) < 0.01;
-
-    if (isFont)
+    if (uv.x >= 3.5)
     {
+        float2 fontUV = uv - float2(4.0, 4.0);
+        float4 texColor = Texture.Sample(Sampler, fontUV);
         return float4(input.Color.rgb, input.Color.a * texColor.a);
     }
 
+    float4 texColor = Texture.Sample(Sampler, uv);
     return texColor * input.Color;
 }
 ";

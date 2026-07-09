@@ -51,12 +51,11 @@ public class SpriteRenderingSystem : RenderSystemBase
             if (sprite == null || string.IsNullOrEmpty(sprite.TexturePath))
                 continue;
 
-            // Load texture if not already loaded
             if (sprite.Texture == null && !_textureCache.ContainsKey(sprite.TexturePath))
             {
                 var texture = await _textureLoader.LoadTextureAsync(
                     sprite.TexturePath,
-                    TextureScaleMode.Nearest,
+                    sprite.TextureScaleMode,
                     cancellationToken);
 
                 _textureCache[sprite.TexturePath] = texture;
@@ -64,7 +63,6 @@ public class SpriteRenderingSystem : RenderSystemBase
             }
             else if (sprite.Texture == null && _textureCache.ContainsKey(sprite.TexturePath))
             {
-                // Reuse cached texture
                 sprite.Texture = _textureCache[sprite.TexturePath];
             }
         }
@@ -100,11 +98,22 @@ public class SpriteRenderingSystem : RenderSystemBase
                 continue;
             }
 
-            // Frustum culling (if camera exists)
-            if (_camera != null && !IsVisible(transform.Position, sprite, _camera))
+            // Frustum culling: delegate to camera.IsVisible(Rectangle) so that camera rotation
+            // and full transform scale are handled correctly.
+            if (_camera != null)
             {
-                culledCount++;
-                continue;
+                var textureWidth = sprite.SourceRect?.Width ?? sprite.Texture?.Width ?? 0;
+                var textureHeight = sprite.SourceRect?.Height ?? sprite.Texture?.Height ?? 0;
+                var spriteScale = transform.Scale * sprite.Scale;
+                var halfW = textureWidth * MathF.Abs(spriteScale.X) / 2f;
+                var halfH = textureHeight * MathF.Abs(spriteScale.Y) / 2f;
+                var pos = transform.Position + sprite.Offset;
+                var spriteBounds = new Rectangle(pos.X - halfW, pos.Y - halfH, halfW * 2f, halfH * 2f);
+                if (!_camera.IsVisible(spriteBounds))
+                {
+                    culledCount++;
+                    continue;
+                }
             }
 
             var position = transform.Position + sprite.Offset;
@@ -112,8 +121,9 @@ public class SpriteRenderingSystem : RenderSystemBase
             var flipX = sprite.FlipX;
             var flipY = sprite.FlipY;
 
-            if (flipX) finalScale.X *= -1;
-            if (flipY) finalScale.Y *= -1;
+            var flip = SpriteFlip.None;
+            if (flipX) flip |= SpriteFlip.Horizontal;
+            if (flipY) flip |= SpriteFlip.Vertical;
 
             // Ghost draws (outgoing frames of concurrent cross-fades) — rendered first so they appear behind.
             foreach (var ghost in sprite.CrossFadeGhosts)
@@ -127,19 +137,22 @@ public class SpriteRenderingSystem : RenderSystemBase
                 if (ghostTexture == null)
                     continue;
 
-                var ghostScale = transform.Scale * sprite.Scale;
-                if (ghost.FlipX) ghostScale.X *= -1;
-                if (ghost.FlipY) ghostScale.Y *= -1;
+                var ghostFlip = SpriteFlip.None;
+                if (ghost.FlipX) ghostFlip |= SpriteFlip.Horizontal;
+                if (ghost.FlipY) ghostFlip |= SpriteFlip.Vertical;
 
                 _batcher.Draw(
                     texture: ghostTexture,
                     position: transform.Position + ghost.DrawOffset,
                     sourceRect: ghost.SourceRect,
-                    scale: ghostScale,
+                    scale: transform.Scale * sprite.Scale,
                     rotation: transform.Rotation,
                     origin: ghost.Origin,
                     tint: ghost.Tint.WithAlpha(ghost.Alpha),
-                    layer: sprite.Layer);
+                    layer: sprite.Layer,
+                    orderInLayer: sprite.OrderInLayer,
+                    flip: ghostFlip,
+                    blendMode: sprite.BlendMode);
             }
 
             _batcher.Draw(
@@ -150,40 +163,16 @@ public class SpriteRenderingSystem : RenderSystemBase
                 rotation: transform.Rotation,
                 origin: sprite.Origin,
                 tint: sprite.Tint,
-                layer: sprite.Layer);
+                layer: sprite.Layer,
+                orderInLayer: sprite.OrderInLayer,
+                flip: flip,
+                blendMode: sprite.BlendMode);
         }
 
         _lastRenderedCount = _lastTotalCount - culledCount;
 
         // Flush batch (sorts by layer/texture and renders)
         _batcher.Flush(renderer);
-    }
-
-    /// <summary>
-    /// Checks if a sprite is visible within the camera frustum.
-    /// Uses simple AABB (Axis-Aligned Bounding Box) culling.
-    /// </summary>
-    private bool IsVisible(Vector2 position, SpriteComponent sprite, ICamera camera)
-    {
-        // Calculate sprite bounds in world space
-        var textureWidth = sprite.SourceRect?.Width ?? sprite.Texture?.Width ?? 0;
-        var textureHeight = sprite.SourceRect?.Height ?? sprite.Texture?.Height ?? 0;
-        
-        var halfWidth = textureWidth * sprite.Scale / 2f;
-        var halfHeight = textureHeight * sprite.Scale / 2f;
-
-        // Calculate camera frustum bounds in world space
-        // Camera position is CENTER of the view, not top-left!
-        var cameraLeft = camera.Position.X - (camera.ViewportWidth / 2f / camera.Zoom);
-        var cameraRight = camera.Position.X + (camera.ViewportWidth / 2f / camera.Zoom);
-        var cameraTop = camera.Position.Y - (camera.ViewportHeight / 2f / camera.Zoom);
-        var cameraBottom = camera.Position.Y + (camera.ViewportHeight / 2f / camera.Zoom);
-
-        // AABB overlap test
-        return position.X + halfWidth >= cameraLeft &&
-               position.X - halfWidth <= cameraRight &&
-               position.Y + halfHeight >= cameraTop &&
-               position.Y - halfHeight <= cameraBottom;
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Brine2D.ECS;
 
 namespace Brine2D.Systems.Audio;
@@ -67,6 +68,7 @@ public abstract class AudioSourceComponent : Component
     /// <summary>
     /// Whether this is currently playing (managed by AudioSystem).
     /// </summary>
+    [JsonIgnore]
     public bool IsPlaying { get; internal set; }
 
     /// <summary>
@@ -75,6 +77,7 @@ public abstract class AudioSourceComponent : Component
     /// If both <see cref="TriggerPlay"/> and <see cref="TriggerStop"/> are set, both are
     /// cleared and no action is taken.
     /// </summary>
+    [JsonIgnore]
     public bool TriggerPlay { get; set; }
 
     /// <summary>
@@ -83,6 +86,7 @@ public abstract class AudioSourceComponent : Component
     /// If both <see cref="TriggerPlay"/> and <see cref="TriggerStop"/> are set, both are
     /// cleared and no action is taken.
     /// </summary>
+    [JsonIgnore]
     public bool TriggerStop { get; set; }
 
     /// <summary>
@@ -90,6 +94,7 @@ public abstract class AudioSourceComponent : Component
     /// (track completed or evicted), not by <see cref="TriggerStop"/> or disabling.
     /// Reset to <see langword="false"/> when new playback starts via <see cref="TriggerPlay"/>.
     /// </summary>
+    [JsonIgnore]
     public bool PlaybackEnded { get; internal set; }
 
     /// <summary>
@@ -98,6 +103,7 @@ public abstract class AudioSourceComponent : Component
     /// If both <see cref="TriggerPause"/> and <see cref="TriggerResume"/> are set, both are
     /// cleared and no action is taken.
     /// </summary>
+    [JsonIgnore]
     public bool TriggerPause { get; set; }
 
     /// <summary>
@@ -106,10 +112,12 @@ public abstract class AudioSourceComponent : Component
     /// If both <see cref="TriggerPause"/> and <see cref="TriggerResume"/> are set, both are
     /// cleared and no action is taken.
     /// </summary>
+    [JsonIgnore]
     public bool TriggerResume { get; set; }
 
     /// <summary>
     /// Whether this is currently paused (managed by AudioSystem).
     /// </summary>
+    [JsonIgnore]
     public bool IsPaused { get; internal set; }
 }

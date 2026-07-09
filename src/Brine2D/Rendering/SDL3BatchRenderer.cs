@@ -34,6 +34,7 @@ internal sealed class SDL3BatchRenderer : IDisposable
     private ITexture? _currentBoundTextureRef;
 
     public readonly int MaxVertices;
+    public bool PixelSnapping { get; set; } = true;
     private const TextureScaleMode WhiteTextureScaleMode = TextureScaleMode.Nearest;
     private const int VerticesPerQuad = 4;
     private const int IndicesPerQuad = 6;
@@ -68,6 +69,7 @@ internal sealed class SDL3BatchRenderer : IDisposable
         if (MaxVertices == 0)
             throw new ArgumentException("MaxVerticesPerFrame must be at least " + VerticesPerQuad, nameof(renderingOptions));
 
+        PixelSnapping = renderingOptions.PixelSnapping;
         _vertexBatch = new Vertex[MaxVertices];
     }
 
@@ -143,6 +145,31 @@ internal sealed class SDL3BatchRenderer : IDisposable
             AddQuadRotated(x, y, width, height, pivotOffset, rotation, color, u1, v1, u2, v2, onFlushNeeded);
         else
             AddQuad(x, y, width, height, color, u1, v1, u2, v2, onFlushNeeded);
+    }
+
+    /// <summary>
+    /// Emits a single font-atlas glyph quad using the explicit font UV sentinel ([4,5] range).
+    /// The fragment shader decodes the sentinel by subtracting (4,4) to recover the real UV,
+    /// then treats the texel as a grayscale alpha mask tinted by <paramref name="color"/>.
+    /// This replaces the fragile near-white grayscale heuristic in the legacy shader.
+    /// </summary>
+    public void DrawFontGlyph(
+        nint atlasHandle,
+        TextureScaleMode scaleMode,
+        float x, float y,
+        float width, float height,
+        Color color,
+        float u1, float v1,
+        float u2, float v2,
+        Action? onFlushNeeded = null,
+        ITexture? textureRef = null)
+    {
+        EnsureTextureBound(atlasHandle, scaleMode, onFlushNeeded, textureRef);
+
+        // Shift UVs into [4,5] so the fragment shader identifies them as font glyphs.
+        AddQuad(x, y, width, height, color,
+            u1 + 4f, v1 + 4f, u2 + 4f, v2 + 4f,
+            onFlushNeeded);
     }
 
     public void DrawRectangleFilled(float x, float y, float width, float height, Color color, float rotation = 0f, Action? onFlushNeeded = null)
@@ -475,7 +502,8 @@ internal sealed class SDL3BatchRenderer : IDisposable
     {
         Debug.Assert(_vertexCount < MaxVertices, "Vertex buffer overflow: EnsureVertexCapacity was bypassed");
 
-        var position = pixelSnap ? new Vector2(MathF.Round(x), MathF.Round(y)) : new Vector2(x, y);
+        bool snap = pixelSnap && PixelSnapping;
+        var position = snap ? new Vector2(MathF.Round(x), MathF.Round(y)) : new Vector2(x, y);
         _vertexBatch[_vertexCount++] = new Vertex(position, color, new Vector2(u, v));
     }
 

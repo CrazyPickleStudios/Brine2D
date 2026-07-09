@@ -51,7 +51,7 @@ public static class SpriteBatcherAtlasExtensions
                 origin ?? new Vector2(0.5f, 0.5f),
                 tint ?? Color.White,
                 layer,
-                flip);
+                flip: flip);
         }
 
         /// <summary>

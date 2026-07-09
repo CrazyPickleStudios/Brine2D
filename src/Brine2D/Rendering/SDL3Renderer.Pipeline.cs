@@ -875,10 +875,34 @@ internal sealed partial class SDL3Renderer
     /// </summary>
     private void DrainPendingUploads()
     {
+        if (_pendingUploads.Count > 0)
+        {
+            _logger.LogDebug(
+                "Draining {Count} pending texture upload(s); WaitForGPUIdle must have been called by the caller",
+                _pendingUploads.Count);
+        }
+
         foreach (var upload in _pendingUploads)
         {
-            SDL3.SDL.ReleaseGPUFence(_device, upload.Fence);
-            SDL3.SDL.ReleaseGPUTransferBuffer(_device, upload.TransferBuffer);
+            if (upload.Fence == nint.Zero)
+            {
+                _logger.LogWarning("Skipping deferred upload drain: fence handle is zero for texture '{Name}'",
+                    upload.Texture.Name);
+            }
+            else
+            {
+                SDL3.SDL.ReleaseGPUFence(_device, upload.Fence);
+            }
+
+            if (upload.TransferBuffer == nint.Zero)
+            {
+                _logger.LogWarning("Skipping transfer buffer release: handle is zero for texture '{Name}'",
+                    upload.Texture.Name);
+            }
+            else
+            {
+                SDL3.SDL.ReleaseGPUTransferBuffer(_device, upload.TransferBuffer);
+            }
 
             if (upload.Texture.IsDisposed)
             {

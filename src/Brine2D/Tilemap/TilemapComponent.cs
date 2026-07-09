@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Serialization;
 using Brine2D.ECS;
 
 namespace Brine2D.Tilemap;
@@ -9,14 +10,17 @@ namespace Brine2D.Tilemap;
 /// </summary>
 public class TilemapComponent : Component
 {
+    [JsonIgnore]
     public Tilemap? Tilemap { get; set; }
 
     /// <summary>World-space offset applied to the entire map, without touching individual layer offsets.</summary>
     public Vector2 PositionOffset { get; set; } = Vector2.Zero;
 
+    [JsonIgnore]
     public TilemapAnimator? Animator { get; internal set; }
 
     /// <summary>True once the async texture load finishes. The renderer skips this component until then.</summary>
+    [JsonIgnore]
     public bool IsLoaded
     {
         get => _isLoaded;

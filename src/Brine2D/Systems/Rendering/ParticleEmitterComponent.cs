@@ -4,6 +4,7 @@ using Brine2D.ECS.Components;
 using Brine2D.Rendering;
 using Brine2D.Rendering.TextureAtlas;
 using System.Numerics;
+using System.Text.Json.Serialization;
 
 namespace Brine2D.Systems.Rendering;
 
@@ -116,6 +117,7 @@ public class ParticleEmitterComponent : Component
     public Vector2 Gravity { get; set; } = new Vector2(0, 100);
     public Vector2 SpawnOffset { get; set; } = Vector2.Zero;
     public float SpawnRadius { get; set; } = 0f;
+    [JsonIgnore]
     public ITexture? ParticleTexture { get; set; }
     public AtlasRegion? ParticleAtlasRegion { get; set; }
 
@@ -363,6 +365,7 @@ public class ParticleEmitterComponent : Component
     /// When true, all particle aging, movement, and new emission are frozen.
     /// Call <see cref="Resume"/> to continue.
     /// </summary>
+    [JsonIgnore]
     public bool IsPaused { get; private set; } = false;
 
     /// <summary>
@@ -379,6 +382,7 @@ public class ParticleEmitterComponent : Component
     /// Not invoked when <see cref="Stop"/> force-clears particles.
     /// This property is not captured by <see cref="CaptureDefaultState"/>.
     /// </summary>
+    [JsonIgnore]
     public Action<Particle>? OnParticleDied { get; set; }
 
     /// <summary>
@@ -386,6 +390,7 @@ public class ParticleEmitterComponent : Component
     /// spawned and added to the active list. Do not hold a reference to the particle beyond the callback.
     /// This property is not captured by <see cref="CaptureDefaultState"/>.
     /// </summary>
+    [JsonIgnore]
     public Action<Particle>? OnParticleSpawned { get; set; }
 
     /// <summary>
@@ -395,6 +400,7 @@ public class ParticleEmitterComponent : Component
     /// emission has stopped (and <see cref="Loop"/> is false). Not invoked by <see cref="Stop"/>
     /// or <see cref="ResetToDefaultState"/>.
     /// </summary>
+    [JsonIgnore]
     public Action? OnEmitterFinished { get; set; }
 
     internal bool BurstFired { get; set; } = false;
@@ -420,8 +426,10 @@ public class ParticleEmitterComponent : Component
 
     internal List<Particle> Particles { get; } = new();
 
+    [JsonIgnore]
     public IReadOnlyList<Particle> ActiveParticles => Particles;
 
+    [JsonIgnore]
     public int ParticleCount => Particles.Count;
 
     internal float EmissionTimer { get; set; }

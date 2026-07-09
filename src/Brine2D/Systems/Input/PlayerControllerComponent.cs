@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using System.Text.Json.Serialization;
 using Brine2D.ECS;
 using Brine2D.Input;
 
@@ -36,16 +37,19 @@ public class PlayerControllerComponent : Component
     /// default WASD / arrow key bindings.
     /// Expected actions: "MoveUp", "MoveDown", "MoveLeft", "MoveRight".
     /// </summary>
+    [JsonIgnore]
     public InputActionMap? ActionMap { get; set; }
 
     /// <summary>
     /// Current input direction this frame (calculated by system).
     /// </summary>
+    [JsonIgnore]
     public Vector2 InputDirection { get; internal set; }
 
     /// <summary>
     /// Whether the player is currently moving (has input).
     /// </summary>
+    [JsonIgnore]
     public bool IsMoving => InputDirection != Vector2.Zero;
 }
 

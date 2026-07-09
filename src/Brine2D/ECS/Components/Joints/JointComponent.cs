@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Serialization;
 using Box2D.NET.Bindings;
 using Brine2D.Physics;
 
@@ -63,6 +64,7 @@ public abstract class JointComponent : Component
     ///     The entity this component is attached to supplies body A via its own
     ///     <see cref="PhysicsBodyComponent" />.
     /// </summary>
+    [JsonIgnore]
     public PhysicsBodyComponent? ConnectedBody
     {
         get;
@@ -87,6 +89,7 @@ public abstract class JointComponent : Component
     /// <summary>
     ///     Returns <c>true</c> if the underlying Box2D joint has been created and is still valid.
     /// </summary>
+    [JsonIgnore]
     public bool IsLive => B2.JointIsValid(JointId);
 
     /// <summary>

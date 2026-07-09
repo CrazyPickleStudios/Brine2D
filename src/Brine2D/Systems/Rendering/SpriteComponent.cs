@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Serialization;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Brine2D.Rendering;
@@ -20,6 +21,7 @@ public class SpriteComponent : Component
     /// <summary>
     /// Loaded texture reference (set by SpriteRenderingSystem).
     /// </summary>
+    [JsonIgnore]
     public ITexture? Texture { get; set; }
 
     /// <summary>
@@ -39,9 +41,10 @@ public class SpriteComponent : Component
     public Vector2 Offset { get; set; }
 
     /// <summary>
-    /// Scale multiplier (applied to transform scale).
+    /// Scale multiplier applied on top of the entity's TransformComponent scale.
+    /// Supports non-uniform (squash-and-stretch) scaling per axis.
     /// </summary>
-    public float Scale { get; set; } = 1.0f;
+    public Vector2 Scale { get; set; } = Vector2.One;
 
     /// <summary>
     /// Origin/pivot point (0–1 range). Defaults to center.
@@ -67,10 +70,38 @@ public class SpriteComponent : Component
     public byte Layer { get; set; } = 0;
 
     /// <summary>
+    /// Secondary sort key within a layer. Sprites with a lower value are drawn first (behind).
+    /// Use this for Y-sorting in top-down games or to control overlap within the same layer.
+    /// </summary>
+    public int OrderInLayer { get; set; } = 0;
+
+    /// <summary>
+    /// Blend mode used when rendering this sprite. Defaults to standard alpha blending.
+    /// </summary>
+    public BlendMode BlendMode { get; set; } = BlendMode.Alpha;
+
+    /// <summary>
+    /// Texture filtering mode used when this sprite's texture is auto-loaded via
+    /// <see cref="SpriteRenderingSystem.LoadTexturesAsync"/>. Defaults to
+    /// <see cref="TextureScaleMode.Nearest"/> for pixel-art friendliness.
+    /// Has no effect when <see cref="Texture"/> is assigned directly.
+    /// </summary>
+    public TextureScaleMode TextureScaleMode { get; set; } = TextureScaleMode.Nearest;
+
+    /// <summary>
     /// Outgoing cross-fade ghosts, one per concurrent fade (base animator + each layer).
     /// Rendered by <see cref="SpriteRenderingSystem"/> as additional draw calls at fading-out
     /// opacity, producing true multi-source cross-fade blends.
     /// Set and cleared automatically by <see cref="Brine2D.Systems.Animation.AnimationSystem"/>.
     /// </summary>
+    [JsonIgnore]
     public List<CrossFadeGhost> CrossFadeGhosts { get; } = new();
+
+    /// <summary>
+    /// Optional custom material for this sprite.
+    /// Stored for use by custom render systems; the built-in
+    /// <see cref="SpriteRenderingSystem"/> does not yet switch pipelines based on this value.
+    /// </summary>
+    [JsonIgnore]
+    public IMaterial? Material { get; set; }
 }

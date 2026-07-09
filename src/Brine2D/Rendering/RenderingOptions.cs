@@ -59,5 +59,19 @@ public sealed class RenderingOptions
     [Range(100, 1_000_000, ErrorMessage = "MaxParticlesPerFrame must be between 100 and 1,000,000")]
     public int MaxParticlesPerFrame { get; set; } = 20_000;
 
+    /// <summary>
+    /// Snaps sprite/primitive vertex positions to whole pixel coordinates before submitting to the GPU.
+    /// Eliminates sub-pixel jitter on pixel-art games. Default: <see langword="true"/>.
+    /// Disable for smooth sub-pixel movement (e.g., physics-driven objects at high resolution).
+    /// </summary>
+    public bool PixelSnapping { get; set; } = true;
+
+    /// <summary>
+    /// Reserved for future MSAA support. Currently only <c>1</c> (no MSAA) is supported;
+    /// values greater than 1 are logged as a warning and ignored.
+    /// </summary>
+    [Range(1, 8, ErrorMessage = "MsaaSamples must be 1 (no MSAA) or a power of two up to 8")]
+    public int MsaaSamples { get; set; } = 1;
+
     public Color ClearColor { get; set; } = Color.FromArgb(255, 52, 78, 65);
 }

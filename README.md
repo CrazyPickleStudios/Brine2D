@@ -449,6 +449,59 @@ public override void Update(IEntityWorld world, GameTime gameTime)
 
 ---
 
+### Persistence (World / Entity Snapshots)
+
+Brine2D ships two serializers. Both produce the same JSON format and support the same round-trip API. Choose based on your publish requirements.
+
+**`EntitySerializer` — zero setup, reflection-based (default choice)**
+
+~~~csharp
+// Inject via constructor (or new up directly)
+private readonly EntitySerializer _serializer;
+
+// Save
+await _serializer.SaveWorldAsync(world, "save.json");
+
+// Load and restore in one call
+await _serializer.LoadAndRestoreWorldAsync(world, "save.json");
+
+// Or snapshot / restore manually
+WorldSnapshot snapshot = _serializer.CreateWorldSnapshot(world);
+_serializer.RestoreWorldFromSnapshot(world, snapshot);
+~~~
+
+`EntitySerializer` discovers and serializes all public component properties automatically. No registration required.
+
+**`AotEntitySerializer` — explicit registration, AOT-friendly**
+
+~~~csharp
+// One-time setup (e.g., in Program.cs or a factory)
+var registry = new ComponentTypeRegistry();
+registry.RegisterBrineComponents();                   // all built-in engine components
+registry.RegisterAllComponents(GetType().Assembly);   // all your game components
+
+var serializer = new AotEntitySerializer(registry);
+
+// API is identical to EntitySerializer
+await serializer.SaveWorldAsync(world, "save.json");
+await serializer.LoadAndRestoreWorldAsync(world, "save.json");
+~~~
+
+`RegisterAllComponents` scans an assembly for every concrete `Component` subclass and registers it in one call. For trimmed / NativeAOT publishing, use `Register<T>(JsonTypeInfo<T>)` per component type with a source-generated `JsonSerializerContext` instead.
+
+**What is and isn't serialized:**
+
+| Persisted | Skipped |
+|---|---|
+| All serializable component properties | Behaviors |
+| Entity name, tags, `IsActive` | Runtime-only properties (`[JsonIgnore]`) |
+| Parent–child hierarchy | Entity IDs (remapped on restore) |
+| Component property values | Interface handles (`ITexture`, `IMusic`, etc.) |
+
+> **Note:** Behaviors must be re-added after restore (e.g., via a prefab factory). Entity IDs in component fields are stale after restore — re-resolve cross-entity references by name or tag.
+
+---
+
 ### Camera
 
 ~~~csharp
@@ -1411,6 +1464,9 @@ var (wx, wy) = tilemap.TileToWorld(tx, ty, layer);
 - `AssetManifest`: typed, compile-time-safe asset declarations
 - Startup-time dependency validation for registered scenes
 - Fallback scenes for graceful error recovery on load failures
+- `EntitySerializer`: reflection-based world/entity snapshot persistence, zero setup
+- `AotEntitySerializer` + `ComponentTypeRegistry`: AOT/trimming-friendly persistence with opt-in source-generated component registration
+- `Brine2D.Build`: optional NuGet package that generates compile-time asset path constants from your asset folders
 
 ---
 
@@ -1449,7 +1505,7 @@ cd samples/FeatureDemos && dotnet run
 ~~~
 src/
   Brine2D/         - core engine (published to NuGet as Brine2D)
-  Brine2D.Build/   - optional MSBuild tooling (Brine2D.Build, coming in 1.0)
+  Brine2D.Build/   - optional MSBuild tooling (published to NuGet as Brine2D.Build)
 samples/
   GettingStarted/  - numbered tutorials
   FeatureDemos/    - interactive feature showcase
@@ -1470,13 +1526,13 @@ tests/
 
 ## Platform Support
 
-| Platform | GPU Backend | Status |
+| Platform | GPU Backend | CI Status |
 |---|---|---|
 | Windows | Vulkan / Direct3D 12 | ✅ Tested |
-| macOS | Metal | ⚠️ Untested |
-| Linux | Vulkan | ⚠️ Untested |
+| macOS | Metal | ✅ CI green, runtime untested |
+| Linux | Vulkan | ✅ CI green, runtime untested |
 
-SDL3 provides the cross-platform layer. macOS and Linux should work. Community testing welcome.
+SDL3 provides the cross-platform layer. macOS and Linux build and test clean in CI. In-game runtime testing on those platforms is community-sourced — reports welcome.
 
 ---
 
@@ -1490,7 +1546,7 @@ SDL3 provides the cross-platform layer. macOS and Linux should work. Community t
 
 ## Current Status
 
-**Version 0.9.x-beta.** All core features working; API may change before 1.0.
+**Version 1.0.** All core features working.
 
 ✅ Working:
 - Scene management, transitions, loading screens
@@ -1507,19 +1563,14 @@ SDL3 provides the cross-platform layer. macOS and Linux should work. Community t
 - Tilemap support
 - Headless mode
 - Startup dependency validation
+- Entity/world persistence (`EntitySerializer`, `AotEntitySerializer`)
+- `Brine2D.Build` MSBuild tooling package (auto-generated asset constants)
+- Cross-platform CI (Windows, macOS, Linux)
 
 ⚠️ Known limitations:
-- macOS and Linux untested
+- macOS and Linux untested in production (CI green)
 - Documentation site in progress
-- Test coverage ~20% (target: 80% for 1.0)
-- API stability not guaranteed until 1.0
-
-**Coming in 1.0:**
-- [ ] Stable API
-- [ ] Complete documentation at [brine2d.com](https://brine2d.com)
-- [ ] macOS and Linux CI
-- [ ] 80%+ test coverage
-- [ ] `Brine2D.Build`: optional NuGet for auto-generated asset path constants
+- NativeAOT/trimmed-publish path for built-in engine components in progress (post-1.0)
 
 ---
 

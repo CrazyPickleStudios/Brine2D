@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Brine2D.Core;
 using Brine2D.ECS;
 using Microsoft.Extensions.Logging;
@@ -25,38 +26,45 @@ public class AnimatorComponent : Component, IDisposable
     private bool _disposed;
 
     /// <summary>The primary animator that drives sprite frame selection for this entity.</summary>
+    [JsonIgnore]
     public SpriteAnimator Animator { get; }
 
     /// <summary>
     /// The state machine that evaluates transitions each frame for the primary animator.
     /// </summary>
+    [JsonIgnore]
     public AnimationStateMachine StateMachine { get; }
 
     /// <summary>Shared parameter store for the primary <see cref="StateMachine"/> transition conditions.</summary>
+    [JsonIgnore]
     public AnimationParameters Parameters { get; } = new();
 
     /// <summary>
     /// Optional 1D blend tree for the primary animator. Evaluated automatically each frame by
     /// <see cref="Brine2D.Systems.Animation.AnimationSystem"/>.
     /// </summary>
+    [JsonIgnore]
     public AnimationBlendSelector1D? BlendSelector1D { get; set; }
 
     /// <summary>
     /// Optional 2D blend tree for the primary animator. When both <see cref="BlendSelector1D"/> and
     /// <see cref="BlendSelector2D"/> are set, <see cref="BlendSelector1D"/> takes precedence.
     /// </summary>
+    [JsonIgnore]
     public AnimationBlendSelector2D? BlendSelector2D { get; set; }
 
     /// <summary>
     /// Read-only ordered view of all additional animation layers, sorted by
     /// <see cref="AnimationLayer.Priority"/> ascending.
     /// </summary>
+    [JsonIgnore]
     public IReadOnlyList<AnimationLayer> Layers => _layers;
 
     /// <summary>
     /// Returns the <see cref="SpriteFrame.HitBox"/> of the primary animator's current frame,
     /// or <c>null</c> if no animation is playing or the current frame has no hitbox defined.
     /// </summary>
+    [JsonIgnore]
     public Rectangle? CurrentHitBox => Animator.CurrentFrame?.HitBox;
 
     /// <summary>

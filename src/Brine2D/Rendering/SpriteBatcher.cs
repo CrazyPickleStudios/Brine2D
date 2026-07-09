@@ -45,6 +45,7 @@ public sealed class SpriteBatcher : IDisposable
     /// <param name="origin">Origin point for rotation/scaling (0-1 range, default center).</param>
     /// <param name="tint">Color tint to apply.</param>
     /// <param name="layer">Rendering layer (lower = background, higher = foreground).</param>
+    /// <param name="orderInLayer">Secondary sort key within a layer. Lower values are drawn first (behind).</param>
     /// <param name="flip">Sprite flip flags.</param>
     /// <param name="blendMode">Blend mode for this sprite (default: Alpha).</param>
     public void Draw(
@@ -56,6 +57,7 @@ public sealed class SpriteBatcher : IDisposable
         Vector2 origin,
         Color tint,
         byte layer,
+        int orderInLayer = 0,
         SpriteFlip flip = SpriteFlip.None,
         BlendMode blendMode = BlendMode.Alpha)
     {
@@ -67,7 +69,7 @@ public sealed class SpriteBatcher : IDisposable
 
         _items.Add(new SpriteBatchItem(
             texture, position, sourceRect ?? texture.Bounds, scale,
-            rotation, origin, tint, layer, flip, blendMode,
+            rotation, origin, tint, layer, orderInLayer, flip, blendMode,
             _nextInsertionOrder++));
     }
 
@@ -123,64 +125,69 @@ public sealed class SpriteBatcher : IDisposable
         byte lastLayer = 0;
         BlendMode lastBlendMode = 0;
 
-        for (int i = 0; i < count; i++)
+        try
         {
-            ref readonly var item = ref span[_sortIndices[i]];
-
-            if (!item.Texture.IsLoaded)
-                continue;
-
-            if (drawCalls == 0)
+            for (int i = 0; i < count; i++)
             {
-                lastTexture = item.Texture;
-                lastLayer = item.Layer;
-                lastBlendMode = item.BlendMode;
-                drawContext.SetRenderLayer(lastLayer);
-                drawContext.SetBlendMode(lastBlendMode);
-                drawCalls = 1;
-            }
-            else
-            {
-                bool textureChanged = item.Texture != lastTexture;
-                bool layerChanged = item.Layer != lastLayer;
-                bool blendChanged = item.BlendMode != lastBlendMode;
+                ref readonly var item = ref span[_sortIndices[i]];
 
-                if (textureChanged || layerChanged || blendChanged)
+                if (!item.Texture.IsLoaded)
+                    continue;
+
+                if (drawCalls == 0)
                 {
-                    drawCalls++;
                     lastTexture = item.Texture;
+                    lastLayer = item.Layer;
+                    lastBlendMode = item.BlendMode;
+                    drawContext.SetRenderLayer(lastLayer);
+                    drawContext.SetBlendMode(lastBlendMode);
+                    drawCalls = 1;
+                }
+                else
+                {
+                    bool textureChanged = item.Texture != lastTexture;
+                    bool layerChanged = item.Layer != lastLayer;
+                    bool blendChanged = item.BlendMode != lastBlendMode;
 
-                    if (layerChanged)
+                    if (textureChanged || layerChanged || blendChanged)
                     {
-                        lastLayer = item.Layer;
-                        drawContext.SetRenderLayer(lastLayer);
-                    }
+                        drawCalls++;
+                        lastTexture = item.Texture;
 
-                    if (blendChanged)
-                    {
-                        lastBlendMode = item.BlendMode;
-                        drawContext.SetBlendMode(lastBlendMode);
+                        if (layerChanged)
+                        {
+                            lastLayer = item.Layer;
+                            drawContext.SetRenderLayer(lastLayer);
+                        }
+
+                        if (blendChanged)
+                        {
+                            lastBlendMode = item.BlendMode;
+                            drawContext.SetBlendMode(lastBlendMode);
+                        }
                     }
                 }
+
+                drawContext.DrawTexture(
+                    item.Texture,
+                    position: item.Position,
+                    sourceRect: item.SourceRect,
+                    origin: item.Origin,
+                    rotation: item.Rotation,
+                    scale: item.Scale,
+                    color: item.Tint,
+                    flip: item.Flip);
             }
-
-            drawContext.DrawTexture(
-                item.Texture,
-                position: item.Position,
-                sourceRect: item.SourceRect,
-                origin: item.Origin,
-                rotation: item.Rotation,
-                scale: item.Scale,
-                color: item.Tint,
-                flip: item.Flip);
         }
+        finally
+        {
+            _lastEstimatedDrawCalls = drawCalls;
+            _items.Clear();
+            _nextInsertionOrder = 0;
 
-        _lastEstimatedDrawCalls = drawCalls;
-        _items.Clear();
-        _nextInsertionOrder = 0;
-
-        drawContext.SetRenderLayer(savedLayer);
-        drawContext.SetBlendMode(savedBlendMode);
+            drawContext.SetRenderLayer(savedLayer);
+            drawContext.SetBlendMode(savedBlendMode);
+        }
 
         TryShrinkBuffers(count);
     }
@@ -239,6 +246,8 @@ public sealed class SpriteBatcher : IDisposable
 
             int layerCmp = itemA.Layer.CompareTo(itemB.Layer);
             if (layerCmp != 0) return layerCmp;
+            int orderCmp = itemA.OrderInLayer.CompareTo(itemB.OrderInLayer);
+            if (orderCmp != 0) return orderCmp;
             int blendCmp = itemA.BlendMode.CompareTo(itemB.BlendMode);
             if (blendCmp != 0) return blendCmp;
             int texCmp = itemA.Texture.SortKey.CompareTo(itemB.Texture.SortKey);
@@ -259,6 +268,7 @@ internal readonly struct SpriteBatchItem(
     Vector2 origin,
     Color tint,
     byte layer,
+    int orderInLayer,
     SpriteFlip flip,
     BlendMode blendMode,
     int insertionOrder)
@@ -271,6 +281,7 @@ internal readonly struct SpriteBatchItem(
     public readonly Vector2 Origin = origin;
     public readonly Color Tint = tint;
     public readonly byte Layer = layer;
+    public readonly int OrderInLayer = orderInLayer;
     public readonly SpriteFlip Flip = flip;
     public readonly BlendMode BlendMode = blendMode;
     public readonly int InsertionOrder = insertionOrder;

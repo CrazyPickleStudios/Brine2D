@@ -57,8 +57,13 @@ public class TransformComponent : Component
     }
 
     /// <summary>
-    ///     World-space rotation in radians. Additive through the parent hierarchy.
+    ///     World-space rotation in <b>radians</b>. Additive through the parent hierarchy.
     /// </summary>
+    /// <remarks>
+    ///     Transform rotation uses radians while <see cref="Brine2D.Rendering.ICamera.Rotation"/>
+    ///     (and <see cref="Brine2D.Rendering.Camera2D.Rotation"/>) uses degrees.
+    ///     Convert with <c>rotation * (180f / MathF.PI)</c> when assigning to a camera.
+    /// </remarks>
     public float Rotation
     {
         get

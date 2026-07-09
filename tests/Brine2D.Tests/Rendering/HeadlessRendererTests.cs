@@ -368,4 +368,43 @@ public class HeadlessRendererTests
         Assert.Throws<ObjectDisposedException>(() => renderer.MeasureText("x"));
         Assert.Throws<ObjectDisposedException>(() => renderer.DrawTexture(Substitute.For<ITexture>(), Vector2.Zero));
     }
+
+    [Fact]
+    public void PixelSnapping_DefaultIsTrue()
+    {
+        using var renderer = new HeadlessRenderer();
+
+        Assert.True(renderer.PixelSnapping);
+    }
+
+    [Fact]
+    public void PixelSnapping_SetAndGet_RoundTrips()
+    {
+        using var renderer = new HeadlessRenderer();
+
+        renderer.PixelSnapping = false;
+        Assert.False(renderer.PixelSnapping);
+
+        renderer.PixelSnapping = true;
+        Assert.True(renderer.PixelSnapping);
+    }
+
+    [Fact]
+    public async Task ReadPixelsAsync_ThrowsNotSupportedException()
+    {
+        using var renderer = new HeadlessRenderer();
+        var mockTexture = Substitute.For<ITexture>();
+
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => renderer.ReadPixelsAsync(mockTexture));
+    }
+
+    [Fact]
+    public async Task ReadPixelsAsync_NullTexture_ThrowsNotSupportedException()
+    {
+        using var renderer = new HeadlessRenderer();
+
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => renderer.ReadPixelsAsync(null!));
+    }
 }

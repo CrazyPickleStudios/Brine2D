@@ -31,4 +31,13 @@ public class TextureAtlasOptions
     /// Default texture scale mode for atlases (default: Nearest).
     /// </summary>
     public TextureScaleMode DefaultScaleMode { get; set; } = TextureScaleMode.Nearest;
+
+    /// <summary>
+    /// When greater than zero, duplicates the outermost row/column of each sprite into the
+    /// surrounding padding by this many pixels.
+    /// Prevents transparent-edge bleed when using linear (bilinear) filtering.
+    /// Only effective when <see cref="Padding"/> is at least as large as this value.
+    /// Default: 0 (no extrusion).
+    /// </summary>
+    public int Extrude { get; set; } = 0;
 }

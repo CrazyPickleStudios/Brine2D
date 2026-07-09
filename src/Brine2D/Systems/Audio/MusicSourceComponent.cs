@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Brine2D.Audio;
 
 namespace Brine2D.Systems.Audio;
@@ -25,6 +26,7 @@ public class MusicSourceComponent : AudioSourceComponent
     /// <summary>
     /// Music to play (looping background music).
     /// </summary>
+    [JsonIgnore]
     public IMusic? Music { get; set; }
 
     /// <summary>

@@ -56,6 +56,15 @@ public interface ITextureAtlasBuilder
     ITextureAtlasBuilder WithScaleMode(TextureScaleMode scaleMode);
 
     /// <summary>
+    /// Enables edge extrusion: duplicates each sprite's outermost pixels into the surrounding
+    /// padding by <paramref name="pixels"/> pixels to prevent transparent-edge bleed when
+    /// using linear (bilinear) filtering.
+    /// Requires <c>WithPadding</c> to be at least as large as this value.
+    /// </summary>
+    /// <param name="pixels">Number of pixels to extrude (0 = disabled).</param>
+    ITextureAtlasBuilder WithExtrude(int pixels);
+
+    /// <summary>
     /// Builds the texture atlas collection asynchronously.
     /// Loads all added textures, packs them, and creates atlas(es).
     /// Automatically creates multiple atlases if textures don't fit in one.

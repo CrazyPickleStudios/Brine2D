@@ -26,29 +26,30 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Publishing to NuGet.org..." -ForegroundColor Cyan
 
 $packages = @(
-    "Brine2D"
+    "Brine2D",
+    "Brine2D.Build"
 )
 
 $source = "https://api.nuget.org/v3/index.json"
 
 foreach ($package in $packages) {
-    $path = "src\$package\bin\Release\$package.0.9.7-beta.nupkg"
-    
-    Write-Host "Checking: $path" -ForegroundColor Yellow
-    
-    if (Test-Path $path) {
-        Write-Host "  Publishing $package..." -ForegroundColor Green
-        dotnet nuget push $path --api-key $ApiKey --source $source --skip-duplicate
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "    $package published!" -ForegroundColor Green
-        } else {
-            Write-Host "    $package failed or already exists" -ForegroundColor Yellow
-        }
+    $nupkgs = Get-ChildItem "src\$package\bin\Release\$package.*.nupkg" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notlike "*.symbols.nupkg" }
+
+    if ($nupkgs.Count -eq 0) {
+        Write-Host "  Package NOT FOUND in src\$package\bin\Release\" -ForegroundColor Red
+        continue
+    }
+
+    $path = ($nupkgs | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+
+    Write-Host "  Publishing $package from $path..." -ForegroundColor Green
+    dotnet nuget push $path --api-key $ApiKey --source $source --skip-duplicate
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "    $package published!" -ForegroundColor Green
     } else {
-        Write-Host "    Package NOT FOUND: $path" -ForegroundColor Red
-        Write-Host "    Available files:" -ForegroundColor Yellow
-        Get-ChildItem "src\$package\bin\Release\" | ForEach-Object { Write-Host "      $_" }
+        Write-Host "    $package failed or already exists" -ForegroundColor Yellow
     }
 }
 

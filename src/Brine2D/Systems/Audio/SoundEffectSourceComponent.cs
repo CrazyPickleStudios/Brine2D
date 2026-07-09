@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Brine2D.Audio;
 
 namespace Brine2D.Systems.Audio;
@@ -24,6 +25,7 @@ public class SoundEffectSourceComponent : AudioSourceComponent
     /// <summary>
     /// Sound effect to play.
     /// </summary>
+    [JsonIgnore]
     public ISoundEffect? SoundEffect { get; set; }
 
     /// <summary>
@@ -88,11 +90,13 @@ public class SoundEffectSourceComponent : AudioSourceComponent
     /// <summary>
     /// Calculated volume after spatial processing (managed by AudioSystem).
     /// </summary>
+    [JsonIgnore]
     public float SpatialVolume { get; internal set; } = 1.0f;
 
     /// <summary>
     /// Calculated stereo pan after spatial processing (managed by AudioSystem).
     /// </summary>
+    [JsonIgnore]
     public float SpatialPan { get; internal set; }
 
     /// <summary>
@@ -110,6 +114,7 @@ public class SoundEffectSourceComponent : AudioSourceComponent
     /// Calculated pitch multiplier from Doppler processing (managed by AudioSystem).
     /// Combined with <see cref="AudioSourceComponent.Pitch"/> when applying to the track.
     /// </summary>
+    [JsonIgnore]
     public float SpatialPitch { get; internal set; } = 1.0f;
 
     /// <summary>
@@ -176,5 +181,6 @@ public class SoundEffectSourceComponent : AudioSourceComponent
     /// Consumed and reset to <see langword="false"/> by <c>AudioSystem</c> each update.
     /// Does nothing if no tracks are active on this entity.
     /// </summary>
+    [JsonIgnore]
     public bool TriggerStopOldest { get; set; }
 }

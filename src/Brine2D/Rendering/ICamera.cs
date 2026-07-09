@@ -19,8 +19,12 @@ public interface ICamera
     float Zoom { get; set; }
 
     /// <summary>
-    /// Gets or sets the camera rotation in degrees.
+    /// Gets or sets the camera rotation in <b>degrees</b>.
     /// </summary>
+    /// <remarks>
+    /// Camera rotation uses degrees while <see cref="Brine2D.ECS.Components.TransformComponent.Rotation"/>
+    /// uses radians. Convert with <c>MathF.PI / 180f</c> when driving the camera from transform data.
+    /// </remarks>
     float Rotation { get; set; }
 
     /// <summary>

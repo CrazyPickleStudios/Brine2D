@@ -766,7 +766,7 @@ internal sealed partial class SDL3Renderer
             float u2 = (glyph.AtlasX + glyph.Width) / (float)atlasTexture.Width;
             float v2 = (glyph.AtlasY + glyph.Height) / (float)atlasTexture.Height;
 
-            _batchRenderer.DrawTexturedQuad(
+            _batchRenderer.DrawFontGlyph(
                 atlasTextureHandle,
                 atlasTexture.ScaleMode,
                 localCursorX,

@@ -28,6 +28,13 @@ public interface IRenderer : IDrawContext, IDisposable
     bool IsInitialized { get; }
 
     /// <summary>
+    /// Gets or sets whether sprite/primitive vertex positions are snapped to whole pixels
+    /// before submission to the GPU. Eliminates sub-pixel jitter for pixel-art games.
+    /// Defaults to the value configured in <see cref="RenderingOptions.PixelSnapping"/>.
+    /// </summary>
+    bool PixelSnapping { get; set; }
+
+    /// <summary>
     /// Gets or sets the active camera used for view-projection transforms.
     /// </summary>
     /// <remarks>
@@ -178,4 +185,19 @@ public interface IRenderer : IDrawContext, IDisposable
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if stack is empty</exception>
     void PopScissorRect();
+
+    /// <summary>
+    /// Asynchronously downloads the pixel data from a GPU texture to a CPU-side byte array.
+    /// </summary>
+    /// <param name="texture">The texture to read. Use <see cref="IRenderTarget.Texture"/> to read a render target.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// Raw pixel bytes in BGRA8 order (4 bytes per pixel, row-major).
+    /// The returned array has length <c>texture.Width × texture.Height × 4</c>.
+    /// </returns>
+    /// <remarks>
+    /// This is a potentially slow GPU readback operation. It submits a copy command, waits for
+    /// the GPU to finish, then maps the transfer buffer. Avoid calling every frame.
+    /// </remarks>
+    Task<byte[]> ReadPixelsAsync(ITexture texture, CancellationToken cancellationToken = default);
 }

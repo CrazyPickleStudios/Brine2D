@@ -11,7 +11,7 @@ namespace Brine2D.ECS.Serialization;
 /// <summary>
 /// Serializes and deserializes entities to/from JSON.
 /// Uses System.Text.Json with support for custom converters.
-/// Works automatically with ANY component type - no hardcoding needed!
+/// Works automatically with ANY component type — no registration needed.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,8 +29,8 @@ namespace Brine2D.ECS.Serialization;
 /// <para>
 /// <b>NativeAOT / trimming.</b> This class uses runtime reflection and dynamic JSON
 /// serialization to handle arbitrary component types. It is not compatible with
-/// NativeAOT or IL trimming as-is; use source-generated <c>JsonSerializerContext</c>
-/// with explicit type registration if either of those targets is required.
+/// NativeAOT or IL trimming. Use <see cref="AotEntitySerializer"/> with an explicit
+/// <see cref="ComponentTypeRegistry"/> when publishing with trimming or NativeAOT enabled.
 /// </para>
 /// </remarks>
 [RequiresDynamicCode("EntitySerializer uses runtime reflection and dynamic JSON serialization. Not compatible with NativeAOT.")]
@@ -39,7 +39,8 @@ public class EntitySerializer
 {
     // Locates the open-generic AddComponent<T>(T component) overload — the one that takes
     // a single parameter of the generic type T (not Action<T> and not parameterless).
-    private static readonly MethodInfo AddComponentMethod =
+    // Internal so ComponentTypeRegistry can reuse it for RegisterAllComponents / RegisterByType.
+    internal static readonly MethodInfo AddComponentMethod =
         typeof(Entity)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .First(m =>
@@ -52,23 +53,28 @@ public class EntitySerializer
     private readonly ILogger<EntitySerializer>? _logger;
     private readonly JsonSerializerOptions _options;
 
+    /// <summary>
+    /// Creates the default <see cref="JsonSerializerOptions"/> used by both
+    /// <see cref="EntitySerializer"/> and <see cref="ComponentTypeRegistry"/>.
+    /// </summary>
+    internal static JsonSerializerOptions CreateDefaultOptions() => new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters =
+        {
+            new JsonStringEnumConverter(),
+            new Vector2Converter()
+        },
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
+        IncludeFields = false
+    };
+
     public EntitySerializer(ILogger<EntitySerializer>? logger = null)
     {
         _logger = logger;
-
-        _options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters =
-            {
-                new JsonStringEnumConverter(),
-                new Vector2Converter()
-            },
-            ReferenceHandler = ReferenceHandler.IgnoreCycles,
-            IncludeFields = false
-        };
+        _options = CreateDefaultOptions();
     }
 
     /// <summary>

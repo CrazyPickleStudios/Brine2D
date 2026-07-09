@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Serialization;
 using Brine2D.Core;
 using Brine2D.ECS;
 
@@ -34,16 +35,19 @@ public class AIControllerComponent : Component
     /// <summary>
     /// Current target entity (set by AISystem).
     /// </summary>
+    [JsonIgnore]
     public Entity? CurrentTarget { get; internal set; }
 
     /// <summary>
     /// Current movement direction (calculated by AISystem).
     /// </summary>
+    [JsonIgnore]
     public Vector2 MoveDirection { get; internal set; }
 
     /// <summary>
     /// Whether the AI has a target in range.
     /// </summary>
+    [JsonIgnore]
     public bool HasTarget => CurrentTarget != null;
 
     // === Patrol Behavior ===
@@ -98,6 +102,7 @@ public class AIControllerComponent : Component
     /// <summary>
     /// Current distance to target (calculated by AISystem).
     /// </summary>
+    [JsonIgnore]
     public float DistanceToTarget { get; internal set; }
 }
 

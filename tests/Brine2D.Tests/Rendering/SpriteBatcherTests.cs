@@ -318,11 +318,149 @@ public class SpriteBatcherTests
     }
 
     [Fact]
+    public void Flush_SameLayer_SortsOrderInLayerAscending()
+    {
+        using var batcher = new SpriteBatcher();
+        var drawContext = Substitute.For<IDrawContext>();
+        var tex1 = CreateMockTexture(sortKey: 1);
+        var tex2 = CreateMockTexture(sortKey: 2);
+        var tex3 = CreateMockTexture(sortKey: 3);
+
+        // Add in reverse order-in-layer order so we can verify sorting flipped them.
+        batcher.Draw(tex1, Vector2.Zero, null, Vector2.One, 0f, Vector2.Zero, Color.White, layer: 0, orderInLayer: 10);
+        batcher.Draw(tex2, Vector2.Zero, null, Vector2.One, 0f, Vector2.Zero, Color.White, layer: 0, orderInLayer: -5);
+        batcher.Draw(tex3, Vector2.Zero, null, Vector2.One, 0f, Vector2.Zero, Color.White, layer: 0, orderInLayer: 0);
+
+        batcher.Flush(drawContext);
+
+        // After sort: tex2 (orderInLayer=-5), tex3 (orderInLayer=0), tex1 (orderInLayer=10).
+        Received.InOrder(() =>
+        {
+            drawContext.DrawTexture(tex2, Arg.Any<Vector2>(), Arg.Any<Rectangle?>(),
+                Arg.Any<Vector2?>(), Arg.Any<float>(), Arg.Any<Vector2?>(), Arg.Any<Color?>(), Arg.Any<SpriteFlip>());
+            drawContext.DrawTexture(tex3, Arg.Any<Vector2>(), Arg.Any<Rectangle?>(),
+                Arg.Any<Vector2?>(), Arg.Any<float>(), Arg.Any<Vector2?>(), Arg.Any<Color?>(), Arg.Any<SpriteFlip>());
+            drawContext.DrawTexture(tex1, Arg.Any<Vector2>(), Arg.Any<Rectangle?>(),
+                Arg.Any<Vector2?>(), Arg.Any<float>(), Arg.Any<Vector2?>(), Arg.Any<Color?>(), Arg.Any<SpriteFlip>());
+        });
+    }
+
+    [Fact]
+    public void Draw_WithoutOrderInLayer_DefaultsToZero()
+    {
+        using var batcher = new SpriteBatcher();
+        var drawContext = Substitute.For<IDrawContext>();
+        var texture = CreateMockTexture();
+
+        // Call without the optional orderInLayer parameter.
+        batcher.Draw(texture, Vector2.Zero, null, Vector2.One, 0f, Vector2.Zero, Color.White, layer: 0);
+
+        batcher.Flush(drawContext);
+
+        Assert.Equal(1, batcher.EstimatedDrawCalls);
+    }
+
+    [Fact]
     public void Dispose_IsIdempotent()
     {
         var batcher = new SpriteBatcher();
 
         batcher.Dispose();
         batcher.Dispose();
+    }
+
+    [Fact]
+    public void Flush_DrawThrows_StillRestoresLayerAndBlendMode()
+    {
+        using var batcher = new SpriteBatcher();
+        var drawContext = Substitute.For<IDrawContext>();
+        drawContext.GetRenderLayer().Returns((byte)7);
+        drawContext.GetBlendMode().Returns(BlendMode.Multiply);
+
+        var texture = CreateMockTexture(isLoaded: true);
+        AddSprite(batcher, texture, layer: 0, blendMode: BlendMode.Alpha);
+
+        drawContext
+            .When(d => d.DrawTexture(
+                Arg.Any<ITexture>(),
+                Arg.Any<Vector2>(),
+                Arg.Any<Rectangle?>(),
+                Arg.Any<Vector2?>(),
+                Arg.Any<float>(),
+                Arg.Any<Vector2?>(),
+                Arg.Any<Color?>(),
+                Arg.Any<SpriteFlip>()))
+            .Do(_ => throw new InvalidOperationException("simulated draw failure"));
+
+        Assert.Throws<InvalidOperationException>(() => batcher.Flush(drawContext));
+
+        drawContext.Received(1).SetRenderLayer(7);
+        drawContext.Received(1).SetBlendMode(BlendMode.Multiply);
+    }
+
+    [Fact]
+    public void Draw_WithFlipHorizontal_PassesFlagThrough()
+    {
+        using var batcher = new SpriteBatcher();
+        var drawContext = Substitute.For<IDrawContext>();
+        var texture = CreateMockTexture(isLoaded: true);
+
+        batcher.Draw(texture, Vector2.Zero, null, Vector2.One, 0f, Vector2.Zero,
+            Color.White, layer: 0, flip: SpriteFlip.Horizontal);
+        batcher.Flush(drawContext);
+
+        drawContext.Received(1).DrawTexture(
+            texture,
+            Arg.Any<Vector2>(),
+            Arg.Any<Rectangle?>(),
+            Arg.Any<Vector2?>(),
+            Arg.Any<float>(),
+            Arg.Any<Vector2?>(),
+            Arg.Any<Color?>(),
+            SpriteFlip.Horizontal);
+    }
+
+    [Fact]
+    public void Draw_WithFlipVertical_PassesFlagThrough()
+    {
+        using var batcher = new SpriteBatcher();
+        var drawContext = Substitute.For<IDrawContext>();
+        var texture = CreateMockTexture(isLoaded: true);
+
+        batcher.Draw(texture, Vector2.Zero, null, Vector2.One, 0f, Vector2.Zero,
+            Color.White, layer: 0, flip: SpriteFlip.Vertical);
+        batcher.Flush(drawContext);
+
+        drawContext.Received(1).DrawTexture(
+            texture,
+            Arg.Any<Vector2>(),
+            Arg.Any<Rectangle?>(),
+            Arg.Any<Vector2?>(),
+            Arg.Any<float>(),
+            Arg.Any<Vector2?>(),
+            Arg.Any<Color?>(),
+            SpriteFlip.Vertical);
+    }
+
+    [Fact]
+    public void Draw_WithFlipBoth_PassesCombinedFlagThrough()
+    {
+        using var batcher = new SpriteBatcher();
+        var drawContext = Substitute.For<IDrawContext>();
+        var texture = CreateMockTexture(isLoaded: true);
+
+        batcher.Draw(texture, Vector2.Zero, null, Vector2.One, 0f, Vector2.Zero,
+            Color.White, layer: 0, flip: SpriteFlip.Horizontal | SpriteFlip.Vertical);
+        batcher.Flush(drawContext);
+
+        drawContext.Received(1).DrawTexture(
+            texture,
+            Arg.Any<Vector2>(),
+            Arg.Any<Rectangle?>(),
+            Arg.Any<Vector2?>(),
+            Arg.Any<float>(),
+            Arg.Any<Vector2?>(),
+            Arg.Any<Color?>(),
+            SpriteFlip.Horizontal | SpriteFlip.Vertical);
     }
 }

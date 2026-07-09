@@ -54,6 +54,8 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
 
     private Color _clearColor = new Color(52, 78, 65, 255);
 
+    private bool _pixelSnapping;
+
     private readonly nint[] _blendModePipelines = new nint[Enum.GetValues<BlendMode>().Length];
     private readonly nint[] _postProcessBlendModePipelines = new nint[Enum.GetValues<BlendMode>().Length];
     private SDL3.SDL.GPUTextureFormat _postProcessFormat;
@@ -114,6 +116,16 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         set => _clearColor = value;
     }
 
+    public bool PixelSnapping
+    {
+        get => _pixelSnapping;
+        set
+        {
+            _pixelSnapping = value;
+            _batchRenderer.PixelSnapping = value;
+        }
+    }
+
     public nint Window => _window;
     public nint Device => _device;
     internal GpuDeviceHandle? GpuDevice => _gpuDeviceHandle;
@@ -168,6 +180,8 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         _batchRenderer = new SDL3BatchRenderer(
             _loggerFactory.CreateLogger<SDL3BatchRenderer>(),
             renderingOptions);
+
+        _pixelSnapping = renderingOptions.PixelSnapping;
 
         _particleRenderer = new SDL3ParticleRenderer(
             _loggerFactory.CreateLogger<SDL3ParticleRenderer>(),
@@ -251,6 +265,10 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             var driverName = SDL3.SDL.GetGPUDeviceDriver(_device);
             _logger.LogInformation("GPU renderer initialized with driver: {Driver}, swapchain format: {Format}",
                 driverName, _swapchainFormat);
+
+            if (_renderingOptions.MsaaSamples > 1)
+                _logger.LogWarning("MsaaSamples = {Samples} is set but MSAA is not yet implemented; running at 1x (no MSAA)",
+                    _renderingOptions.MsaaSamples);
 
             _shaderLoader = new SDL3ShaderLoader(
                 _loggerFactory.CreateLogger<SDL3ShaderLoader>(),
@@ -1053,6 +1071,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         if (_device != nint.Zero)
         {
             SDL3.SDL.WaitForGPUIdle(_device);
+            _logger.LogDebug("GPU idle confirmed; draining {Count} pending texture upload(s)", _pendingUploads.Count);
             DrainPendingUploads();
             _frameManager.Dispose();
         }

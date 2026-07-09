@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Box2D.NET.Bindings;
 using Brine2D.Physics;
 
@@ -171,6 +172,7 @@ public sealed class SubShape
     ///     The callback is invoked from the Box2D broad-phase on the simulation thread — keep it
     ///     allocation-free.
     /// </summary>
+    [JsonIgnore]
     public Func<PhysicsBodyComponent, SubShape?, bool>? ShouldCollide
     {
         get;

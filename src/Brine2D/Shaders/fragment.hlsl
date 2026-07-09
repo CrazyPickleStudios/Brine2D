@@ -16,7 +16,7 @@ float4 main(PSInput input) : SV_Target
     // Normal texture UVs are always in [0,1] so the threshold is unambiguous.
     // One bounding quad replaces N CPU-computed geometry segments; fwidth() gives
     // sub-pixel anti-aliasing that scales automatically with circle size and camera zoom.
-    if (uv.x >= 1.5)
+    if (uv.x >= 1.5 && uv.x < 3.5)
     {
         float2 circleUV = uv - 2.0;
         float dist = length(circleUV - 0.5);
@@ -26,17 +26,16 @@ float4 main(PSInput input) : SV_Target
         return float4(input.Color.rgb, input.Color.a * alpha);
     }
 
-    float4 texColor = Texture.Sample(Sampler, uv);
-
-    float grayscale = (texColor.r + texColor.g + texColor.b) / 3.0;
-    bool isFont = grayscale > 0.95 &&
-                  abs(texColor.r - texColor.g) < 0.01 &&
-                  abs(texColor.g - texColor.b) < 0.01;
-
-    if (isFont)
+    // Font glyph: TexCoord.x >= 3.5 signals a font-atlas quad.
+    // The actual UV is encoded in (uv - 4.0) so it maps back to [0,1].
+    // Using this explicit sentinel removes the fragile near-white grayscale heuristic.
+    if (uv.x >= 3.5)
     {
+        float2 fontUV = uv - float2(4.0, 4.0);
+        float4 texColor = Texture.Sample(Sampler, fontUV);
         return float4(input.Color.rgb, input.Color.a * texColor.a);
     }
 
+    float4 texColor = Texture.Sample(Sampler, uv);
     return texColor * input.Color;
 }

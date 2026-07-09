@@ -27,6 +27,7 @@ public sealed class TextureAtlasBuilder : ITextureAtlasBuilder
     private int _padding = 2;
     private bool _usePowerOfTwo = true;
     private TextureScaleMode _scaleMode = TextureScaleMode.Nearest;
+    private int _extrude = 0;
 
     public TextureAtlasBuilder(
         ITextureLoader textureLoader,
@@ -49,6 +50,7 @@ public sealed class TextureAtlasBuilder : ITextureAtlasBuilder
         _padding = _options.Padding;
         _usePowerOfTwo = _options.UsePowerOfTwo;
         _scaleMode = _options.DefaultScaleMode;
+        _extrude = _options.Extrude;
     }
 
     public ITextureAtlasBuilder WithName(string name)
@@ -107,6 +109,12 @@ public sealed class TextureAtlasBuilder : ITextureAtlasBuilder
     public ITextureAtlasBuilder WithScaleMode(TextureScaleMode scaleMode)
     {
         _scaleMode = scaleMode;
+        return this;
+    }
+
+    public ITextureAtlasBuilder WithExtrude(int pixels)
+    {
+        _extrude = Math.Max(0, pixels);
         return this;
     }
 
@@ -281,6 +289,9 @@ public sealed class TextureAtlasBuilder : ITextureAtlasBuilder
                 {
                     _logger.LogWarning("Failed to blit texture '{Name}' to atlas", region.Name);
                 }
+
+                if (_extrude > 0)
+                    ExtrudeRegion(atlasSurface, region.X, region.Y, region.Width, region.Height, _extrude);
             }
 
             // Create GPU texture
@@ -398,10 +409,91 @@ public sealed class TextureAtlasBuilder : ITextureAtlasBuilder
         return packed;
     }
 
+    /// <summary>
+    /// Copies the outermost pixel row/column of a packed sprite region into the surrounding
+    /// padding area. This prevents transparent-edge bleed when linear filtering samples
+    /// outside the logical sprite boundary.
+    /// </summary>
+    private static unsafe void ExtrudeRegion(nint surface, int rx, int ry, int rw, int rh, int extrude)
+    {
+        if (rw <= 0 || rh <= 0 || extrude <= 0 || surface == nint.Zero) return;
+
+        var s = System.Runtime.InteropServices.Marshal.PtrToStructure<SDL3.SDL.Surface>(surface);
+        int surfaceWidth = s.Width;
+        int surfaceHeight = s.Height;
+        int pitch = s.Pitch;
+        byte* pixels = (byte*)s.Pixels;
+
+        if (pixels == null) return;
+
+        int ext = Math.Min(extrude, Math.Min(rx, ry));
+        if (ext <= 0) return;
+
+        // Blit top edge
+        for (int e = 1; e <= ext; e++)
+        {
+            int srcRow = ry;
+            int dstRow = ry - e;
+            if (dstRow < 0) break;
+            Buffer.MemoryCopy(
+                pixels + srcRow * pitch + rx * 4,
+                pixels + dstRow * pitch + rx * 4,
+                (nuint)(rw * 4),
+                (nuint)(rw * 4));
+        }
+
+        // Blit bottom edge
+        for (int e = 1; e <= ext; e++)
+        {
+            int srcRow = ry + rh - 1;
+            int dstRow = ry + rh - 1 + e;
+            if (dstRow >= surfaceHeight) break;
+            Buffer.MemoryCopy(
+                pixels + srcRow * pitch + rx * 4,
+                pixels + dstRow * pitch + rx * 4,
+                (nuint)(rw * 4),
+                (nuint)(rw * 4));
+        }
+
+        // Blit left edge column-by-column
+        for (int row = ry - ext; row < ry + rh + ext; row++)
+        {
+            if (row < 0 || row >= surfaceHeight) continue;
+            byte* srcPixel = pixels + row * pitch + rx * 4;
+            for (int e = 1; e <= ext; e++)
+            {
+                int dstCol = rx - e;
+                if (dstCol < 0) break;
+                byte* dstPixel = pixels + row * pitch + dstCol * 4;
+                dstPixel[0] = srcPixel[0];
+                dstPixel[1] = srcPixel[1];
+                dstPixel[2] = srcPixel[2];
+                dstPixel[3] = srcPixel[3];
+            }
+        }
+
+        // Blit right edge column-by-column
+        for (int row = ry - ext; row < ry + rh + ext; row++)
+        {
+            if (row < 0 || row >= surfaceHeight) continue;
+            byte* srcPixel = pixels + row * pitch + (rx + rw - 1) * 4;
+            for (int e = 1; e <= ext; e++)
+            {
+                int dstCol = rx + rw - 1 + e;
+                if (dstCol >= surfaceWidth) break;
+                byte* dstPixel = pixels + row * pitch + dstCol * 4;
+                dstPixel[0] = srcPixel[0];
+                dstPixel[1] = srcPixel[1];
+                dstPixel[2] = srcPixel[2];
+                dstPixel[3] = srcPixel[3];
+            }
+        }
+    }
+
     private static int NextPowerOfTwo(int value)
     {
         if (value <= 0) return 1;
-        
+
         value--;
         value |= value >> 1;
         value |= value >> 2;

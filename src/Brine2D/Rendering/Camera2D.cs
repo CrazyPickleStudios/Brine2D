@@ -54,6 +54,13 @@ public sealed class Camera2D : ICamera, IShakableCamera, ITrackableCamera, IDisp
         }
     }
 
+    /// <summary>
+    /// Gets or sets the camera rotation in <b>degrees</b>.
+    /// </summary>
+    /// <remarks>
+    /// This value is in degrees, unlike <see cref="Brine2D.ECS.Components.TransformComponent.Rotation"/>
+    /// which is in radians. Use <c>MathF.PI / 180f</c> to convert if needed.
+    /// </remarks>
     public float Rotation
     {
         get => _rotation;
