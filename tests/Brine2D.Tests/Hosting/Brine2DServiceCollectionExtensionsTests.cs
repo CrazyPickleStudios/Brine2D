@@ -2,6 +2,7 @@ using System.Numerics;
 using Brine2D.Hosting;
 using Brine2D.Physics;
 using Brine2D.Rendering;
+using Brine2D.Rendering.SDL.PostProcessing;
 using Brine2D.Systems.Physics;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -76,5 +77,47 @@ public class Brine2DServiceCollectionExtensionsTests
         var camera = scope.ServiceProvider.GetRequiredService<ICamera>();
 
         camera.Position.Should().Be(new Vector2(512f, 384f));
+    }
+
+    [Fact]
+    public void DefaultCamera_UsesLetterboxDesignResolution_WhenRegistered_OverridingRendererSize()
+    {
+        // Renderer reports the live (larger) window size, but the camera should match the
+        // fixed design resolution that AddLetterbox() actually renders game-world content into.
+        var renderer = Substitute.For<IRenderer>();
+        renderer.Width.Returns(1920);
+        renderer.Height.Returns(1080);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(renderer);
+        services.AddSingleton(new LetterboxDesignResolution(1280, 720));
+        services.AddBrine2D();
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var camera = scope.ServiceProvider.GetRequiredService<ICamera>();
+
+        camera.ViewportWidth.Should().Be(1280);
+        camera.ViewportHeight.Should().Be(720);
+        camera.Position.Should().Be(new Vector2(640f, 360f));
+    }
+
+    [Fact]
+    public void DefaultCamera_UsesRendererSize_WhenLetterboxDesignResolutionNotRegistered()
+    {
+        var renderer = Substitute.For<IRenderer>();
+        renderer.Width.Returns(800);
+        renderer.Height.Returns(600);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(renderer);
+        services.AddBrine2D();
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var camera = scope.ServiceProvider.GetRequiredService<ICamera>();
+
+        camera.ViewportWidth.Should().Be(800);
+        camera.ViewportHeight.Should().Be(600);
     }
 }

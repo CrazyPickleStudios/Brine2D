@@ -8,6 +8,7 @@ using Brine2D.Input;
 using Brine2D.Physics;
 using Brine2D.Pooling;
 using Brine2D.Rendering;
+using Brine2D.Rendering.SDL.PostProcessing;
 using Brine2D.Threading;
 using Brine2D.UI;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,13 +94,25 @@ public static class Brine2DServiceCollectionExtensions
         services.TryAddTransient<DefaultFallbackScene>();
 
         // Camera registration with ICameraManager is handled by SceneManager.SetupScene; DI factories must be side-effect-free.
+        // When AddLetterbox() is configured, all game-world rendering happens in the fixed
+        // design resolution (not the live window/viewport size), so the camera's viewport
+        // must match the design resolution rather than the renderer/window size.
         services.TryAddScoped<ICamera>(sp =>
         {
-            var renderer = sp.GetService<IRenderer>();
-            var windowOptions = sp.GetRequiredService<WindowOptions>();
-            var (w, h) = renderer is { Width: > 0, Height: > 0 }
-                ? (renderer.Width, renderer.Height)
-                : (windowOptions.Width, windowOptions.Height);
+            var designResolution = sp.GetService<LetterboxDesignResolution>();
+            int w, h;
+            if (designResolution != null)
+            {
+                (w, h) = (designResolution.Width, designResolution.Height);
+            }
+            else
+            {
+                var renderer = sp.GetService<IRenderer>();
+                var windowOptions = sp.GetRequiredService<WindowOptions>();
+                (w, h) = renderer is { Width: > 0, Height: > 0 }
+                    ? (renderer.Width, renderer.Height)
+                    : (windowOptions.Width, windowOptions.Height);
+            }
 
             return new Camera2D(w, h) { Position = new Vector2(w / 2f, h / 2f) };
         });
