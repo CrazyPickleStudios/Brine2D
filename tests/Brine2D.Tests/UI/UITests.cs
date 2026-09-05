@@ -1,4 +1,5 @@
 ﻿using Brine2D.Core;
+using Brine2D.Events;
 using Brine2D.Input;
 using Brine2D.Rendering;
 using Brine2D.Rendering.Text;
@@ -61,6 +62,25 @@ public class UITests
         button.Render(renderer);
 
         renderer.DidNotReceiveWithAnyArgs().DrawText(default!, default, default, default(TextRenderOptions));
+    }
+
+    [Fact]
+    public void UIButton_ParameterlessConstructor_DefaultsToNonZeroSize()
+    {
+        var button = new UIButton();
+
+        button.Text.Should().BeEmpty();
+        button.Position.Should().Be(Vector2.Zero);
+        button.Size.Should().Be(UIButton.DefaultSize);
+        button.Size.Should().NotBe(Vector2.Zero);
+    }
+
+    [Fact]
+    public void UIButton_Constructor_TextAndPositionOnly_DefaultsSizeToNonZero()
+    {
+        var button = new UIButton("OK", new Vector2(10f, 20f));
+
+        button.Size.Should().Be(UIButton.DefaultSize);
     }
 
     [Fact]
@@ -727,6 +747,58 @@ public class UITests
         Assert.False(textInput.IsFocused);
     }
 
+    [Fact]
+    public void UICanvas_WithEventBus_DoesNotAutoTrackResizeByDefault()
+    {
+        var eventBus = new EventBus();
+        var canvas = new UICanvas(MakeInput(), eventBus);
+        canvas.ScreenSize = new Vector2(1280f, 720f);
+
+        eventBus.Publish(new WindowResizedEvent(800, 600));
+
+        Assert.Equal(new Vector2(1280f, 720f), canvas.ScreenSize);
+    }
+
+    [Fact]
+    public void UICanvas_AutoResizeToWindow_True_TracksWindowResizedEvent()
+    {
+        var eventBus = new EventBus();
+        var canvas = new UICanvas(MakeInput(), eventBus)
+        {
+            AutoResizeToWindow = true
+        };
+
+        eventBus.Publish(new WindowResizedEvent(800, 600));
+
+        Assert.Equal(new Vector2(800f, 600f), canvas.ScreenSize);
+    }
+
+    [Fact]
+    public void UICanvas_AutoResizeToWindow_SetFalseAfterTrue_StopsTrackingResize()
+    {
+        var eventBus = new EventBus();
+        var canvas = new UICanvas(MakeInput(), eventBus)
+        {
+            AutoResizeToWindow = true
+        };
+        eventBus.Publish(new WindowResizedEvent(800, 600));
+
+        canvas.AutoResizeToWindow = false;
+        eventBus.Publish(new WindowResizedEvent(400, 300));
+
+        Assert.Equal(new Vector2(800f, 600f), canvas.ScreenSize);
+    }
+
+    [Fact]
+    public void UICanvas_AutoResizeToWindow_NoEventBusSupplied_DoesNotThrow()
+    {
+        var canvas = new UICanvas(MakeInput());
+
+        canvas.AutoResizeToWindow = true;
+
+        Assert.True(canvas.AutoResizeToWindow);
+    }
+
     #endregion
 
     #region UIPanel
@@ -914,6 +986,23 @@ public class UITests
 
         label.Size.X.Should().BeGreaterThan(0f);
         label.Size.Y.Should().BeGreaterThan(0f);
+    }
+
+    [Fact]
+    public void UILabel_ParameterlessConstructor_DefaultsToEmptyTextAndZeroPosition()
+    {
+        var label = new UILabel();
+
+        label.Text.Should().BeEmpty();
+        label.Position.Should().Be(Vector2.Zero);
+    }
+
+    [Fact]
+    public void UILabel_Constructor_TextOnly_DefaultsPositionToZero()
+    {
+        var label = new UILabel("Hi");
+
+        label.Position.Should().Be(Vector2.Zero);
     }
 
     [Fact]
@@ -1853,6 +1942,25 @@ public class UIReviewFixTests
         panel.ClearChildren();
 
         panel.GetChildren().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void UIPanel_Render_AnchoredChild_BottomRight_UsesSizeAwarePosition()
+    {
+        var renderer = MakeRenderer();
+        var panel = new UIPanel(new Vector2(0, 0), new Vector2(200, 100));
+        var child = new UIButton("B", Vector2.Zero, new Vector2(40, 20))
+        {
+            Anchor = UIAnchor.BottomRight
+        };
+        panel.AddChild(child);
+
+        panel.Render(renderer);
+
+        // Size-aware default: BottomRight resolves to (panelSize - childSize), so the child's
+        // own bottom-right corner (not its top-left) lands on the panel's bottom-right corner
+        // with zero AnchorOffset needed: (200 - 40, 100 - 20) = (160, 80).
+        renderer.Received().DrawRectangleFilled(160f, 80f, Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>());
     }
 
     [Fact]

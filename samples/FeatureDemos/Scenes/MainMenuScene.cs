@@ -58,6 +58,7 @@ public class MainMenuScene : Scene
             // Rendering
             new("Texture Atlasing",      () => _sceneManager.LoadScene<TextureAtlasDemoScene>(new FadeTransition(0.5f, Color.Black)),     "Sprite batching & atlases",      "Rendering"),
             new("Scissor Rects",         () => _sceneManager.LoadScene<ScissorRectDemoScene>(new FadeTransition(0.5f, Color.Black)),       "UI clipping & scroll views",     "Rendering"),
+            new("Letterbox",             () => _sceneManager.LoadScene<LetterboxDemoScene>(new FadeTransition(0.5f, Color.Black)),          "Fixed-aspect-ratio scaling",     "Rendering"),
 
             // Physics
             new("Box2D Physics",         () => _sceneManager.LoadScene<PhysicsDemoScene>(new FadeTransition(0.5f, Color.Black)),           "Rigid body simulation",          "Physics"),

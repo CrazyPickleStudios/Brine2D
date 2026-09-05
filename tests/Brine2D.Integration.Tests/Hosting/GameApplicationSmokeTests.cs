@@ -1,7 +1,6 @@
 using Brine2D.Core;
 using Brine2D.Engine;
 using Brine2D.Hosting;
-using Brine2D.Systems.Physics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -15,8 +14,7 @@ public class GameApplicationSmokeTests
 {
     private static GameApplicationBuilder HeadlessBuilder() =>
         GameApplication.CreateBuilder()
-            .Configure(o => o.Headless = true)
-            .ExcludeDefaultSystem<Box2DPhysicsSystem>();
+            .Configure(o => o.Headless = true);
 
     [Fact]
     public async Task Build_InHeadlessMode_SucceedsAndDisposesCleanly()

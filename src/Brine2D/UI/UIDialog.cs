@@ -294,7 +294,7 @@ public class UIDialog : IUIComponent
                 (anchoredChild.Anchor != UIAnchor.TopLeft || anchoredChild.AnchorOffset != Vector2.Zero))
             {
                 var saved = anchoredChild.Position;
-                var anchorOrigin = UIAnchorResolver.Resolve(anchoredChild.Anchor, Size.X, Size.Y);
+                var anchorOrigin = UIAnchorResolver.Resolve(anchoredChild.Anchor, Size.X, Size.Y, anchoredChild.Size);
                 anchoredChild.Position = _position + anchorOrigin + anchoredChild.AnchorOffset;
                 child.Render(renderer);
                 anchoredChild.Position = saved;

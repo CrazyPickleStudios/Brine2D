@@ -38,7 +38,9 @@ public class SDL3PostProcessPipeline : PostProcessPipeline, IDisposable
     }
 
     /// <summary>
-    /// Propagate new dimensions to all SDL3 post-process effects.
+    /// Propagate new dimensions to all SDL3 post-process effects, except
+    /// <see cref="Effects.LetterboxEffect"/> (which tracks the live swapchain size instead,
+    /// via <see cref="SetSwapchainDimensions"/>).
     /// Call this when render targets are recreated (e.g. on window resize).
     /// If effects haven't been initialized yet, dimensions are deferred until first Execute.
     /// </summary>
@@ -48,6 +50,23 @@ public class SDL3PostProcessPipeline : PostProcessPipeline, IDisposable
         _pendingHeight = height;
 
         foreach (var effect in _effects.OfType<ISDL3PostProcessEffect>())
+        {
+            if (effect is Effects.LetterboxEffect)
+                continue;
+
+            effect.SetDimensions(width, height);
+        }
+    }
+
+    /// <summary>
+    /// Propagate the live swapchain (window) size to any registered
+    /// <see cref="Effects.LetterboxEffect"/>. Unlike <see cref="SetEffectDimensions"/>, this
+    /// does not affect other effects and is safe to call every frame or on every resize
+    /// even when the main/ping-pong render targets stay at a fixed design resolution.
+    /// </summary>
+    public void SetSwapchainDimensions(int width, int height)
+    {
+        foreach (var effect in _effects.OfType<Effects.LetterboxEffect>())
         {
             effect.SetDimensions(width, height);
         }
@@ -67,6 +86,10 @@ public class SDL3PostProcessPipeline : PostProcessPipeline, IDisposable
         }
 
         EnsureSorted();
+
+        // Letterbox effects always fit into the true swapchain size, which is authoritative
+        // here every frame — sync directly rather than relying solely on resize-event timing.
+        SetSwapchainDimensions(targetWidth, targetHeight);
 
         _enabledEffectsCache.Clear();
         foreach (var effect in _effects)
@@ -213,6 +236,9 @@ public class SDL3PostProcessPipeline : PostProcessPipeline, IDisposable
         {
             foreach (var effect in _effects.OfType<ISDL3PostProcessEffect>())
             {
+                if (effect is Effects.LetterboxEffect)
+                    continue;
+
                 effect.SetDimensions(_pendingWidth, _pendingHeight);
             }
         }

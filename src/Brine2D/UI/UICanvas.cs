@@ -88,6 +88,8 @@ public class UICanvas : IInputLayer, IDisposable
 
     private IUIComponent? _focusedWidget;
     private IDisposable? _resizeSubscription;
+    private readonly IEventBus? _eventBus;
+    private bool _autoResizeToWindow;
 
     // When the active dropdown lives inside a UIScrollView its expanded list is drawn
     // as a top-level overlay. This field holds the resolved screen position of the dropdown
@@ -210,15 +212,49 @@ public class UICanvas : IInputLayer, IDisposable
     }
 
     /// <summary>
-    /// Creates a canvas subscribed to <see cref="WindowResizedEvent"/> on
-    /// <paramref name="eventBus"/> so <see cref="ScreenSize"/> tracks window resizes.
-    /// The subscription is released on <see cref="Dispose"/>.
+    /// Creates a canvas that can auto-track <see cref="WindowResizedEvent"/> on
+    /// <paramref name="eventBus"/> when <see cref="AutoResizeToWindow"/> is set to
+    /// <see langword="true"/>. The event bus is captured but no subscription is created
+    /// until <see cref="AutoResizeToWindow"/> is explicitly opted into — presence of an
+    /// event bus alone no longer implies automatic resize tracking.
     /// </summary>
     public UICanvas(IInputContext input, IEventBus eventBus)
         : this(input)
     {
-        _resizeSubscription = eventBus.Subscribe<WindowResizedEvent>(e =>
-            ScreenSize = new Vector2(e.Width, e.Height));
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+    }
+
+    /// <summary>
+    /// When <see langword="true"/>, subscribes to <see cref="WindowResizedEvent"/> on the
+    /// <see cref="IEventBus"/> supplied via the <see cref="UICanvas(IInputContext, IEventBus)"/>
+    /// constructor so <see cref="ScreenSize"/> tracks window resizes automatically. Defaults to
+    /// <see langword="false"/> — resize tracking is an explicit opt-in, not an implicit side
+    /// effect of an event bus being available. Setting this to <see langword="false"/> after
+    /// having been <see langword="true"/> unsubscribes. No-op (does not throw) if no
+    /// <see cref="IEventBus"/> was supplied at construction — <see cref="ScreenSize"/> must
+    /// then be updated manually.
+    /// </summary>
+    public bool AutoResizeToWindow
+    {
+        get => _autoResizeToWindow;
+        set
+        {
+            if (_autoResizeToWindow == value)
+                return;
+
+            _autoResizeToWindow = value;
+
+            if (value)
+            {
+                _resizeSubscription = _eventBus?.Subscribe<WindowResizedEvent>(e =>
+                    ScreenSize = new Vector2(e.Width, e.Height));
+            }
+            else
+            {
+                _resizeSubscription?.Dispose();
+                _resizeSubscription = null;
+            }
+        }
     }
 
     /// <summary>
@@ -923,7 +959,7 @@ public class UICanvas : IInputLayer, IDisposable
             if (component is IAnchoredUIComponent anchored &&
                 (anchored.Anchor != UIAnchor.TopLeft || anchored.AnchorOffset != Vector2.Zero))
             {
-                var anchorOrigin = UIAnchorResolver.Resolve(anchored.Anchor, _screenSize.X, _screenSize.Y);
+                var anchorOrigin = UIAnchorResolver.Resolve(anchored.Anchor, _screenSize.X, _screenSize.Y, anchored.Size);
                 var resolvedPosition = anchorOrigin + anchored.AnchorOffset;
 
                 var saved = anchored.Position;

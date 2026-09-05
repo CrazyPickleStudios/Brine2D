@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# Internal process/working notes (not part of the shipped repo)
+/BACKLOG.md
+/NOTES_FOR_DOCS.md
+
 # User-specific files
 *.rsuser
 *.suo

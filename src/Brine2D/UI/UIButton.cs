@@ -150,11 +150,17 @@ public class UIButton : IUIComponent, IAnchoredUIComponent
     /// </summary>
     public Color TextureTint { get; set; } = Color.White;
 
-    public UIButton(string text, Vector2 position, Vector2 size)
+    /// <summary>
+    /// Default button size used when <paramref name="size"/> is not specified, so an
+    /// anchor-driven/object-initializer <c>new UIButton()</c> is never invisibly zero-size.
+    /// </summary>
+    public static readonly Vector2 DefaultSize = new Vector2(120, 40);
+
+    public UIButton(string text = "", Vector2 position = default, Vector2? size = null)
     {
         Text = text;
         Position = position;
-        Size = size;
+        Size = size ?? DefaultSize;
     }
 
     public void Update(float deltaTime)

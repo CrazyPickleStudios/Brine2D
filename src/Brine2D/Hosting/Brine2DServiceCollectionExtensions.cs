@@ -1,11 +1,15 @@
+using System.Numerics;
 using Brine2D.Assets;
 using Brine2D.Audio;
 using Brine2D.ECS;
 using Brine2D.Engine;
 using Brine2D.Events;
+using Brine2D.Input;
+using Brine2D.Physics;
 using Brine2D.Pooling;
 using Brine2D.Rendering;
 using Brine2D.Threading;
+using Brine2D.UI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -39,6 +43,11 @@ public static class Brine2DServiceCollectionExtensions
         AddBrineCore(services);
         AddECSCore(services);
         AddBrineEngine(services);
+
+        // Box2D ships as part of core Brine2D (not an optional assembly), so PhysicsWorld and the
+        // default Box2DPhysicsSystem must always be resolvable, even when AddPhysics() is never
+        // called. AddPhysics() remains available purely to configure gravity/layers/thresholds.
+        services.AddPhysicsCore();
 
         return new Brine2DBuilder(services);
     }
@@ -92,7 +101,27 @@ public static class Brine2DServiceCollectionExtensions
                 ? (renderer.Width, renderer.Height)
                 : (windowOptions.Width, windowOptions.Height);
 
-            return new Camera2D(w, h);
+            return new Camera2D(w, h) { Position = new Vector2(w / 2f, h / 2f) };
+        });
+
+        // UICanvas is on by default (no AddUICanvas() call required), matching the default
+        // camera/physics precedent. Window-resize tracking is NOT automatic — opt in via
+        // canvas.AutoResizeToWindow = true (see UICanvas.AutoResizeToWindow).
+        services.TryAddScoped<UICanvas>(sp =>
+        {
+            var renderer = sp.GetService<IRenderer>();
+            var windowOptions = sp.GetRequiredService<WindowOptions>();
+            var (w, h) = renderer is { Width: > 0, Height: > 0 }
+                ? (renderer.Width, renderer.Height)
+                : (windowOptions.Width, windowOptions.Height);
+
+            var input = sp.GetRequiredService<IInputContext>();
+            var eventBus = sp.GetService<IEventBus>();
+            var canvas = eventBus != null
+                ? new UICanvas(input, eventBus)
+                : new UICanvas(input);
+            canvas.ScreenSize = new Vector2(w, h);
+            return canvas;
         });
     }
 

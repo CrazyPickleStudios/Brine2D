@@ -975,7 +975,7 @@ public class EntityTests : TestBase
     }
 
     [Fact]
-    public void RemoveBehavior_NullsEntityReference()
+    public void RemoveBehavior_DetachesEntityReference()
     {
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
@@ -986,11 +986,11 @@ public class EntityTests : TestBase
 
         entity.RemoveBehavior<TestBehavior>();
 
-        Assert.Null(behavior.Entity!);
+        Assert.Throws<InvalidOperationException>(() => behavior.Entity);
     }
 
     [Fact]
-    public void DestroyEntity_NullsBehaviorEntityReference()
+    public void DestroyEntity_DetachesBehaviorEntityReference()
     {
         var world = CreateTestWorld();
         var entity = world.CreateEntity();
@@ -1002,7 +1002,7 @@ public class EntityTests : TestBase
         world.DestroyEntity(entity);
         world.Flush();
 
-        Assert.Null(behavior.Entity);
+        Assert.Throws<InvalidOperationException>(() => behavior.Entity);
     }
 
     [Fact]
@@ -1158,7 +1158,7 @@ public class EntityTests : TestBase
         }
 
         Assert.NotNull(captured);
-        Assert.Null(captured!.Entity);
+        Assert.Throws<InvalidOperationException>(() => captured!.Entity);
     }
 
     [Fact]

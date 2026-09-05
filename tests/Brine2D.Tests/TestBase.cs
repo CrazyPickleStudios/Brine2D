@@ -1,5 +1,7 @@
+using Brine2D.Audio;
 using Brine2D.ECS;
 using Brine2D.Engine;
+using Brine2D.Input;
 using Brine2D.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -9,7 +11,7 @@ namespace Brine2D.Tests;
 
 public abstract class TestBase
 {
-    protected IEntityWorld CreateTestWorld(Action<ECSOptions>? configure = null)
+    protected IEntityWorld CreateTestWorld(Action<ECSOptions>? configure = null, bool withFrameworkServices = true)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -19,9 +21,21 @@ public abstract class TestBase
         var options = new ECSOptions();
         configure?.Invoke(options);
 
+        var loggerFactory = serviceProvider.GetService<ILoggerFactory>();
+
+        SceneFrameworkServices? frameworkServices = withFrameworkServices
+            ? new SceneFrameworkServices(
+                loggerFactory ?? Substitute.For<ILoggerFactory>(),
+                Substitute.For<IRenderer>(),
+                Substitute.For<IInputContext>(),
+                Substitute.For<IAudioPlayer>(),
+                Substitute.For<IGameContext>())
+            : null;
+
         return new EntityWorld(
             new ServiceProviderActivator(serviceProvider),
-            serviceProvider.GetService<ILoggerFactory>(),
+            frameworkServices,
+            loggerFactory,
             options);
     }
 

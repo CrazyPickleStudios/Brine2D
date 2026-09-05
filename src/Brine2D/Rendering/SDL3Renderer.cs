@@ -156,7 +156,8 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         PostProcessingOptions? postProcessingOptions = null,
         SDL3PostProcessPipeline? postProcessPipeline = null,
         IFontLoader? fontLoader = null,
-        IEventBus? eventBus = null)
+        IEventBus? eventBus = null,
+        Brine2D.Rendering.SDL.PostProcessing.LetterboxDesignResolution? letterboxDesignResolution = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
@@ -191,7 +192,8 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             _loggerFactory.CreateLogger<SDL3RenderTargetManager>(),
             _loggerFactory,
             postProcessingOptions,
-            postProcessPipeline);
+            postProcessPipeline,
+            letterboxDesignResolution);
 
         _postProcessPipeline = postProcessPipeline;
         _frameManager = new SDL3FrameManager(_loggerFactory.CreateLogger<SDL3FrameManager>());
@@ -300,6 +302,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
             if (_renderTargetManager.UsePostProcessing)
             {
                 _renderTargetManager.CreatePostProcessingTargets(_viewportWidth, _viewportHeight);
+                _renderTargetManager.SetSwapchainDimensions(_viewportWidth, _viewportHeight);
                 _logger.LogInformation("Post-processing enabled");
             }
 
@@ -343,6 +346,7 @@ internal sealed partial class SDL3Renderer : IRenderer, ISDL3WindowProvider, ITe
         if (_postProcessingResizePending)
         {
             _renderTargetManager.CreatePostProcessingTargets(_viewportWidth, _viewportHeight);
+            _renderTargetManager.SetSwapchainDimensions(_viewportWidth, _viewportHeight);
             _postProcessingResizePending = false;
         }
 

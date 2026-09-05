@@ -610,4 +610,178 @@ public class SpriteRenderingSystemTests : TestBase
             Arg.Any<Color?>(),
             SpriteFlip.None);
     }
+
+    [Fact]
+    public void Render_UnloadedTexturePath_LazyLoadsAndRenders()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockRenderer = Substitute.For<IRenderer>();
+        var mockTextureLoader = Substitute.For<ITextureLoader>();
+        var mockTexture = Substitute.For<ITexture>();
+        mockTexture.Width.Returns(32);
+        mockTexture.Height.Returns(32);
+        mockTexture.IsLoaded.Returns(true);
+        mockTexture.Bounds.Returns(new Rectangle(0, 0, 32, 32));
+        mockTexture.SortKey.Returns(1);
+        mockRenderer.GetBlendMode().Returns(BlendMode.Alpha);
+
+        mockTextureLoader.LoadTexture("sprite.png", Arg.Any<TextureScaleMode>())
+            .Returns(mockTexture);
+
+        var entity = world.CreateEntity()
+            .AddComponent<TransformComponent>()
+            .AddComponent<SpriteComponent>(s => s.TexturePath = "sprite.png");
+
+        world.Flush();
+
+        var system = new SpriteRenderingSystem(mockTextureLoader);
+
+        // Act: no explicit LoadTexturesAsync call — texture should be lazily loaded at render time.
+        system.Render(world, mockRenderer, default);
+
+        // Assert
+        Assert.Equal(1, system.GetBatchStats().RenderedCount);
+        Assert.Equal(mockTexture, entity.GetComponent<SpriteComponent>()!.Texture);
+        mockTextureLoader.Received(1).LoadTexture("sprite.png", Arg.Any<TextureScaleMode>());
+    }
+
+    [Fact]
+    public void Render_UnloadedTexturePath_UsesTextureScaleMode()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockRenderer = Substitute.For<IRenderer>();
+        var mockTextureLoader = Substitute.For<ITextureLoader>();
+        var mockTexture = Substitute.For<ITexture>();
+        mockTexture.Width.Returns(32);
+        mockTexture.Height.Returns(32);
+        mockTexture.IsLoaded.Returns(true);
+        mockTexture.Bounds.Returns(new Rectangle(0, 0, 32, 32));
+        mockRenderer.GetBlendMode().Returns(BlendMode.Alpha);
+
+        mockTextureLoader.LoadTexture("sprite.png", Arg.Any<TextureScaleMode>())
+            .Returns(mockTexture);
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>()
+            .AddComponent<SpriteComponent>(s =>
+            {
+                s.TexturePath = "sprite.png";
+                s.TextureScaleMode = TextureScaleMode.Linear;
+            });
+
+        world.Flush();
+
+        var system = new SpriteRenderingSystem(mockTextureLoader);
+
+        // Act
+        system.Render(world, mockRenderer, default);
+
+        // Assert
+        mockTextureLoader.Received(1).LoadTexture("sprite.png", TextureScaleMode.Linear);
+    }
+
+    [Fact]
+    public void Render_MultipleSpritesSharingTexturePath_LoadsOnce()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockRenderer = Substitute.For<IRenderer>();
+        var mockTextureLoader = Substitute.For<ITextureLoader>();
+        var mockTexture = Substitute.For<ITexture>();
+        mockTexture.Width.Returns(32);
+        mockTexture.Height.Returns(32);
+        mockTexture.IsLoaded.Returns(true);
+        mockTexture.Bounds.Returns(new Rectangle(0, 0, 32, 32));
+        mockRenderer.GetBlendMode().Returns(BlendMode.Alpha);
+
+        mockTextureLoader.LoadTexture("shared.png", Arg.Any<TextureScaleMode>())
+            .Returns(mockTexture);
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>()
+            .AddComponent<SpriteComponent>(s => s.TexturePath = "shared.png");
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>()
+            .AddComponent<SpriteComponent>(s => s.TexturePath = "shared.png");
+
+        world.Flush();
+
+        var system = new SpriteRenderingSystem(mockTextureLoader);
+
+        // Act
+        system.Render(world, mockRenderer, default);
+
+        // Assert
+        Assert.Equal(2, system.GetBatchStats().RenderedCount);
+        mockTextureLoader.Received(1).LoadTexture("shared.png", Arg.Any<TextureScaleMode>());
+    }
+
+    [Fact]
+    public void Render_LazyLoadedTextureIsReusedByLoadTexturesAsync()
+    {
+        // Arrange: render-time lazy load populates the shared cache, so a subsequent
+        // explicit preload call for the same path should not trigger another load.
+        var world = CreateTestWorld();
+        var mockRenderer = Substitute.For<IRenderer>();
+        var mockTextureLoader = Substitute.For<ITextureLoader>();
+        var mockTexture = Substitute.For<ITexture>();
+        mockTexture.Width.Returns(32);
+        mockTexture.Height.Returns(32);
+        mockTexture.IsLoaded.Returns(true);
+        mockTexture.Bounds.Returns(new Rectangle(0, 0, 32, 32));
+        mockRenderer.GetBlendMode().Returns(BlendMode.Alpha);
+
+        mockTextureLoader.LoadTexture("sprite.png", Arg.Any<TextureScaleMode>())
+            .Returns(mockTexture);
+
+        var entity1 = world.CreateEntity()
+            .AddComponent<TransformComponent>()
+            .AddComponent<SpriteComponent>(s => s.TexturePath = "sprite.png");
+
+        world.Flush();
+
+        var system = new SpriteRenderingSystem(mockTextureLoader);
+        system.Render(world, mockRenderer, default);
+
+        var entity2 = world.CreateEntity()
+            .AddComponent<TransformComponent>()
+            .AddComponent<SpriteComponent>(s => s.TexturePath = "sprite.png");
+
+        world.Flush();
+
+        // Act
+        system.Render(world, mockRenderer, default);
+
+        // Assert
+        Assert.Equal(mockTexture, entity1.GetComponent<SpriteComponent>()!.Texture);
+        Assert.Equal(mockTexture, entity2.GetComponent<SpriteComponent>()!.Texture);
+        mockTextureLoader.Received(1).LoadTexture("sprite.png", Arg.Any<TextureScaleMode>());
+    }
+
+    [Fact]
+    public void Render_EmptyTexturePathAndNoTexture_Skips()
+    {
+        // Arrange
+        var world = CreateTestWorld();
+        var mockRenderer = Substitute.For<IRenderer>();
+        var mockTextureLoader = Substitute.For<ITextureLoader>();
+
+        world.CreateEntity()
+            .AddComponent<TransformComponent>()
+            .AddComponent<SpriteComponent>();
+
+        world.Flush();
+
+        var system = new SpriteRenderingSystem(mockTextureLoader);
+
+        // Act
+        system.Render(world, mockRenderer, default);
+
+        // Assert
+        Assert.Equal(0, system.GetBatchStats().RenderedCount);
+        mockTextureLoader.DidNotReceive().LoadTexture(Arg.Any<string>(), Arg.Any<TextureScaleMode>());
+    }
 }

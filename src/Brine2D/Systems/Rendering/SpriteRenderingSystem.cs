@@ -13,6 +13,9 @@ namespace Brine2D.Systems.Rendering;
 /// System that renders all entities with SpriteComponent.
 /// Uses batching for optimal performance on both Legacy and GPU renderers.
 /// Includes frustum culling to only render visible sprites.
+/// Sprites with an unloaded <see cref="SpriteComponent.TexturePath"/> are lazily loaded (and
+/// cached) the first time they are rendered; <see cref="LoadTexturesAsync"/> remains available
+/// as an optional preload/warm-cache call to avoid a load hitch on first appearance.
 /// </summary>
 public class SpriteRenderingSystem : RenderSystemBase
 {
@@ -69,6 +72,26 @@ public class SpriteRenderingSystem : RenderSystemBase
     }
 
     /// <summary>
+    /// Resolves a sprite's texture from its <see cref="SpriteComponent.TexturePath"/> if it isn't
+    /// already loaded, reusing a shared cache keyed by path so identical paths are only loaded once.
+    /// </summary>
+    private void ResolveTexture(SpriteComponent sprite)
+    {
+        if (string.IsNullOrEmpty(sprite.TexturePath))
+            return;
+
+        if (_textureCache.TryGetValue(sprite.TexturePath, out var cached))
+        {
+            sprite.Texture = cached;
+            return;
+        }
+
+        var texture = _textureLoader.LoadTexture(sprite.TexturePath, sprite.TextureScaleMode);
+        _textureCache[sprite.TexturePath] = texture;
+        sprite.Texture = texture;
+    }
+
+    /// <summary>
     /// Renders all entities with SpriteComponent using batching.
     /// Automatically culls off-screen sprites when a camera is present.
     /// </summary>
@@ -79,6 +102,9 @@ public class SpriteRenderingSystem : RenderSystemBase
 
         foreach (var (entity, sprite) in _spriteQuery)
         {
+            if (sprite.Texture == null)
+                ResolveTexture(sprite);
+
             if (sprite.Texture != null)
                 _cachedSprites.Add((entity, sprite));
         }

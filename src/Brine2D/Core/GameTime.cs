@@ -3,8 +3,14 @@
 /// <summary>
 ///     Represents timing information for the game loop.
 /// </summary>
-/// <param name="TotalTime">The total elapsed time since the game started.</param>
-/// <param name="ElapsedTime">The elapsed time since the last frame.</param>
+/// <param name="TotalTime">
+/// The total elapsed time since the game started. See <see cref="TotalSeconds"/> for the
+/// equivalent value as a <see cref="double"/> in seconds.
+/// </param>
+/// <param name="ElapsedTime">
+/// The elapsed time since the last frame. See <see cref="DeltaTime"/> for the equivalent value
+/// as a <see cref="double"/> in seconds.
+/// </param>
 /// <param name="FrameCount">The total number of frames rendered since the game started.</param>
 /// <param name="IsTimeClamped">
 /// Whether <see cref="ElapsedTime"/> was clamped this frame.
@@ -26,9 +32,13 @@ public readonly record struct GameTime(
     bool IsTimeClamped = false,
     float Alpha = 0f)
 {
-    /// <summary>Gets the elapsed time as seconds (convenience property).</summary>
+    /// <summary>
+    /// Gets <see cref="ElapsedTime"/> as seconds (convenience property).
+    /// </summary>
     public double DeltaTime => ElapsedTime.TotalSeconds;
 
-    /// <summary>Gets the total time as seconds (convenience property).</summary>
+    /// <summary>
+    /// Gets <see cref="TotalTime"/> as seconds (convenience property).
+    /// </summary>
     public double TotalSeconds => TotalTime.TotalSeconds;
 }

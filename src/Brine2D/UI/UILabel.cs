@@ -56,8 +56,9 @@ public class UILabel : IUIComponent, IAnchoredUIComponent
     /// <remarks>
     /// <see cref="IUIComponent.Size"/> is an approximation until the first <see cref="Render"/>
     /// call, so hit-testing before the first render may be slightly off.
+    /// Both parameters default so <c>new UILabel()</c> works for anchor-driven/object-initializer use.
     /// </remarks>
-    public UILabel(string text, Vector2 position)
+    public UILabel(string text = "", Vector2 position = default)
     {
         Text = text;
         Position = position;

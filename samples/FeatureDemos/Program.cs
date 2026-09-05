@@ -33,10 +33,11 @@ builder.Configure(options =>
 
 // Optional features
 builder.Services.AddPostProcessing();
+builder.Services.AddLetterbox(1280, 720);
 builder.Services.AddTextureAtlasing();
 builder.Services.AddTilemapServices();
 builder.Services.AddPhysics();
-builder.Services.AddUICanvas();
+// UICanvas is registered by default via AddBrine2D() — no AddUICanvas() call needed.
 builder.Services.AddPerformanceMonitoring();
 
 // ConfigureScene is the right place for project-wide system config

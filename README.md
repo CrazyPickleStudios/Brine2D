@@ -224,18 +224,21 @@ public class GameScene : Scene
 }
 ~~~
 
-**Default systems (added automatically in execution order):**
+**Default systems (added automatically to every scene, in execution order):**
 
 | System | Pipeline | Order | Purpose |
 |---|---|---|---|
 | `SpriteRenderingSystem` | Render | 0 | Sprite batching and frustum culling |
 | `AudioSystem` | Update | 0 | Spatial audio processing |
 | `ParticleSystem` | Both | 250 / 100 | GPU-instanced particles, trails, sub-emitters, turbulence |
+| `Box2DPhysicsSystem` | Fixed Update | 0 | Box2D physics simulation (no-op until bodies exist) |
 | `AnimationSystem` | Update | 400 | Sprite animation, state machines, layers, blend trees |
 | `CameraSystem` | Update | 500 | Camera follow and zoom |
 | `DebugRenderer` | Render | 1000 | Debug visualization (disabled by default) |
 
-> **Physics systems are opt-in.** Call `builder.Services.AddPhysics()` and then `World.AddSystem<Box2DPhysicsSystem>()` in your scene's `OnEnter`. See the [Physics](#physics) section below.
+> **`Box2DPhysicsSystem` is always registered** (it's core to Brine2D, not a separate assembly), but it's a no-op until you add a `RigidBodyComponent`/collider to an entity. `builder.Services.AddPhysics()` is purely for *configuring* physics (gravity, layers, thresholds) — not for enabling the system. See the [Physics](#physics) section below.
+>
+> Don't need physics at all? Remove the (near-zero) cost with `builder.ExcludeDefaultSystem<Box2DPhysicsSystem>()`.
 
 ---
 
@@ -1179,7 +1182,7 @@ builder.AddDefaultSystem<FogOfWarSystem>(s => s.Radius = 200f); // with configur
 
 // Permanently exclude a default system project-wide (avoids construction cost entirely)
 builder.ExcludeDefaultSystem<ParticleSystem>();
-builder.ExcludeDefaultSystem<CollisionDetectionSystem>();
+builder.ExcludeDefaultSystem<Box2DPhysicsSystem>();
 ~~~
 
 `ExcludeDefaultSystem` removes the system from every scene. To conditionally disable a system at runtime instead, use `ConfigureScene` with `IsEnabled = false`.

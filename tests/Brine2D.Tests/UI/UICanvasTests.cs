@@ -809,16 +809,18 @@ public class UICanvasTests
         var canvas = CreateCanvas();
         canvas.ScreenSize = new Vector2(800, 600);
 
+        // Size-aware default: BottomRight resolves to (screenSize - buttonSize), so the
+        // button's own bottom-right corner (not its top-left) lands on the screen corner
+        // with zero AnchorOffset needed.
         var button = new AnchoredButton("B", new Vector2(80, 30))
         {
-            Anchor = UIAnchor.BottomRight,
-            AnchorOffset = new Vector2(-100, -50)
+            Anchor = UIAnchor.BottomRight
         };
         bool clicked = false;
         button.OnClick += () => clicked = true;
         canvas.Add(button);
 
-        SetMousePosition(new Vector2(740, 565));
+        SetMousePosition(new Vector2(760, 585));
         SetMousePressed();
         canvas.ProcessMouseInput(_input, false);
         SetMouseReleased();
@@ -833,10 +835,12 @@ public class UICanvasTests
         var canvas = CreateCanvas();
         canvas.ScreenSize = new Vector2(800, 600);
 
+        // Size-aware default: MiddleCenter resolves to ((screenSize - buttonSize) / 2f), so the
+        // button's own center (not its top-left) lands on the screen center with zero
+        // AnchorOffset needed.
         var button = new AnchoredButton("B", new Vector2(80, 30))
         {
-            Anchor = UIAnchor.MiddleCenter,
-            AnchorOffset = new Vector2(-40, -15)
+            Anchor = UIAnchor.MiddleCenter
         };
         bool clicked = false;
         button.OnClick += () => clicked = true;
@@ -852,15 +856,14 @@ public class UICanvasTests
     }
 
     [Fact]
-    public void ProcessMouseInput_AnchoredButton_OldRawPosition_DoesNotHit()
+    public void ProcessMouseInput_AnchoredButton_TopLeftOfScreen_DoesNotHitBottomRightAnchoredButton()
     {
         var canvas = CreateCanvas();
         canvas.ScreenSize = new Vector2(800, 600);
 
         var button = new AnchoredButton("B", new Vector2(80, 30))
         {
-            Anchor = UIAnchor.BottomRight,
-            AnchorOffset = new Vector2(-100, -50)
+            Anchor = UIAnchor.BottomRight
         };
         bool clicked = false;
         button.OnClick += () => clicked = true;
@@ -876,20 +879,39 @@ public class UICanvasTests
     }
 
     [Fact]
-    public void UIAnchorResolver_AllAnchors_ReturnCorrectOrigins()
+    public void UIAnchorResolver_AllAnchors_ZeroSize_ReturnCorrectOrigins()
     {
         const float w = 800f;
         const float h = 600f;
+        var zeroSize = Vector2.Zero;
 
-        UIAnchorResolver.Resolve(UIAnchor.TopLeft, w, h).Should().Be(new Vector2(0, 0));
-        UIAnchorResolver.Resolve(UIAnchor.TopCenter, w, h).Should().Be(new Vector2(400, 0));
-        UIAnchorResolver.Resolve(UIAnchor.TopRight, w, h).Should().Be(new Vector2(800, 0));
-        UIAnchorResolver.Resolve(UIAnchor.MiddleLeft, w, h).Should().Be(new Vector2(0, 300));
-        UIAnchorResolver.Resolve(UIAnchor.MiddleCenter, w, h).Should().Be(new Vector2(400, 300));
-        UIAnchorResolver.Resolve(UIAnchor.MiddleRight, w, h).Should().Be(new Vector2(800, 300));
-        UIAnchorResolver.Resolve(UIAnchor.BottomLeft, w, h).Should().Be(new Vector2(0, 600));
-        UIAnchorResolver.Resolve(UIAnchor.BottomCenter, w, h).Should().Be(new Vector2(400, 600));
-        UIAnchorResolver.Resolve(UIAnchor.BottomRight, w, h).Should().Be(new Vector2(800, 600));
+        UIAnchorResolver.Resolve(UIAnchor.TopLeft, w, h, zeroSize).Should().Be(new Vector2(0, 0));
+        UIAnchorResolver.Resolve(UIAnchor.TopCenter, w, h, zeroSize).Should().Be(new Vector2(400, 0));
+        UIAnchorResolver.Resolve(UIAnchor.TopRight, w, h, zeroSize).Should().Be(new Vector2(800, 0));
+        UIAnchorResolver.Resolve(UIAnchor.MiddleLeft, w, h, zeroSize).Should().Be(new Vector2(0, 300));
+        UIAnchorResolver.Resolve(UIAnchor.MiddleCenter, w, h, zeroSize).Should().Be(new Vector2(400, 300));
+        UIAnchorResolver.Resolve(UIAnchor.MiddleRight, w, h, zeroSize).Should().Be(new Vector2(800, 300));
+        UIAnchorResolver.Resolve(UIAnchor.BottomLeft, w, h, zeroSize).Should().Be(new Vector2(0, 600));
+        UIAnchorResolver.Resolve(UIAnchor.BottomCenter, w, h, zeroSize).Should().Be(new Vector2(400, 600));
+        UIAnchorResolver.Resolve(UIAnchor.BottomRight, w, h, zeroSize).Should().Be(new Vector2(800, 600));
+    }
+
+    [Fact]
+    public void UIAnchorResolver_AllAnchors_NonZeroSize_SubtractsSizeFromEdgeAndCenterAnchors()
+    {
+        const float w = 800f;
+        const float h = 600f;
+        var size = new Vector2(100f, 50f);
+
+        UIAnchorResolver.Resolve(UIAnchor.TopLeft, w, h, size).Should().Be(new Vector2(0, 0));
+        UIAnchorResolver.Resolve(UIAnchor.TopCenter, w, h, size).Should().Be(new Vector2(350, 0));
+        UIAnchorResolver.Resolve(UIAnchor.TopRight, w, h, size).Should().Be(new Vector2(700, 0));
+        UIAnchorResolver.Resolve(UIAnchor.MiddleLeft, w, h, size).Should().Be(new Vector2(0, 275));
+        UIAnchorResolver.Resolve(UIAnchor.MiddleCenter, w, h, size).Should().Be(new Vector2(350, 275));
+        UIAnchorResolver.Resolve(UIAnchor.MiddleRight, w, h, size).Should().Be(new Vector2(700, 275));
+        UIAnchorResolver.Resolve(UIAnchor.BottomLeft, w, h, size).Should().Be(new Vector2(0, 550));
+        UIAnchorResolver.Resolve(UIAnchor.BottomCenter, w, h, size).Should().Be(new Vector2(350, 550));
+        UIAnchorResolver.Resolve(UIAnchor.BottomRight, w, h, size).Should().Be(new Vector2(700, 550));
     }
 
     [Fact]
@@ -1246,16 +1268,18 @@ public class UICanvasTests
         var canvas = CreateCanvas();
         canvas.ScreenSize = new Vector2(800, 600);
 
+        // Size-aware default: BottomCenter resolves to ((screenW - buttonW) / 2f, screenH - buttonH),
+        // so the button's own bottom edge (not its top-left) lands on the screen's bottom edge,
+        // horizontally centered, with zero AnchorOffset needed.
         var button = new UIButton("B", Vector2.Zero, new Vector2(100, 30))
         {
-            Anchor = UIAnchor.BottomCenter,
-            AnchorOffset = new Vector2(-50, -40)
+            Anchor = UIAnchor.BottomCenter
         };
         bool clicked = false;
         button.OnClick += () => clicked = true;
         canvas.Add(button);
 
-        SetMousePosition(new Vector2(400, 575));
+        SetMousePosition(new Vector2(400, 585));
         SetMousePressed();
         canvas.ProcessMouseInput(_input, false);
         SetMouseReleased();
@@ -2010,14 +2034,14 @@ public class UICanvasTests
         var slider = new UISlider(new Vector2(0, 0), new Vector2(200, 20))
         {
             Anchor = UIAnchor.BottomRight,
-            AnchorOffset = new Vector2(-200, -20)
+            AnchorOffset = new Vector2(-20, -20)
         };
         canvas.Add(slider);
 
         canvas.Render(renderer);
 
-        // BottomRight anchor (800,600) + offset(-200,-20) = (600,580)
-        renderer.Received().DrawRectangleFilled(600f, Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>());
+        // Size-aware BottomRight anchor: (800 - 200, 600 - 20) + offset(-20,-20) = (580,560)
+        renderer.Received().DrawRectangleFilled(580f, Arg.Any<float>(), Arg.Any<float>(), Arg.Any<float>(), Arg.Any<Color>());
     }
 
     #endregion

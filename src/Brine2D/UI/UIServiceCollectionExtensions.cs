@@ -1,6 +1,7 @@
 using Brine2D.Events;
 using Brine2D.Input;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Brine2D.UI;
 
@@ -10,14 +11,15 @@ namespace Brine2D.UI;
 public static class UIServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds <see cref="UICanvas"/> to the service collection.
-    /// When <see cref="IEventBus"/> is registered, the canvas subscribes to
-    /// <see cref="WindowResizedEvent"/> automatically so <see cref="UICanvas.ScreenSize"/>
-    /// stays in sync without any manual wiring.
+    /// Adds <see cref="UICanvas"/> to the service collection. Kept for backward compatibility;
+    /// <see cref="UICanvas"/> is now registered by default via <c>AddBrine2D()</c>, so calling
+    /// this is only necessary when <c>AddBrine2D()</c> was not used. Uses <see cref="IServiceCollectionServiceExtensions.TryAddScoped{TService}(IServiceCollection, Func{IServiceProvider, TService})"/>
+    /// so it never overrides an existing registration. Window-resize tracking is NOT automatic —
+    /// opt in explicitly via <see cref="UICanvas.AutoResizeToWindow"/>.
     /// </summary>
     public static IServiceCollection AddUICanvas(this IServiceCollection services)
     {
-        services.AddScoped<UICanvas>(sp =>
+        services.TryAddScoped<UICanvas>(sp =>
         {
             var input = sp.GetRequiredService<IInputContext>();
             var eventBus = sp.GetService<IEventBus>();

@@ -16,17 +16,26 @@ internal sealed class SDL3RenderTargetManager : IDisposable
     private readonly ILoggerFactory _loggerFactory;
     private readonly PostProcessingOptions? _postProcessingOptions;
     private readonly SDL3PostProcessPipeline? _postProcessPipeline;
-    
+    private readonly LetterboxDesignResolution? _letterboxDesignResolution;
+
     private GpuDeviceHandle? _deviceHandle;
     private IRenderTarget? _currentRenderTarget;
     private readonly Stack<IRenderTarget?> _renderTargetStack = new();
-    
+
     private RenderTarget? _mainRenderTarget;
     private RenderTarget? _pingPongTarget;
-    
+
     private int _disposed;
 
     public bool UsePostProcessing => _postProcessingOptions?.Enabled == true && _postProcessPipeline != null;
+
+    /// <summary>
+    /// True when a letterbox effect is registered — main/ping-pong render targets are
+    /// created at the fixed design resolution rather than the live viewport size, and
+    /// window resizes no longer recreate them.
+    /// </summary>
+    public bool UsesFixedDesignResolution => _letterboxDesignResolution != null;
+
     public IRenderTarget? CurrentRenderTarget => _currentRenderTarget;
     public RenderTarget? MainRenderTarget => _mainRenderTarget;
     public RenderTarget? PingPongTarget => _pingPongTarget;
@@ -41,12 +50,14 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         ILogger<SDL3RenderTargetManager> logger,
         ILoggerFactory loggerFactory,
         PostProcessingOptions? postProcessingOptions,
-        SDL3PostProcessPipeline? postProcessPipeline)
+        SDL3PostProcessPipeline? postProcessPipeline,
+        LetterboxDesignResolution? letterboxDesignResolution = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _postProcessingOptions = postProcessingOptions;
         _postProcessPipeline = postProcessPipeline;
+        _letterboxDesignResolution = letterboxDesignResolution;
     }
     
     public void Initialize(GpuDeviceHandle deviceHandle, SDL3.SDL.GPUTextureFormat defaultFormat)
@@ -114,15 +125,43 @@ internal sealed class SDL3RenderTargetManager : IDisposable
         {
             throw new InvalidOperationException("Cannot pop render target: stack is empty");
         }
-        
+
         var previousTarget = _renderTargetStack.Pop();
         SetRenderTarget(previousTarget);
     }
 
+    /// <summary>
+    /// Propagates the live swapchain (window) size to any registered letterbox effect, so
+    /// it can recompute its centered fit rect. Safe to call regardless of whether
+    /// <see cref="UsesFixedDesignResolution"/> is true.
+    /// </summary>
+    public void SetSwapchainDimensions(int width, int height)
+    {
+        _postProcessPipeline?.SetSwapchainDimensions(width, height);
+    }
+
+    /// <summary>
+    /// Creates (or recreates) the main/ping-pong post-processing render targets.
+    /// When a letterbox effect is registered (<see cref="UsesFixedDesignResolution"/>),
+    /// the requested <paramref name="width"/>/<paramref name="height"/> are ignored in
+    /// favor of the fixed design resolution, so game-world rendering is decoupled from
+    /// window size entirely.
+    /// </summary>
     public void CreatePostProcessingTargets(int width, int height)
     {
         if (!UsePostProcessing)
             return;
+
+        if (_letterboxDesignResolution != null)
+        {
+            width = _letterboxDesignResolution.Width;
+            height = _letterboxDesignResolution.Height;
+
+            // Design resolution is fixed — skip recreating targets that already match it
+            // (e.g. redundant calls from window resize events).
+            if (_mainRenderTarget != null && _mainRenderTarget.Width == width && _mainRenderTarget.Height == height)
+                return;
+        }
 
         if (_deviceHandle == null)
             throw new InvalidOperationException("Render target manager must be initialized before creating post-processing targets.");

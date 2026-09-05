@@ -112,6 +112,38 @@ public static class PostProcessingServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Adds a fixed-aspect-ratio/letterbox effect to the pipeline. The main render target
+    /// (and all game-world rendering) is fixed at <paramref name="designWidth"/> x
+    /// <paramref name="designHeight"/> regardless of window size; this effect scales that
+    /// output to fit the actual window, centered, filling the remainder with
+    /// <paramref name="barColor"/>. Always runs last in the pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Requires <see cref="AddPostProcessing"/> to have been called first. When this effect
+    /// is registered, the render target manager sizes the main/ping-pong render targets to
+    /// the design resolution instead of the live viewport, so window resizes no longer
+    /// recreate them.
+    /// </remarks>
+    public static IServiceCollection AddLetterbox(this IServiceCollection services, int designWidth, int designHeight, Brine2D.Core.Color? barColor = null)
+    {
+        if (services == null)
+            throw new ArgumentNullException(nameof(services));
+
+        services.AddSingleton<IPostProcessEffect>(provider =>
+        {
+            var logger = provider.GetService<ILogger<LetterboxEffect>>();
+            var effect = new LetterboxEffect(designWidth, designHeight, logger);
+            if (barColor.HasValue)
+                effect.BarColor = barColor.Value;
+            return effect;
+        });
+
+        services.TryAddSingleton(new Brine2D.Rendering.SDL.PostProcessing.LetterboxDesignResolution(designWidth, designHeight));
+
+        return services;
+    }
+
     private static SDL3.SDL.GPUTextureFormat ResolveColorTargetFormat(IServiceProvider provider)
     {
         var options = provider.GetService<PostProcessingOptions>();

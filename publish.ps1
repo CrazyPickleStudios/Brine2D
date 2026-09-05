@@ -33,18 +33,23 @@ $packages = @(
 $source = "https://api.nuget.org/v3/index.json"
 
 foreach ($package in $packages) {
-    $nupkgs = Get-ChildItem "src\$package\bin\Release\$package.*.nupkg" -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -notlike "*.symbols.nupkg" }
+    $csprojPath = "src\$package\$package.csproj"
+    $version = ([xml](Get-Content $csprojPath)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 
-    if ($nupkgs.Count -eq 0) {
-        Write-Host "  Package NOT FOUND in src\$package\bin\Release\" -ForegroundColor Red
+    if (-not $version) {
+        Write-Host "  Could not determine version from $csprojPath" -ForegroundColor Red
         continue
     }
 
-    $path = ($nupkgs | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+    $expectedNupkg = "src\$package\bin\Release\$package.$version.nupkg"
 
-    Write-Host "  Publishing $package from $path..." -ForegroundColor Green
-    dotnet nuget push $path --api-key $ApiKey --source $source --skip-duplicate
+    if (-not (Test-Path $expectedNupkg)) {
+        Write-Host "  Package NOT FOUND: $expectedNupkg" -ForegroundColor Red
+        continue
+    }
+
+    Write-Host "  Publishing $package $version from $expectedNupkg..." -ForegroundColor Green
+    dotnet nuget push $expectedNupkg --api-key $ApiKey --source $source --skip-duplicate
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "    $package published!" -ForegroundColor Green

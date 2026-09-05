@@ -203,6 +203,18 @@ if (newContent != existing)
     </Task>
   </UsingTask>
 
+  <!--
+    Registers the asset folder with Visual Studio's Fast Up-to-Date Check so it knows this
+    build depends on those files. This must be a plain (target-less) ItemGroup so the items
+    exist during project evaluation, not only when a target actually runs — otherwise VS can
+    skip invoking MSBuild entirely when a new asset is added, requiring a manual obj/bin clean
+    to force regeneration of $(Brine2DAssetsOutputFile).
+  -->
+  <ItemGroup Condition="'$(Brine2DGenerateAssets)' == 'true' And Exists('$(Brine2DAssetsFolder)')">
+    <UpToDateCheckInput Include="$(Brine2DAssetsFolder)/**/*.*" />
+    <UpToDateCheckBuilt Include="$(Brine2DAssetsOutputFile)" />
+  </ItemGroup>
+
   <!-- Collect asset files (separate target so Inputs/Outputs can reference them) -->
   <Target Name="_Brine2DCollectAssets"
           Condition="'$(Brine2DGenerateAssets)' == 'true' And Exists('$(Brine2DAssetsFolder)')">

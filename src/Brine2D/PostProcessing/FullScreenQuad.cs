@@ -21,6 +21,28 @@ internal static class FullScreenQuad
     /// </summary>
     public static void Blit(nint commandBuffer, nint sourceTexture, nint targetTexture, int sourceWidth, int sourceHeight, int destWidth, int destHeight, ILogger? logger = null)
     {
+        Blit(commandBuffer, sourceTexture, targetTexture, 0, 0, sourceWidth, sourceHeight, 0, 0, destWidth, destHeight, logger);
+    }
+
+    /// <summary>
+    /// Blit a source texture region to a target texture region, allowing independent source and
+    /// destination offsets and dimensions. Used for letterbox/pillarbox centering, where the
+    /// destination rect is smaller than the full target texture.
+    /// </summary>
+    public static void Blit(
+        nint commandBuffer,
+        nint sourceTexture,
+        nint targetTexture,
+        int sourceX,
+        int sourceY,
+        int sourceWidth,
+        int sourceHeight,
+        int destX,
+        int destY,
+        int destWidth,
+        int destHeight,
+        ILogger? logger = null)
+    {
         logger?.LogDebug("FullScreenQuad.Blit: Starting blit");
 
         var blitInfo = new SDL3.SDL.GPUBlitInfo
@@ -30,8 +52,8 @@ internal static class FullScreenQuad
                 Texture = sourceTexture,
                 MipLevel = 0,
                 LayerOrDepthPlane = 0,
-                X = 0,
-                Y = 0,
+                X = (uint)sourceX,
+                Y = (uint)sourceY,
                 W = (uint)sourceWidth,
                 H = (uint)sourceHeight
             },
@@ -40,8 +62,8 @@ internal static class FullScreenQuad
                 Texture = targetTexture,
                 MipLevel = 0,
                 LayerOrDepthPlane = 0,
-                X = 0,
-                Y = 0,
+                X = (uint)destX,
+                Y = (uint)destY,
                 W = (uint)destWidth,
                 H = (uint)destHeight
             },
@@ -53,6 +75,61 @@ internal static class FullScreenQuad
         };
 
         SDL3.SDL.BlitGPUTexture(commandBuffer, ref blitInfo);
+    }
+
+    /// <summary>
+    /// Clears an entire target texture to a solid color via a render pass. Used to fill
+    /// letterbox/pillarbox bars before blitting the scaled-to-fit image into a centered
+    /// sub-rect, since <see cref="Blit"/>'s <c>ClearColor</c> only affects the destination
+    /// blit region, not the full texture.
+    /// </summary>
+    public static void Clear(nint commandBuffer, nint targetTexture, int width, int height, Brine2D.Core.Color color, ILogger? logger = null)
+    {
+        logger?.LogDebug("FullScreenQuad.Clear: Clearing {Width}x{Height} to {Color}", width, height, color);
+
+        var colorTargetInfo = new SDL3.SDL.GPUColorTargetInfo
+        {
+            Texture = targetTexture,
+            MipLevel = 0,
+            LayerOrDepthPlane = 0,
+            ClearColor = new SDL3.SDL.FColor
+            {
+                R = color.R / 255f,
+                G = color.G / 255f,
+                B = color.B / 255f,
+                A = color.A / 255f
+            },
+            LoadOp = SDL3.SDL.GPULoadOp.Clear,
+            StoreOp = SDL3.SDL.GPUStoreOp.Store,
+            ResolveTexture = IntPtr.Zero,
+            ResolveMipLevel = 0,
+            ResolveLayer = 0,
+            Cycle = false,
+            CycleResolveTexture = false
+        };
+
+        var colorTargets = new[] { colorTargetInfo };
+        var colorTargetHandle = GCHandle.Alloc(colorTargets, GCHandleType.Pinned);
+
+        try
+        {
+            var renderPass = SDL3.SDL.BeginGPURenderPass(
+                commandBuffer,
+                colorTargetHandle.AddrOfPinnedObject(),
+                1,
+                IntPtr.Zero);
+
+            if (renderPass == nint.Zero)
+            {
+                throw new InvalidOperationException($"Failed to begin render pass: {SDL3.SDL.GetError()}");
+            }
+
+            SDL3.SDL.EndGPURenderPass(renderPass);
+        }
+        finally
+        {
+            colorTargetHandle.Free();
+        }
     }
 
     /// <summary>

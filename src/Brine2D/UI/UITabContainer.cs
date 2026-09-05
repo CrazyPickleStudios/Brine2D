@@ -309,7 +309,7 @@ public class UITabContainer : IUIComponent, IAnchoredUIComponent
                 {
                     var saved = anchoredComponent.Position;
                     var contentSize = new Vector2(Size.X, Size.Y - TabHeight);
-                    var anchorOrigin = UIAnchorResolver.Resolve(anchoredComponent.Anchor, contentSize.X, contentSize.Y);
+                    var anchorOrigin = UIAnchorResolver.Resolve(anchoredComponent.Anchor, contentSize.X, contentSize.Y, anchoredComponent.Size);
                     anchoredComponent.Position = contentOrigin + anchorOrigin + anchoredComponent.AnchorOffset;
                     component.Render(renderer);
                     anchoredComponent.Position = saved;

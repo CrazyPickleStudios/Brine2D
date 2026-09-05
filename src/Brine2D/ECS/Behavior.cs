@@ -1,16 +1,37 @@
+using Brine2D.Audio;
 using Brine2D.Core;
+using Brine2D.Engine;
+using Brine2D.Input;
 using Brine2D.Rendering;
+using Microsoft.Extensions.Logging;
 
 namespace Brine2D.ECS;
 
 /// <summary>
-/// Base class for behaviors — logic that operates on a single entity.
+/// Base class for behaviors, which contain logic that operates on a single entity.
 /// Each entity gets its own behavior instance with constructor injection support.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Use behaviors for entity-specific logic (player movement, boss AI, etc.).
 /// For batch processing of many entities, use systems instead.
+/// </para>
+/// <para>
+/// <b>Ambient vs. parameter-passed:</b> <see cref="Behavior"/> exposes its framework
+/// services (<see cref="Entity"/>, <see cref="Input"/>, <see cref="Renderer"/>,
+/// <see cref="Logger"/>, <see cref="Audio"/>, <see cref="Game"/>) as ambient properties,
+/// the same convention <c>Scene</c>/<c>SceneBase</c> use, because exactly one behavior
+/// instance is bound to exactly one entity for its entire attached lifetime, so the context
+/// never changes between <see cref="OnAdded"/>, <see cref="Update"/>,
+/// <see cref="FixedUpdate"/>, <see cref="Render"/>, and any other lifecycle callback, so
+/// there is no need to re-supply it on every call. Systems (<see cref="IUpdateSystem"/>,
+/// <see cref="IFixedUpdateSystem"/>, <see cref="IRenderSystem"/>) are the opposite shape:
+/// a single system instance batch-processes many entities per call, so there is no single
+/// "current entity" to be ambient about. Those APIs instead take the
+/// <see cref="IEntityWorld"/> (and entities/components within it) as explicit parameters.
+/// Prefer ambient properties for anything scoped to "this behavior's entity, for as long as
+/// it's attached"; prefer parameters for anything that varies per call or per entity within
+/// a single call.
 /// </para>
 /// <para>
 /// <b>Execution order:</b> During <see cref="EntityWorld.Update"/>, all
@@ -26,37 +47,106 @@ namespace Brine2D.ECS;
 /// <code>
 /// public class PlayerMovementBehavior : Behavior
 /// {
-///     private readonly IInputContext _input;
-///     private readonly IAudioService _audio;
-///
-///     public PlayerMovementBehavior(IInputContext input, IAudioService audio)
-///     {
-///         _input = input;
-///         _audio = audio;
-///     }
-///
 ///     public override int UpdateOrder => 10;
 ///
 ///     public override void Update(GameTime gameTime)
 ///     {
-///         if (_input.IsKeyDown(Key.W))
-///             _audio.PlaySound(_footstep);
+///         if (Input.IsKeyDown(Key.W))
+///             Audio.PlaySound(_footstep);
 ///     }
 /// }
 /// </code>
 /// </remarks>
 public abstract class Behavior
 {
+    private Entity? _entity;
+
+    private static InvalidOperationException NotAttached(string name) => new(
+        $"'{name}' is not available because this behavior has been detached from its entity " +
+        $"(via {nameof(ECS.Entity.RemoveBehavior)}, {nameof(ECS.Entity.Destroy)}, or was never attached). " +
+        "Avoid accessing this property from outside the normal Update/FixedUpdate/Render lifecycle " +
+        "(e.g., from event callbacks or cached references) without first checking the behavior is still attached.");
+
     /// <summary>
     /// The entity this behavior is attached to.
     /// </summary>
     /// <remarks>
-    /// <see langword="null"/> after the behavior has been detached via
-    /// <see cref="Entity.RemoveBehavior{T}"/> or when the owning entity is destroyed.
-    /// Check this property before accessing entity state from outside the normal
-    /// Update/FixedUpdate/Render lifecycle (e.g., from event callbacks or cached references).
+    /// Throws <see cref="InvalidOperationException"/> if accessed after the behavior has been
+    /// detached via <see cref="Entity.RemoveBehavior{T}"/>, after the owning entity has been
+    /// destroyed, or before the behavior has been attached at all. Avoid caching this value or
+    /// accessing it from outside the normal Update/FixedUpdate/Render lifecycle (e.g., from event
+    /// callbacks) without first confirming the behavior is still attached.
     /// </remarks>
-    public Entity? Entity { get; internal set; }
+    public Entity Entity
+    {
+        get => _entity ?? throw NotAttached(nameof(Entity));
+        internal set => _entity = value;
+    }
+
+    /// <summary>
+    /// Non-throwing internal read of the current entity reference, used only by
+    /// <see cref="EntityWorld"/>'s per-frame dispatch loops to check whether a behavior is
+    /// still attached without incurring exception overhead. <see cref="Entity.Entity"/> can be
+    /// nulled out synchronously (via <see cref="ECS.Entity.RemoveBehavior{T}"/> or
+    /// <see cref="ECS.Entity.Destroy"/>) even though removal from <see cref="EntityWorld"/>'s
+    /// dispatch lists is deferred until the next pass, so this must reflect the immediate value.
+    /// </summary>
+    internal Entity? EntityOrNull => _entity;
+
+    private ILogger? _logger;
+    private IRenderer? _renderer;
+    private IInputContext? _input;
+    private IAudioPlayer? _audio;
+    private IGameContext? _game;
+
+    private static InvalidOperationException NotReady(string name) => new(
+        $"'{name}' is not available in the behavior constructor. " +
+        $"Override {nameof(OnAdded)}() or later lifecycle methods to access framework properties.");
+
+    /// <summary>
+    /// Logger for this behavior. Available from <see cref="OnAdded"/> onwards.
+    /// </summary>
+    protected internal ILogger Logger
+    {
+        get => _logger ?? throw NotReady(nameof(Logger));
+        internal set => _logger = value;
+    }
+
+    /// <summary>
+    /// Renderer for this behavior's scene. Available from <see cref="OnAdded"/> onwards.
+    /// </summary>
+    protected internal IRenderer Renderer
+    {
+        get => _renderer ?? throw NotReady(nameof(Renderer));
+        internal set => _renderer = value;
+    }
+
+    /// <summary>
+    /// Input context for this behavior's scene. Available from <see cref="OnAdded"/> onwards.
+    /// </summary>
+    protected internal IInputContext Input
+    {
+        get => _input ?? throw NotReady(nameof(Input));
+        internal set => _input = value;
+    }
+
+    /// <summary>
+    /// Audio player for this behavior's scene. Available from <see cref="OnAdded"/> onwards.
+    /// </summary>
+    protected internal IAudioPlayer Audio
+    {
+        get => _audio ?? throw NotReady(nameof(Audio));
+        internal set => _audio = value;
+    }
+
+    /// <summary>
+    /// Game context for this behavior's scene. Available from <see cref="OnAdded"/> onwards.
+    /// </summary>
+    protected internal IGameContext Game
+    {
+        get => _game ?? throw NotReady(nameof(Game));
+        internal set => _game = value;
+    }
 
     private bool _isEnabled = true;
 
@@ -137,10 +227,10 @@ public abstract class Behavior
     protected internal virtual void OnDisabled() { }
 
     /// <summary>
-    /// Called once before the first tick of this behavior's lifecycle — guaranteed to run before
+    /// Called once before the first tick of this behavior's lifecycle, guaranteed to run before
     /// the first <see cref="Update"/>, <see cref="FixedUpdate"/>, or <see cref="Render"/> call,
     /// whichever occurs first. Use this to perform initialization that depends on all entities and
-    /// components being present — e.g., looking up sibling entities or caching cross-entity references.
+    /// components being present, e.g., looking up sibling entities or caching cross-entity references.
     /// </summary>
     /// <remarks>
     /// <c>OnStart</c> fires in whichever pipeline dispatches this behavior first. On most frames the
@@ -216,7 +306,7 @@ public abstract class Behavior
     /// </summary>
     /// <param name="component">The component that was added.</param>
     /// <remarks>
-    /// Use this to react to dynamic component changes — for example, caching a newly-added
+    /// Use this to react to dynamic component changes, for example caching a newly-added
     /// weapon component or enabling a visual effect when a status effect is applied.
     /// <c>Entity</c> is guaranteed to be non-null inside this callback.
     /// </remarks>
@@ -238,7 +328,7 @@ public abstract class Behavior
     /// </summary>
     /// <param name="component">The component that was removed.</param>
     /// <remarks>
-    /// Use this to react to dynamic component changes — for example, releasing a cached
+    /// Use this to react to dynamic component changes, for example releasing a cached
     /// weapon reference or disabling dependent logic when a required component is removed.
     /// <c>Entity</c> is guaranteed to be non-null inside this callback.
     /// </remarks>

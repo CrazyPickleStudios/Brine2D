@@ -13,13 +13,42 @@ namespace Brine2D.Physics;
 public static class PhysicsServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds Box2D physics services. Each scene scope gets its own <see cref="PhysicsWorld"/>.
+    /// Registers Box2D physics services unconditionally so <see cref="PhysicsWorld"/> and the
+    /// default <see cref="Box2DPhysicsSystem"/> are always resolvable, even when <see cref="AddPhysics"/>
+    /// is never called. Box2D ships as part of core Brine2D (not a separate optional assembly),
+    /// so gating registration behind an opt-in call only protected against nothing while causing
+    /// a DI-resolution crash the first time a scene's default systems tried to construct
+    /// <see cref="Box2DPhysicsSystem"/>. Called unconditionally from <c>AddBrine2D</c>.
+    /// </summary>
+    internal static void AddPhysicsCore(this IServiceCollection services)
+    {
+        services.TryAddScoped(_ =>
+        {
+            var defaults = new PhysicsOptions();
+            return new PhysicsWorld(defaults.Gravity, defaults.PixelsPerMeter, defaults.SubStepCount);
+        });
+
+        services.TryAddScoped<Box2DPhysicsSystem>();
+        services.TryAddScoped<Box2DDebugDrawSystem>();
+        services.TryAddScoped<PrePhysicsKinematicCharacterSystem>();
+        services.TryAddScoped<PostPhysicsKinematicCharacterSystem>();
+        services.TryAddScoped<BuoyancySystem>();
+
+        services.TryAddSingleton<PhysicsLayerRegistry>();
+    }
+
+    /// <summary>
+    /// Configures Box2D physics (gravity, layers, thresholds, filters). <see cref="PhysicsWorld"/>
+    /// and the default physics systems are always registered by <c>AddBrine2D</c>
+    /// (see <see cref="AddPhysicsCore"/>) — this call is purely about configuration, not existence.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Add simulation to a scene with <c>world.AddSystem&lt;Box2DPhysicsSystem&gt;()</c>.
-    /// Add the debug draw overlay with <c>world.AddSystem&lt;Box2DDebugDrawSystem&gt;()</c> —
-    /// both are registered in DI by this call and are zero-cost when not added as systems.
+    /// Add simulation to a scene with <c>world.AddSystem&lt;Box2DPhysicsSystem&gt;()</c> —
+    /// this is already done automatically as a default system unless excluded via
+    /// <c>builder.ExcludeDefaultSystem&lt;Box2DPhysicsSystem&gt;()</c>.
+    /// Add the debug draw overlay with <c>world.AddSystem&lt;Box2DDebugDrawSystem&gt;()</c>;
+    /// both are zero-cost when not added as systems.
     /// </para>
     /// <para>
     /// <see cref="PhysicsOptions.PixelsPerMeter"/> maps to <c>B2.SetLengthUnitsPerMeter</c>,
@@ -44,7 +73,9 @@ public static class PhysicsServiceCollectionExtensions
         var options = new PhysicsOptions();
         configure?.Invoke(options);
 
-        services.TryAddScoped(_ =>
+        // Replace (not TryAdd): AddPhysicsCore already registered a default-options PhysicsWorld;
+        // this call's whole purpose is to override it with the configured one.
+        services.Replace(ServiceDescriptor.Scoped(_ =>
         {
             var world = new PhysicsWorld(options.Gravity, options.PixelsPerMeter, options.SubStepCount);
 
@@ -70,8 +101,10 @@ public static class PhysicsServiceCollectionExtensions
                 world.SetPreSolveFilter(options.PreSolveFilter);
 
             return world;
-        });
+        }));
 
+        // TryAdd here too: keeps AddPhysics self-sufficient for standalone DI usage
+        // that doesn't call AddBrine2D at all.
         services.TryAddScoped<Box2DPhysicsSystem>();
         services.TryAddScoped<Box2DDebugDrawSystem>();
         services.TryAddScoped<PrePhysicsKinematicCharacterSystem>();
