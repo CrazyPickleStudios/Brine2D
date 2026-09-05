@@ -226,10 +226,18 @@ public sealed class TilemapSystemTests : TestBase
         component.IsLoaded.Should().BeFalse();
 
         tcs.SetResult(Substitute.For<ITexture>());
-        await Task.Yield();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => component.IsLoaded, TimeSpan.FromSeconds(5));
 
         component.IsLoaded.Should().BeTrue();
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
     }
 
     [Fact]
